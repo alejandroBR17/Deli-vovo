@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Prato ou item de confeitaria da vovó",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "oldPrice": { "type": "number" },
+        "variations": { "type": "array" },
+        "additionals": { "type": "array" }
+      },
+      "required": ["id", "name", "price", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Pedido efetuado por um cliente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "scheduledTo": { "type": "string" },
+        "refusalReason": { "type": "string" },
+        "customer": { "type": "object" },
+        "total": { "type": "number" },
+        "itemsSummary": { "type": "string" },
+        "items": { "type": "array" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string" },
+        "type": { "type": "string" },
+        "userId": { "type": "string" },
+        "archived": { "type": "boolean" }
+      },
+      "required": ["id", "customer", "total", "paymentMethod", "status", "type"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Perfil de usuário ou administrador",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "cart": { "type": "string" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Config": {
+      "title": "Config",
+      "description": "Configuração dinâmica do app",
+      "type": "object",
+      "properties": {
+        "value": { "type": "string" }
+      },
+      "required": ["value"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "Inscrição de notificação push",
+      "type": "object",
+      "properties": {
+        "endpoint": { "type": "string" },
+        "keys": { "type": "object" },
+        "userId": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["endpoint", "keys"]
+    },
+    "Visit": {
+      "title": "Visit",
+      "description": "Visitas únicas no app",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isPwa": { "type": "boolean" },
+        "userAgent": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "authType": { "type": "string" }
+      },
+      "required": ["id", "timestamp"]
+    },
+    "Presence": {
+      "title": "Presence",
+      "description": "Presença em tempo real de clientes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "lastSeen": { "type": "string" },
+        "isShopping": { "type": "boolean" }
+      },
+      "required": ["id", "lastSeen"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Coleção de pratos disponíveis"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Coleção de pedidos efetuados"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Perfis de usuários"
+    },
+    "/configs/{configKey}": {
+      "schema": "Config",
+      "description": "Configurações globais"
+    },
+    "/push_subscriptions/{subId}": {
+      "schema": "PushSubscription",
+      "description": "Inscrições para push notifications"
+    },
+    "/visits/{visitId}": {
+      "schema": "Visit",
+      "description": "Registro de visitas"
+    },
+    "/presence/{presenceId}": {
+      "schema": "Presence",
+      "description": "Presença em tempo real de clientes"
+    }
+  }
+}

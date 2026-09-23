@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Delícias da Vovó",
+  "description": "Um site encantador para a Delícias da Vovó, focado em vendas de salgados artesanais com integração direta ao WhatsApp e recomendações inteligentes via IA.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

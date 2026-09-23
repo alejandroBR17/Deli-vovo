@@ -1,0 +1,24 @@
+{
+  "name": "Delícias da Vovó Grazy",
+  "short_name": "Vovó Grazy",
+  "description": "Salgados quentinhos, fritos na hora e com a verdadeira Massa com tempero de Mãe!",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "background_color": "#F9F9F9",
+  "theme_color": "#D61F1F",
+  "gcm_sender_id": "103953800507",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/k6ykwRQ8/Favicon-Vov.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://i.ibb.co/k6ykwRQ8/Favicon-Vov.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

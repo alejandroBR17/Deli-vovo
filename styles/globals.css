@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#F9F9F9] text-zinc-900 antialiased  select-none;
+    font-family: 'Quicksand', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  h1, h2, h3, h4 {
+    @apply tracking-tight;
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+.shadow-3xl {
+  box-shadow: 0 -10px 40px -15px rgba(0, 0, 0, 0.2);
+}
+
+@media (min-width: 768px) {
+  .shadow-3xl {
+    box-shadow: -20px 0 50px -15px rgba(0, 0, 0, 0.3);
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Animações nativas estilo iFood/App Desktop */
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideLeftDrawer {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-sheet {
+  animation: slideUpSheet 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@media (min-width: 768px) {
+  .md\:animate-drawer {
+    animation: slideLeftDrawer 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+}
+
+::selection {
+  @apply bg-[#D61F1F] text-white;
+}
+
+.stripe-element-container {
+  @apply p-1;
+}
+
+.StripeElement {
+  width: 100%;
+}
