@@ -249,19 +249,19 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   };
 
   return (
-    <div className="fixed inset-0 z-[400] flex flex-col justify-end items-center">
+    <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full desktop:max-w-[480px] h-[90vh] bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] animate-sheet overflow-hidden">
+      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
-        <div className="w-full flex justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
+        <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
         </div>
 
-        <header className="px-6 py-4  flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-vovoh-red text-white rounded-[1rem] flex items-center justify-center shadow-lg shadow-red-100"><ShoppingCart size={20}/></div>
-            <h3 className="text-xl font-black text-vovoh-dark">Sua Sacola</h3>
+        <header className="px-6 py-4 md:py-5 flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-100"><ShoppingCart size={20}/></div>
+            <h3 className="text-xl md:text-2xl font-black text-vovoh-dark">Sua Sacola</h3>
           </div>
           <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-colors"><X size={20}/></button>
         </header>
@@ -621,16 +621,16 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
   };
 
   return (
-    <div className="fixed inset-0 z-[400] flex flex-col justify-end items-center">
+    <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full desktop:max-w-[480px] h-[92vh] bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] animate-sheet overflow-hidden">
+      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
-        <div className="w-full flex justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
+        <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
         </div>
 
-        <header className="px-6 py-4  flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
+        <header className="px-6 py-4 md:py-5 flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-vovoh-gold text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-100"><Clock size={24}/></div>
             <div>

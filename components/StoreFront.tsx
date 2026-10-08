@@ -139,63 +139,63 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
 
   return (
     <>
-      <header className="pt-24 pb-10   px-4 container mx-auto text-center">
-        <div className="relative inline-block mb-6 ">
-          <img src={logo} className="w-48 [400px] drop-shadow-2xl animate-in zoom-in duration-700" alt="Logo" />
-          <div className="absolute -bottom-2 -right-2   bg-vovoh-gold text-white px-3 py-1  rounded-full shadow-xl rotate-12 flex items-center gap-1  border-2 border-white">
-            <Star size={10} fill="white" className=" " />
-            <span className="text-[8px]  font-black uppercase tracking-widest">Artesanal</span>
+      <header className="pt-8 md:pt-16 pb-8 md:pb-12 px-4 max-w-7xl mx-auto text-center">
+        <div className="relative inline-block mb-6">
+          <img src={logo} className="w-44 md:w-56 drop-shadow-2xl animate-in zoom-in duration-700" alt="Logo" />
+          <div className="absolute -bottom-2 -right-2 bg-vovoh-gold text-white px-3 py-1 rounded-full shadow-xl rotate-12 flex items-center gap-1 border-2 border-white">
+            <Star size={10} fill="white" />
+            <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest">Artesanal</span>
           </div>
         </div>
         
-        <h2 className="text-2xl  font-black text-vovoh-dark mb-3  tracking-tight leading-tight" dangerouslySetInnerHTML={{__html: dynamicConfigs?.store_name || `Comidinha de vó, <br/><span class="text-vovoh-red italic font-serif">feita com amor.</span>`}}>
+        <h2 className="text-2xl md:text-4xl font-black text-vovoh-dark mb-3 tracking-tight leading-tight max-w-2xl mx-auto" dangerouslySetInnerHTML={{__html: dynamicConfigs?.store_name || `Comidinha de vó, <br/><span class="text-vovoh-red italic font-serif">feita com amor.</span>`}}>
         </h2>
         
-        <p className="max-w-lg mx-auto text-gray-500 font-medium mb-6  text-xs  leading-relaxed px-4">
+        <p className="max-w-xl mx-auto text-gray-500 font-medium mb-8 text-xs md:text-sm leading-relaxed px-4">
           {dynamicConfigs?.store_subtitle || "Salgados fritos na hora, empanadas autênticas e a verdadeira Massa com tempero de Mãe."}
         </p>
 
-        <div className="flex gap-3 justify-center items-center px-4">
-           <a href="#menu" className="flex-1   py-3.5   bg-vovoh-red text-white font-black rounded-full shadow-lg shadow-red-200 hover:brightness-110 active:scale-95 transition-all text-sm  text-center">
+        <div className="flex gap-4 justify-center items-center px-4 max-w-md mx-auto">
+           <a href="#menu" className="flex-1 py-3.5 md:py-4 bg-vovoh-red text-white font-black rounded-full shadow-lg shadow-red-200 hover:brightness-110 active:scale-95 transition-all text-sm md:text-base text-center">
              Ver Cardápio
            </a>
-           <button onClick={() => document.getElementById('vovoh-ai')?.scrollIntoView({behavior:'smooth'})} className="flex-1   py-3.5   bg-white text-vovoh-dark font-black rounded-full shadow-sm border border-gray-100 hover:bg-gray-50 active:scale-95 transition-all text-sm  flex items-center justify-center gap-2">
+           <button onClick={() => document.getElementById('vovoh-ai')?.scrollIntoView({behavior:'smooth'})} className="flex-1 py-3.5 md:py-4 bg-white text-vovoh-dark font-black rounded-full shadow-sm border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all text-sm md:text-base flex items-center justify-center gap-2">
              <Sparkles size={16} className="text-vovoh-gold" /> Dica da Vovó
            </button>
         </div>
 
-        <div className="mt-10  max-w-4xl mx-auto space-y-6">
+        <div className="mt-10 max-w-4xl mx-auto space-y-6">
           {prepTime && prepTime.forecast && (
             <div className="animate-in fade-in slide-in-from-bottom-4">
-              <div className="relative overflow-hidden bg-white rounded- shadow-xl shadow-vovoh-red/5 border border-vovoh-red/10 p-5  flex flex-col  items-center justify-between gap-4 group">
+              <div className="relative overflow-hidden bg-white rounded-3xl shadow-xl shadow-vovoh-red/5 border border-vovoh-red/10 p-5 md:p-6 flex flex-col md:flex-row items-center justify-between gap-4 group">
                 
                 {/* Background Decor */}
                 <div className="absolute top-0 right-0 w-40 h-40 bg-vovoh-gold/5 rounded-full blur-2xl -z-0 pointer-events-none translate-x-1 -translate-y-1"></div>
                 <div className="absolute bottom-0 left-0 w-40 h-40 bg-vovoh-red/5 rounded-full blur-2xl -z-0 pointer-events-none -translate-x-1 translate-y-1"></div>
 
-                <div className="flex items-center gap-4 relative z-10 w-full ">
-                  <div className="w-12 h-12   bg-vovoh-red/10 text-vovoh-red rounded-2xl flex items-center justify-center shadow-inner shrink-0">
-                    <Timer size={24} className="animate-pulse  " strokeWidth={2.5} />
+                <div className="flex items-center gap-4 relative z-10 w-full md:w-auto">
+                  <div className="w-12 h-12 md:w-14 md:h-14 bg-vovoh-red/10 text-vovoh-red rounded-2xl flex items-center justify-center shadow-inner shrink-0">
+                    <Timer size={24} className="animate-pulse" strokeWidth={2.5} />
                   </div>
                   <div className="text-left">
-                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-vovoh-gold/10 text-vovoh-gold text-[9px] font-black uppercase tracking-widest mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-vovoh-gold/10 text-vovoh-gold text-[9px] font-black uppercase tracking-widest mb-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-vovoh-gold animate-ping"></span>
                       Ao Vivo
                     </div>
-                    <h3 className="text-lg  font-black text-vovoh-dark tracking-tight leading-none">
+                    <h3 className="text-lg md:text-xl font-black text-vovoh-dark tracking-tight leading-none">
                       Tempo de Preparo
                     </h3>
-                    <p className="text-[10px]  text-gray-400 font-bold mt-0.5">
-                      Estimativa para agora
+                    <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1">
+                      Estimativa para pedidos feitos agora
                     </p>
                   </div>
                 </div>
 
-                <div className="relative z-10 w-full ">
-                  <div className="bg-vovoh-dark text-white px-6 py-3   rounded-2xl shadow-lg flex items-center justify-between  gap-4 w-full ">
+                <div className="relative z-10 w-full md:w-auto">
+                  <div className="bg-vovoh-dark text-white px-6 py-3.5 rounded-2xl shadow-lg flex items-center justify-between gap-6 w-full md:w-auto">
                     <div className="text-left">
                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Previsão</p>
-                       <p className="text-2xl  font-black tracking-tighter text-vovoh-gold leading-none">{prepTime.forecast}</p>
+                       <p className="text-2xl md:text-3xl font-black tracking-tighter text-vovoh-gold leading-none">{prepTime.forecast}</p>
                     </div>
                     <div className="h-8 w-px bg-white/10"></div>
                     <Clock size={20} className="text-gray-400" />
@@ -206,62 +206,62 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
             </div>
           )}
 
-          {/* Highlights Carousel */}
-          <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-4 -mx-4 px-4     ">
-            <div className="min-w-[240px]  snap-center flex items-center gap-3 p-4 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="w-10 h-10 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center shrink-0">
-                <Flame size={20} />
+          {/* Highlights */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+            <div className="flex items-center gap-3.5 p-4 md:p-5 rounded-2xl bg-white shadow-sm border border-gray-100">
+              <div className="w-11 h-11 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center shrink-0">
+                <Flame size={22} />
               </div>
               <div className="text-left">
-                <h4 className="font-black text-vovoh-dark text-xs uppercase tracking-wide">Frito na Hora</h4>
-                <p className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">Chega quentinho e crocante pra você.</p>
+                <h4 className="font-black text-vovoh-dark text-xs md:text-sm uppercase tracking-wide">Frito na Hora</h4>
+                <p className="text-[10px] md:text-xs text-gray-500 font-medium leading-tight mt-0.5">Chega quentinho e crocante pra você.</p>
               </div>
             </div>
-            <div className="min-w-[240px]  snap-center flex items-center gap-3 p-4 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center shrink-0">
-                <Heart size={20} />
+            <div className="flex items-center gap-3.5 p-4 md:p-5 rounded-2xl bg-white shadow-sm border border-gray-100">
+              <div className="w-11 h-11 bg-red-50 text-red-500 rounded-xl flex items-center justify-center shrink-0">
+                <Heart size={22} />
               </div>
               <div className="text-left">
-                <h4 className="font-black text-vovoh-dark text-xs uppercase tracking-wide">Tempero de Mãe</h4>
-                <p className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">Receita de família com toque especial.</p>
+                <h4 className="font-black text-vovoh-dark text-xs md:text-sm uppercase tracking-wide">Tempero de Mãe</h4>
+                <p className="text-[10px] md:text-xs text-gray-500 font-medium leading-tight mt-0.5">Receita de família com toque especial.</p>
               </div>
             </div>
-            <div className="min-w-[240px]  snap-center flex items-center gap-3 p-4 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="w-10 h-10 bg-green-50 text-green-500 rounded-xl flex items-center justify-center shrink-0">
-                <ShieldCheck size={20} />
+            <div className="flex items-center gap-3.5 p-4 md:p-5 rounded-2xl bg-white shadow-sm border border-gray-100">
+              <div className="w-11 h-11 bg-green-50 text-green-500 rounded-xl flex items-center justify-center shrink-0">
+                <ShieldCheck size={22} />
               </div>
               <div className="text-left">
-                <h4 className="font-black text-vovoh-dark text-xs uppercase tracking-wide">Qualidade Real</h4>
-                <p className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">Ingredientes frescos e selecionados.</p>
+                <h4 className="font-black text-vovoh-dark text-xs md:text-sm uppercase tracking-wide">Qualidade Real</h4>
+                <p className="text-[10px] md:text-xs text-gray-500 font-medium leading-tight mt-0.5">Ingredientes frescos e selecionados.</p>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main id="menu" className="pb-24  container mx-auto px-4 ">
+      <main id="menu" className="pb-24 max-w-7xl mx-auto px-4 md:px-6">
         
-        <div className="sticky top-[70px] z-[190] bg-[#F9F9F9]/95 backdrop-blur-xl py-3 -mx-4 px-4   mb-6 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-200/50 shadow-sm transition-all snap-x snap-mandatory scroll-pl-4">
+        <div className="sticky top-[64px] z-[190] bg-[#F9F9F9]/95 backdrop-blur-xl py-3 -mx-4 px-4 md:mx-0 md:px-0 mb-6 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-200/50 shadow-sm transition-all snap-x snap-mandatory scroll-pl-4">
           {visibleCategories.map(c => (
-            <button key={c.id} onClick={() => setActiveCat(c.id)} className={`px-4 py-2.5   rounded-full font-black text-xs  whitespace-nowrap transition-all flex-shrink-0 snap-center ${activeCat === c.id ? 'bg-vovoh-dark text-white shadow-lg shadow-black/10 scale-105' : 'bg-white text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}>
+            <button key={c.id} onClick={() => setActiveCat(c.id)} className={`px-4 md:px-5 py-2.5 rounded-full font-black text-xs md:text-sm whitespace-nowrap transition-all flex-shrink-0 snap-center ${activeCat === c.id ? 'bg-vovoh-dark text-white shadow-lg shadow-black/10 scale-105' : 'bg-white text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}>
               {c.label}
             </button>
           ))}
         </div>
 
         {isLoading ? <GrandmaLoader /> : (
-          <div className="grid grid-cols-1  lg:grid-cols-4 gap-3 ">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {products.filter((p: any) => activeCat === 'todos' || p.category === activeCat).map((p: any) => (
-              <div key={p.id} className="group bg-white rounded-[1.5rem]  p-3 shadow-sm border border-gray-100 flex gap-3 hover:border-vovoh-red0 hover:shadow-xl transition-all duration-300 items-stretch">
+              <div key={p.id} className="group bg-white rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-3.5 hover:border-vovoh-red/30 hover:shadow-xl transition-all duration-300 items-stretch">
                 <div 
-                  className="w-24 h-24   flex-shrink-0 rounded-2xl [1.5rem] overflow-hidden bg-vovoh-cream relative cursor-zoom-in group/img self-center"
+                  className="w-24 h-24 md:w-28 md:h-28 flex-shrink-0 rounded-xl md:rounded-2xl overflow-hidden bg-vovoh-cream relative cursor-zoom-in group/img self-center"
                   onClick={() => setSelectedZoomImage(p.image || PLACEHOLDER_IMG)}
                 >
-                   <img src={p.image || PLACEHOLDER_IMG} className="w-full h-full object-cover :scale-110 transition-transform duration-700" alt={p.name} />
+                   <img src={p.image || PLACEHOLDER_IMG} className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700" alt={p.name} />
                 </div>
                 
                 <div 
-                  className="flex flex-col flex-grow justify-between py-1 cursor-pointer min-w-0"
+                  className="flex flex-col flex-grow justify-between py-0.5 md:py-1 cursor-pointer min-w-0"
                   onClick={() => {
                     setSelectedProduct(p);
                     if (p.variations && p.variations.length > 0) {
@@ -275,23 +275,23 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
                 >
                    <div className="flex flex-col h-full">
                      <div className="flex justify-between items-start gap-2">
-                        <h4 className="text-sm  font-black text-vovoh-dark leading-tight line-clamp-2">{p.name}</h4>
+                        <h4 className="text-sm md:text-base font-black text-vovoh-dark leading-tight line-clamp-2">{p.name}</h4>
                         {p.oldPrice && (
-                          <span className="bg-vovoh-gold text-white px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider shadow-sm shrink-0">Promo</span>
+                          <span className="bg-vovoh-gold text-white px-1.5 py-0.5 rounded-md text-[8px] md:text-[9px] font-black uppercase tracking-wider shadow-sm shrink-0">Promo</span>
                         )}
                      </div>
-                     <p className="text-[10px]  text-gray-400 font-medium line-clamp-2 mt-1 mb-2 leading-relaxed">"{p.description}"</p>
+                     <p className="text-[10px] md:text-xs text-gray-400 font-medium line-clamp-2 mt-1 mb-2 leading-relaxed">"{p.description}"</p>
                      
-                     <div className="mt-auto flex items-end justify-between gap-2">
+                     <div className="mt-auto flex items-end justify-between gap-2 pt-1">
                         <div className="flex flex-col">
-                          {p.oldPrice && <span className="text-[9px] text-gray-300 line-through font-bold">R$ {Number(p.oldPrice).toFixed(2)}</span>}
-                          <span className="text-sm  font-black text-vovoh-dark">R$ {Number(p.price).toFixed(2)}</span>
+                          {p.oldPrice && <span className="text-[9px] md:text-[10px] text-gray-300 line-through font-bold">R$ {Number(p.oldPrice).toFixed(2)}</span>}
+                          <span className="text-sm md:text-base font-black text-vovoh-dark">R$ {Number(p.price).toFixed(2)}</span>
                         </div>
                         <button onClick={(e) => {
                           e.stopPropagation();
                           onAddToCart(p, null, [], "", e);
-                        }} className="w-8 h-8   bg-gray-50 text-vovoh-red rounded-full flex items-center justify-center hover:bg-vovoh-red hover:text-white transition-all active:scale-90 shadow-sm border border-gray-100">
-                          <Plus size={16} className=" " strokeWidth={3} />
+                        }} className="w-8 h-8 md:w-9 md:h-9 bg-gray-50 text-vovoh-red rounded-full flex items-center justify-center hover:bg-vovoh-red hover:text-white transition-all active:scale-90 shadow-sm border border-gray-100">
+                          <Plus size={16} strokeWidth={3} />
                         </button>
                      </div>
                    </div>
@@ -324,25 +324,25 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
       )}
 
       {selectedProduct && (
-        <div className="fixed inset-0 z-[500] flex flex-col justify-end items-center">
+        <div className="fixed inset-0 z-[500] flex flex-col justify-end md:justify-center items-center p-0 md:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setSelectedProduct(null)} />
           
-          <div className="relative w-full desktop:max-w-[480px] bg-white rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full max-h-[90vh] overflow-hidden">
+          <div className="relative w-full md:max-w-xl bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full md:zoom-in-95 max-h-[90vh] md:max-h-[85vh] overflow-hidden z-10">
             
             {/* Drag Handle for Mobile */}
-            <div className="w-full flex justify-center items-center h-6 bg-white shrink-0 cursor-pointer" onClick={() => setSelectedProduct(null)}>
+            <div className="w-full flex md:hidden justify-center items-center h-6 bg-white shrink-0 cursor-pointer" onClick={() => setSelectedProduct(null)}>
                <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
             </div>
 
             <div className="relative shrink-0">
-               <div className="h-48  w-full bg-vovoh-cream relative">
+               <div className="h-48 md:h-56 w-full bg-vovoh-cream relative">
                   <img src={selectedProduct.image || PLACEHOLDER_IMG} className="w-full h-full object-cover" alt={selectedProduct.name} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                  <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-white0 backdrop-blur-md p-2 rounded-full hover:bg-white/30 text-white transition-all"><X size={20} /></button>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                  <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-black/30 backdrop-blur-md p-2 rounded-full hover:bg-black/50 text-white transition-all"><X size={20} /></button>
                </div>
                <div className="absolute bottom-0 left-0 w-full p-6 text-white">
-                  <h3 className="text-2xl  font-black leading-tight shadow-black drop-shadow-md">{selectedProduct.name}</h3>
-                  <p className="text-xs  font-medium opacity-90 line-clamp-2 mt-1 drop-shadow-sm">{selectedProduct.description}</p>
+                  <h3 className="text-2xl md:text-3xl font-black leading-tight shadow-black drop-shadow-md">{selectedProduct.name}</h3>
+                  <p className="text-xs md:text-sm font-medium opacity-90 line-clamp-2 mt-1 drop-shadow-sm">{selectedProduct.description}</p>
                </div>
             </div>
 
@@ -443,56 +443,57 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
         </div>
       )}
 
-      <section id="vovoh-ai" className="py-16  container mx-auto px-4 ">
-         <div className="max-w-5xl mx-auto bg-vovoh-dark rounded-[3rem] [4rem] p-6  shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] flex flex-col  gap-8  items-center relative overflow-hidden border border-white/10">
+      <section id="vovoh-ai" className="py-12 md:py-20 max-w-7xl mx-auto px-4 md:px-6">
+         <div className="bg-vovoh-dark rounded-3xl md:rounded-[3.5rem] p-6 md:p-12 shadow-2xl flex flex-col md:flex-row gap-8 md:gap-12 items-center relative overflow-hidden border border-white/10">
             
-            <div className="absolute top-0 right-0 w-64 h-64 bg-vovoh-red0 rounded-full blur-[80px] -z-0 pointer-events-none"></div>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-vovoh-red/20 rounded-full blur-[80px] -z-0 pointer-events-none"></div>
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-vovoh-gold/10 rounded-full blur-[80px] -z-0 pointer-events-none"></div>
             
-            <div className="w-32 h-32   bg-vovoh-red rounded-[2.5rem]  flex items-center justify-center text-white shadow-2xl shadow-red-900/50 flex-shrink-0 z-10 border border-red-4000">
-               <ChefHat size={60} className="  animate-pulse" />
+            <div className="w-28 h-28 md:w-36 md:h-36 bg-vovoh-red rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-red-900/50 flex-shrink-0 z-10 border border-red-400/20">
+               <ChefHat size={56} className="animate-pulse" />
             </div>
             
-            <div className="flex-grow z-10 w-full text-center ">
-               <div className="flex items-center justify-center  gap-2 mb-4 ">
+            <div className="flex-grow z-10 w-full text-center md:text-left">
+               <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
                   <Sparkles size={24} className="text-vovoh-gold" />
-                  <h3 className="text-2xl  font-black text-white tracking-tight">Dica da Vovó!</h3>
+                  <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight">Dica da Vovó!</h3>
                </div>
+               <p className="text-zinc-400 text-xs md:text-sm font-medium mb-4">Diga o que você precisa e a Vovó sugere o pedido ideal na hora:</p>
                
                <div className="relative group">
                   <textarea 
                     value={aiInput}
                     onChange={e => setAiInput(e.target.value)}
                     placeholder="Ex: Vovó, vou receber 10 amigos hoje à noite, o que eu peço?"
-                    className="w-full p-6  bg-white/5 rounded- [2.5rem] min-h-[120px] [150px] outline-none border border-white/10 focus:border-vovoh-red/50 focus:bg-white/10 transition-all font-bold text-sm  text-white placeholder:text-gray-500 backdrop-blur-md resize-none"
+                    className="w-full p-5 md:p-6 bg-white/5 rounded-2xl md:rounded-3xl min-h-[110px] md:min-h-[120px] outline-none border border-white/10 focus:border-vovoh-red/50 focus:bg-white/10 transition-all font-bold text-sm md:text-base text-white placeholder:text-gray-500 backdrop-blur-md resize-none"
                   />
-                  <button onClick={askGrandma} disabled={aiLoading} className="absolute bottom-4 right-4   w-12 h-12   bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(214,31,31,0.4)] hover:bg-red-600 hover:scale-105 active:scale-90 transition-all">
-                    {aiLoading ? <Loader2 className="animate-spin" /> : <Send size={24} />}
+                  <button onClick={askGrandma} disabled={aiLoading} className="absolute bottom-4 right-4 w-12 h-12 bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-lg hover:bg-red-600 hover:scale-105 active:scale-90 transition-all">
+                    {aiLoading ? <Loader2 className="animate-spin" /> : <Send size={22} />}
                   </button>
                </div>
                
                {aiRes && (
-                 <div className="mt-6  p-6  bg-white rounded- [2.5rem] border border-gray-100 animate-in fade-in slide-in-from-top-4 text-left shadow-xl shadow-black/5 relative overflow-hidden">
+                 <div className="mt-6 p-6 bg-white rounded-3xl border border-gray-100 animate-in fade-in slide-in-from-top-4 text-left shadow-xl shadow-black/5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-vovoh-gold/5 rounded-full blur-[40px] -z-0 pointer-events-none"></div>
                     
-                    <div className="text-base  font-medium text-gray-600 leading-relaxed mb-6 prose prose-p:my-2 prose-strong:text-vovoh-dark prose-strong:font-black prose-ul:list-disc prose-ul:pl-4 prose-li:marker:text-vovoh-gold relative z-10">
+                    <div className="text-sm md:text-base font-medium text-gray-600 leading-relaxed mb-6 prose prose-p:my-2 prose-strong:text-vovoh-dark prose-strong:font-black prose-ul:list-disc prose-ul:pl-4 prose-li:marker:text-vovoh-gold relative z-10">
                       <ReactMarkdown>{aiRes.message}</ReactMarkdown>
                     </div>
                     
                     {aiRes.suggestedItems && aiRes.suggestedItems.length > 0 && (
-                      <div className="flex flex-col gap-4 pt-6 border-t border-gray-100 relative z-10">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-100 relative z-10">
                         <div className="flex flex-wrap gap-2">
                            {aiRes.suggestedItems.map((item: any, i: number) => (
-                             <span key={i} className="px-3 py-1.5   bg-vovoh-red/5 rounded-xl text-[10px]  font-black text-vovoh-red uppercase shadow-sm border border-vovoh-red/10 flex items-center gap-2">
+                             <span key={i} className="px-3 py-1.5 bg-vovoh-red/5 rounded-xl text-[10px] font-black text-vovoh-red uppercase shadow-sm border border-vovoh-red/10 flex items-center gap-2">
                                {item.name} <span className="bg-vovoh-red text-white px-1.5 rounded-md">x{item.quantity}</span>
                              </span>
                            ))}
                         </div>
                         <button 
                           onClick={handleAddSuggestion}
-                          className="w-full  px-8 py-4 bg-vovoh-gold text-white font-black rounded-2xl text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-5000 flex items-center justify-center gap-3 active:scale-95"
+                          className="w-full sm:w-auto px-6 py-3.5 bg-vovoh-gold text-white font-black rounded-2xl text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 shrink-0"
                         >
-                          <Plus size={18} /> Adicionar Sugestão à Sacola
+                          <Plus size={16} /> Adicionar à Sacola
                         </button>
                       </div>
                     )}
@@ -502,11 +503,11 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
          </div>
       </section>
 
-      <section className="py-16  bg-white">
-        <div className="container mx-auto px-4 ">
-          <div className="flex flex-col  gap-12 items-center">
-            <div className="w-full  relative">
-              <div className="aspect-square bg-vovoh-cream rounded-[3rem] overflow-hidden shadow-2xl rotate-3">
+      <section className="py-16 md:py-24 bg-white border-y border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+            <div className="w-full relative max-w-md mx-auto md:max-w-none">
+              <div className="aspect-square bg-vovoh-cream rounded-3xl md:rounded-[3rem] overflow-hidden shadow-2xl">
                 <img 
                   src={dynamicConfigs?.story_image || "https://imgur.com/lrKC57Q.png"} 
                   className="w-full h-full object-cover hover:scale-105 transition-all duration-700" 
@@ -514,20 +515,16 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <div className="absolute -bottom-6 -left-6 bg-vovoh-red text-white p-8 rounded- shadow-xl -rotate-6 hidden">
-                <p className="text-4xl font-black">20+</p>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Anos de Tradição</p>
-              </div>
             </div>
-            <div className="w-full  space-y-6">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-vovoh-cream text-vovoh-gold rounded-full text-[10px] font-black uppercase tracking-widest">
+            <div className="w-full space-y-6 text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-vovoh-cream text-vovoh-gold rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest">
                 Nossa História
               </div>
-              <h3 className="text-3xl  font-black text-vovoh-dark tracking-tighter leading-tight">
+              <h3 className="text-3xl md:text-5xl font-black text-vovoh-dark tracking-tighter leading-tight">
                 Da nossa cozinha <br/>
-                <span className="text-vovoh-red">para a sua mesa.</span>
+                <span className="text-vovoh-red font-serif italic">para a sua mesa.</span>
               </h3>
-              <div className="text-gray-500 font-medium leading-relaxed whitespace-pre-line">
+              <div className="text-gray-500 font-medium text-sm md:text-base leading-relaxed whitespace-pre-line">
                 {dynamicConfigs?.story_text || `A Delícias da Vovó nasceu do desejo de compartilhar o sabor autêntico da comida caseira. Tudo começou na cozinha da Vovó Grazy, onde cada salgado era feito com um cuidado que só quem ama cozinhar entende.
 
 Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanadas, criando uma mistura única de sabores que conquistou toda a vizinhança de Colombo. Hoje, mantemos a mesma essência: massa fresca, recheio generoso e muito capricho.`}
@@ -535,13 +532,13 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
               <div className="pt-4 flex items-center gap-4">
                 <div className="flex -space-x-3">
                   {[1,2,3,4].map(i => (
-                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-200 overflow-hidden">
+                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-200 overflow-hidden shadow-sm">
                       <img src={`https://i.pravatar.cc/100?u=${i}`} alt="Avatar" />
                     </div>
                   ))}
                 </div>
-                <p className="text-xs font-bold text-vovoh-dark">
-                  <span className="text-vovoh-red">500+</span> clientes felizes toda semana
+                <p className="text-xs md:text-sm font-bold text-vovoh-dark">
+                  <span className="text-vovoh-red font-extrabold">500+</span> famílias felizes toda semana
                 </p>
               </div>
             </div>
@@ -549,19 +546,22 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
         </div>
       </section>
 
-      <section className="py-16  container mx-auto px-4 ">
-        <div className="text-center mb-12 ">
-          <h3 className="text-3xl  font-black text-vovoh-dark tracking-tighter mb-4">O que dizem os netinhos...</h3>
+      <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 md:px-6">
+        <div className="text-center mb-12">
+          <h3 className="text-3xl md:text-4xl font-black text-vovoh-dark tracking-tighter mb-3">O que dizem os netinhos...</h3>
+          <p className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest">Avaliações reais de clientes da região</p>
         </div>
-        <div className="grid grid-cols-1  gap-6 ">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {testimonials.map((t: any, i: number) => (
-            <div key={i} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 hover:shadow-xl transition-all group">
-              <div className="flex gap-1 mb-4">
-                {[...Array(Number(t.rating || 5))].map((_, i) => <Star key={i} size={14} className="text-vovoh-gold fill-current" />)}
+            <div key={i} className="bg-white p-7 md:p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-xl transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex gap-1 mb-4">
+                  {[...Array(Number(t.rating || 5))].map((_, i) => <Star key={i} size={15} className="text-vovoh-gold fill-current" />)}
+                </div>
+                <p className="text-gray-600 font-medium italic mb-6 text-sm md:text-base leading-relaxed">"{t.text}"</p>
               </div>
-              <p className="text-gray-600 font-medium italic mb-6 leading-relaxed">"{t.text}"</p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-vovoh-cream flex items-center justify-center font-black text-vovoh-gold text-xs">
+              <div className="flex items-center gap-3 pt-4 border-t border-gray-50">
+                <div className="w-10 h-10 rounded-full bg-vovoh-cream flex items-center justify-center font-black text-vovoh-gold text-sm shadow-inner">
                   {t.name.charAt(0)}
                 </div>
                 <p className="font-black text-vovoh-dark text-sm">{t.name}</p>
@@ -571,55 +571,55 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
         </div>
       </section>
 
-      <section className="py-16  bg-vovoh-dark relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full opacity-5">
+      <section className="py-16 md:py-24 bg-vovoh-dark relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
           <div className="absolute top-10 left-10 w-64 h-64 bg-vovoh-red rounded-full blur-3xl"></div>
           <div className="absolute bottom-10 right-10 w-64 h-64 bg-vovoh-gold rounded-full blur-3xl"></div>
         </div>
 
-        <div className="container mx-auto px-4  max-w-4xl relative z-10">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/5 text-vovoh-gold rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-white/10">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 relative z-10">
+          <div className="text-center mb-12 md:mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/5 text-vovoh-gold rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest mb-4 border border-white/10">
               Central de Ajuda
             </div>
-            <h3 className="text-3xl  font-black text-white tracking-tighter mb-4">Dúvidas Frequentes</h3>
-            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">Tudo o que você precisa saber sobre as delícias</p>
+            <h3 className="text-3xl md:text-5xl font-black text-white tracking-tighter mb-4">Dúvidas Frequentes</h3>
+            <p className="text-gray-400 font-bold text-xs md:text-sm uppercase tracking-widest">Tudo o que você precisa saber sobre as delícias</p>
           </div>
 
           <div className="grid gap-4">
             {faqs.map((faq: any, i: number) => (
               <div 
                 key={i} 
-                className={`group rounded- border transition-all duration-500 ${
+                className={`group rounded-2xl md:rounded-3xl border transition-all duration-300 overflow-hidden ${
                   openFaq === i 
-                    ? 'bg-white/10 border-white0 shadow-2xl' 
-                    : 'bg-white/5 border-white/5 hover:bg-white/[0.07] hover:border-white/10'
+                    ? 'bg-white/10 border-white/20 shadow-2xl' 
+                    : 'bg-white/5 border-white/5 hover:bg-white/[0.08] hover:border-white/10'
                 }`}
               >
                 <button 
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full p-6  text-left flex justify-between items-center"
+                  className="w-full p-5 md:p-6 text-left flex justify-between items-center"
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs transition-colors ${
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs transition-colors shrink-0 ${
                       openFaq === i ? 'bg-vovoh-red text-white' : 'bg-white/10 text-vovoh-gold'
                     }`}>
                       {i + 1}
                     </div>
-                    <span className="font-black text-white text-sm  tracking-tight">{faq.q}</span>
+                    <span className="font-black text-white text-sm md:text-base tracking-tight">{faq.q}</span>
                   </div>
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-white/5 text-white/40 group-hover:text-white transition-all ${
-                    openFaq === i ? 'rotate-180 bg-vovoh-red0 text-vovoh-red' : ''
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center bg-white/5 text-white/40 group-hover:text-white transition-all shrink-0 ${
+                    openFaq === i ? 'rotate-180 bg-vovoh-red text-white' : ''
                   }`}>
-                    <ChevronDown size={20} />
+                    <ChevronDown size={18} />
                   </div>
                 </button>
-                <div className={`transition-all duration-500 ease-in-out ${
+                <div className={`transition-all duration-300 ease-in-out ${
                   openFaq === i ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'
                 } overflow-hidden`}>
-                  <div className="px-6 pb-8   ml-12">
-                    <div className="h-px w-12 bg-vovoh-red/30 mb-6"></div>
-                    <p className="text-gray-300 font-medium text-sm  leading-relaxed">
+                  <div className="px-6 pb-6 md:pb-8 ml-12">
+                    <div className="h-px w-12 bg-vovoh-red/30 mb-4"></div>
+                    <p className="text-gray-300 font-medium text-xs md:text-sm leading-relaxed">
                       {faq.a}
                     </p>
                   </div>

@@ -172,17 +172,17 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
   };
 
   return (
-    <div className="fixed inset-0 z-[600] flex flex-col justify-end items-center">
+    <div className="fixed inset-0 z-[600] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={user ? onClose : undefined} />
       
-      <div className="relative w-full desktop:max-w-[480px] h-[90vh] bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] animate-sheet overflow-hidden border-t border-white/20">
+      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden border-t md:border-t-0 md:border-l border-white/20 z-10">
         
         {/* Drag Handle Mobile */}
-        <div className="w-full flex justify-center items-center h-8 bg-white shrink-0 cursor-pointer rounded-t-[2.5rem]" onClick={user ? onClose : undefined}>
+        <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer rounded-t-[2.5rem]" onClick={user ? onClose : undefined}>
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
         </div>
 
-        <header className="px-6 py-4  flex justify-between items-center bg-white border-b border-gray-100 shrink-0 relative z-10">
+        <header className="px-6 py-4 md:py-5 flex justify-between items-center bg-white border-b border-gray-100 shrink-0 relative z-10">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-vovoh-dark text-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/5"><User size={22} strokeWidth={2.5}/></div>
             <div>

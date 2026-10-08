@@ -854,23 +854,77 @@ export default function Home() {
 
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <nav className="sticky top-0 z-[300] bg-white/80 backdrop-blur-md border-b border-gray-200/50 h-16 px-4 flex items-center justify-between shadow-sm shrink-0 transition-all">
-        <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
-          <div className="w-10 h-10 bg-vovoh-red rounded-xl flex items-center justify-center text-white shadow-lg rotate-3 group-active:scale-95 transition-transform"><ChefHat size={20} /></div>
-          <div>
-            <h1 className="text-lg font-black text-vovoh-dark tracking-tighter leading-none">Vovó Grazy</h1>
-            <p className="text-[8px] font-black text-vovoh-red uppercase tracking-[0.2em] mt-0.5">Salgados & Empanadas</p>
+      <nav className="sticky top-0 z-[300] bg-white/85 backdrop-blur-md border-b border-gray-200/50 h-16 px-4 md:px-8 shadow-sm shrink-0 transition-all">
+        <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+            <div className="w-10 h-10 bg-vovoh-red rounded-xl flex items-center justify-center text-white shadow-lg rotate-3 group-active:scale-95 transition-transform"><ChefHat size={20} /></div>
+            <div>
+              <h1 className="text-lg md:text-xl font-black text-vovoh-dark tracking-tighter leading-none">Vovó Grazy</h1>
+              <p className="text-[8px] md:text-[9px] font-black text-vovoh-red uppercase tracking-[0.2em] mt-0.5">Salgados & Empanadas</p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-           <button 
-             onClick={toggleNotifications} 
-             className={`p-2 rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}
-             title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
-           >
-             {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
-           </button>
+          {/* Desktop Navigation Links */}
+          <div className="hidden md:flex items-center gap-8">
+            <button 
+              onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} 
+              className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
+            >
+              Início
+            </button>
+            <button 
+              onClick={() => document.getElementById('menu')?.scrollIntoView({behavior: 'smooth'})} 
+              className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
+            >
+              Cardápio
+            </button>
+            <button 
+              onClick={() => document.getElementById('vovoh-ai')?.scrollIntoView({behavior: 'smooth'})} 
+              className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
+            >
+              Dica da Vovó
+            </button>
+            <button 
+              onClick={() => setIsTrackingOpen(true)} 
+              className={`text-xs font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 ${orders.some(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado') ? 'text-vovoh-gold animate-pulse' : 'text-gray-500 hover:text-vovoh-red'}`}
+            >
+              <ClipboardList size={16} /> Meus Pedidos
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={toggleNotifications} 
+              className={`p-2 rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}
+              title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
+            >
+              {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
+            </button>
+
+            {/* Desktop User Profile Button */}
+            <button 
+              onClick={() => setIsAuthOpen(true)} 
+              className="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-full border border-gray-200 text-xs font-bold text-vovoh-dark hover:border-vovoh-red hover:text-vovoh-red transition-all"
+            >
+              <User size={16} />
+              <span>{user ? user.name.split(' ')[0] : 'Entrar'}</span>
+            </button>
+
+            {/* Desktop Cart Button */}
+            <button 
+              ref={cartButtonRef}
+              onClick={() => setIsCartOpen(true)} 
+              className="hidden md:flex items-center gap-2.5 px-4 py-2 bg-vovoh-red text-white rounded-full font-black text-xs uppercase tracking-wider shadow-md hover:bg-red-600 transition-all active:scale-95 relative"
+            >
+              <ShoppingCart size={16} />
+              <span>Sacola</span>
+              {cart.length > 0 && (
+                <span className="bg-vovoh-gold text-white text-[10px] font-black px-1.5 py-0.5 rounded-full ml-1">
+                  {cart.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -956,8 +1010,8 @@ export default function Home() {
          />
       </div>
 
-      {/* Bottom Navigation Bar */}
-      <div className="fixed bottom-0 left-0 right-0 desktop:max-w-[480px] desktop:mx-auto desktop:left-1/2 desktop:-translate-x-1/2 z-[250] bg-white border-t border-gray-100 flex justify-around items-end h-20 pb-2 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)]">
+      {/* Bottom Navigation Bar (Mobile Only) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-white border-t border-gray-100 flex justify-around items-end h-20 pb-2 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)]">
         
         <button onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} className="flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-vovoh-red active:scale-95 transition-all w-16">
           <Store size={22} />

@@ -931,22 +931,22 @@ export default function AdminPage() {
       )}
 
       <div className="max-w-7xl mx-auto space-y-12">
-        <header className="sticky top-0 bg-vovoh-dark/90 backdrop-blur-md z-40 flex flex-col  justify-between items-start  gap-6  py-4 pb-4 border-b border-white/5">
-          <div className="flex items-center gap-4  w-full ">
-            <div className="w-12 h-12   bg-vovoh-red rounded-2xl flex items-center justify-center shadow-2xl rotate-3 shrink-0">
-              <ChefHat className="text-white w-6 h-6  " />
+        <header className="sticky top-0 bg-vovoh-dark/95 backdrop-blur-md z-40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6 py-4 pb-4 border-b border-white/5">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-vovoh-red rounded-2xl flex items-center justify-center shadow-2xl rotate-3 shrink-0">
+              <ChefHat className="text-white w-6 h-6 md:w-7 md:h-7" />
             </div>
             <div className="min-w-0 flex-grow">
-              <h1 className="text-2xl  font-black tracking-tight truncate">Painel da Vovó</h1>
+              <h1 className="text-2xl md:text-3xl font-black tracking-tight truncate">Painel da Vovó</h1>
               <div className="flex flex-wrap items-center gap-2 mt-1">
-                <span className="text-vovoh-red font-black text-[9px] [10px] uppercase tracking-[0.2em] whitespace-nowrap">Gestão de Pedidos</span>
-                <span className="text-zinc-600 font-bold text-[9px] [10px]">•</span>
+                <span className="text-vovoh-red font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Gestão de Pedidos</span>
+                <span className="text-zinc-600 font-bold text-[9px] md:text-[10px]">•</span>
                 {notifPerm !== 'granted' ? (
-                  <button onClick={requestNotification} className="flex items-center gap-1.5 px-2.5 py-1 bg-vovoh-gold text-black rounded-full text-[9px] [10px] font-black uppercase tracking-widest shadow-lg shadow-vovoh-gold/10 animate-pulse hover:scale-105 transition-all">
+                  <button onClick={requestNotification} className="flex items-center gap-1.5 px-2.5 py-1 bg-vovoh-gold text-black rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-vovoh-gold/10 animate-pulse hover:scale-105 transition-all">
                     <Bell size={10} className="fill-black shrink-0" /> Ativar Alertas
                   </button>
                 ) : (
-                  <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full text-[8px] [9px] font-black uppercase tracking-widest border border-emerald-500/20">
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest border border-emerald-500/20">
                     <CheckCircle2 size={10} className="text-emerald-400 shrink-0" /> Alertas Ativos
                   </span>
                 )}
@@ -954,7 +954,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full  justify-between ">
+          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
             {/* Quick manual refresh and web store view */}
             <div className="flex items-center gap-2">
               <button 

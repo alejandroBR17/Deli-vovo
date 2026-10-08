@@ -61,7 +61,7 @@ export default function App() {
           <AdminPage />
         </div>
       ) : (
-        <div className="w-full min-h-screen desktop:max-w-[480px] desktop:mx-auto desktop:shadow-[0_0_60px_rgba(0,0,0,0.6)] desktop:border-x desktop:border-zinc-800 bg-[#F9F9F9] relative">
+        <div className="w-full min-h-screen bg-[#F9F9F9] relative">
           <Home />
         </div>
       )}
