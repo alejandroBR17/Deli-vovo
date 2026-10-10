@@ -20,7 +20,8 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
 
   if (!isOpen) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { const response = await fetch('/api/auth/logout', { method: 'POST' }); if (!response.ok) throw new Error(); } catch { showMsg('Não foi possível sair. Tente novamente.', 'error'); return; }
     localStorage.removeItem('vovoh_user');
     setUser(null);
     showMsg("Você saiu da conta. Volte sempre, querido!", "info");

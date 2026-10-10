@@ -29,6 +29,7 @@ export interface User {
 }
 
 export interface Order {
+  accessToken?: string;
   id: string;
   items: CartItem[];
   total: number;

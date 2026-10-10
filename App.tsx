@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import Home from './pages/Home';
-import AdminPage from './pages/AdminPage';
+const AdminPage = lazy(() => import('./pages/AdminPage'));
 import { ChefHat, ShoppingBag, ShieldCheck } from 'lucide-react';
 
 export default function App() {
@@ -58,7 +58,7 @@ export default function App() {
 
       {isAdmin ? (
         <div className="w-full min-h-screen bg-vovoh-dark text-white">
-          <AdminPage />
+          <Suspense fallback={<p role="status" className="p-6 text-center">Abrindo o painel...</p>}><AdminPage /></Suspense>
         </div>
       ) : (
         <div className="w-full min-h-screen bg-[#F9F9F9] relative">

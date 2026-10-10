@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs-extra';
@@ -7,71 +8,43 @@ import webpush from 'web-push';
 import { GoogleGenAI } from "@google/genai";
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  setDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where 
-} from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
+import { initializeApp, getApps, cert, applicationDefault } from 'firebase-admin/app';
+import { getFirestore, Firestore, Query, DocumentReference } from 'firebase-admin/firestore';
+import { waitUntil } from '@vercel/functions';
+import { rateLimit } from 'express-rate-limit';
+import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin } from '../server/admin-auth';
 
 dotenv.config();
 
-// --- Inicialização do Firebase Firestore no Backend ---
-let firebaseApp;
-let db: any = null;
-let firestoreLoadMethod = "none";
-
+let db: Firestore | null = null;
+let firestoreLoadMethod = 'none';
 try {
-  let fbConfig: any = null;
-  // 1. Tentar ler das variáveis de ambiente
-  if (process.env.VITE_FIREBASE_API_KEY) {
-    fbConfig = {
-      apiKey: process.env.VITE_FIREBASE_API_KEY,
-      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.VITE_FIREBASE_APP_ID,
-    };
-    firestoreLoadMethod = "env";
-  } else {
-    // 2. Tentar ler usando require relativo (para que o esbuild inclua no bundle compilado)
-    try {
-      fbConfig = require('../firebase-applet-config.json');
-      firestoreLoadMethod = "require_bundle";
-    } catch (e) {
-      // 3. Fallback para ler por fs-extra caso o require falhe
-      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-      if (fs.existsSync(configPath)) {
-        fbConfig = fs.readJsonSync(configPath);
-        firestoreLoadMethod = "fs_local";
-      }
-    }
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const credential = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+      ? cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) : applicationDefault();
+    const firebaseApp = getApps()[0] || initializeApp({ credential });
+    const databaseId = process.env.FIREBASE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId;
+    db = databaseId ? getFirestore(firebaseApp, databaseId) : getFirestore(firebaseApp);
+    db.settings({ ignoreUndefinedProperties: true });
+    firestoreLoadMethod = 'admin';
   }
-
-  if (fbConfig && fbConfig.apiKey) {
-    firebaseApp = getApps().length === 0 ? initializeApp(fbConfig) : getApp();
-    const databaseId = fbConfig.firestoreDatabaseId || process.env.VITE_FIREBASE_DATABASE_ID;
-    if (databaseId) {
-      db = getFirestore(firebaseApp, databaseId);
-    } else {
-      db = getFirestore(firebaseApp);
-    }
-    console.log(`API Backend: Firebase Firestore inicializado e ativo via método: ${firestoreLoadMethod} (databaseId: ${databaseId || 'default'})!`);
-  } else {
-    console.warn("API Backend: Nenhuma configuração do Firebase encontrada para inicialização.");
-  }
-} catch (e) {
-  console.error("API Backend: Falha ao inicializar o Firestore:", e);
+} catch {
+  console.error('Não foi possível inicializar o acesso privado ao Firestore.');
 }
+
+// Keep the repository calls uniform while using server credentials exclusively.
+const collection = (database: Firestore, name: string) => database.collection(name);
+const doc = (database: Firestore, name: string, id: string) => database.collection(name).doc(id);
+const getDocs = (reference: Query) => reference.get();
+const getDoc = (reference: DocumentReference) => reference.get();
+const setDoc = (reference: DocumentReference, data: any, options?: { merge: boolean }) =>
+  options ? reference.set(data, options) : reference.set(data);
+const updateDoc = (reference: DocumentReference, data: any) => reference.update(data);
+const deleteDoc = (reference: DocumentReference) => reference.delete();
+const where = (field: string, operation: '==', value: string) => ({ field, operation, value });
+const query = (reference: Query, filter: ReturnType<typeof where>) =>
+  reference.where(filter.field, filter.operation, filter.value);
 
 const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23FFFBF2'/%3E%3Ccircle cx='200' cy='180' r='100' fill='%23fef3c7' stroke='%23D97706' stroke-width='4' stroke-dasharray='10 10'/%3E%3Cpath d='M200 140 C 200 140 170 110 140 140 C 110 170 200 240 200 240 C 200 240 290 170 260 140 C 230 110 200 140 200 140 Z' fill='%23D61F1F' opacity='0.8'/%3E%3Ctext x='50%25' y='80%25' font-family='sans-serif' font-weight='900' font-size='22' fill='%23D97706' text-anchor='middle'%3EMistério Gostoso%3C/text%3E%3Ctext x='50%25' y='88%25' font-family='sans-serif' font-weight='500' font-size='14' fill='%23999' text-anchor='middle'%3E(Logo a Vovó põe a foto)%3C/text%3E%3C/svg%3E";
 
@@ -96,7 +69,11 @@ function cleanForFirestore<T>(obj: T): T {
 }
 
 const isVercel = !!process.env.VERCEL;
-const DATA_DIR = (process.env.NODE_ENV === 'production' || isVercel) ? '/tmp/data' : path.join(process.cwd(), 'data');
+function requireLocalStorage() {
+  if (isVercel) throw new Error('Armazenamento persistente indisponível. Tente novamente mais tarde.');
+}
+
+const DATA_DIR = process.env.NODE_ENV === 'test' && process.env.TEST_DATA_DIR ? process.env.TEST_DATA_DIR : (process.env.NODE_ENV === 'production' || isVercel) ? '/tmp/data' : path.join(process.cwd(), 'data');
 
 console.log(`Storage: Usando diretório de dados local: ${DATA_DIR}`);
 
@@ -149,6 +126,7 @@ export interface Order {
   type: string;
   userId?: string;
   archived?: boolean;
+  submissionKeyHash?: string;
 }
 
 export interface User {
@@ -223,7 +201,9 @@ async function callGAS(action: string, payload?: any, queryParams: Record<string
     options.body = JSON.stringify({ action, payload });
   }
 
-  const response = await fetch(urlObj.toString(), options);
+  if (!process.env.GOOGLE_SHEETS_API_SECRET) throw new Error('A integração com a planilha precisa de uma chave privada.');
+  urlObj.searchParams.set('apiSecret', process.env.GOOGLE_SHEETS_API_SECRET);
+  const response = await fetch(urlObj.toString(), { ...options, signal: AbortSignal.timeout(15000) });
   if (!response.ok) {
     throw new Error(`Google Sheets API failed with status ${response.status}`);
   }
@@ -236,7 +216,7 @@ async function callGAS(action: string, payload?: any, queryParams: Record<string
     }
     return data;
   } catch (e: any) {
-    console.error("Failed to parse GAS response as JSON. Text content was:", text);
+    console.error("Resposta inválida da integração com a planilha.");
     throw new Error(e.message || "Invalid response from Google Sheets Script");
   }
 }
@@ -265,6 +245,7 @@ const PushSubscriptionRepo = {
         console.error("Firestore: Erro ao listar push subscriptions:", e);
       }
     }
+    requireLocalStorage();
     const subscriptions = await fs.readJson(FILES.push_subscriptions).catch(() => []);
     return subscriptions;
   },
@@ -285,6 +266,7 @@ const PushSubscriptionRepo = {
     } else {
       subscriptions.push(subscription);
     }
+    requireLocalStorage();
     await fs.writeJson(FILES.push_subscriptions, subscriptions);
   },
   delete: async (endpoint: string) => {
@@ -299,6 +281,7 @@ const PushSubscriptionRepo = {
     }
     const subscriptions = await fs.readJson(FILES.push_subscriptions).catch(() => []);
     const filtered = subscriptions.filter((s: PushSubscription) => s.endpoint !== endpoint);
+    requireLocalStorage();
     await fs.writeJson(FILES.push_subscriptions, filtered);
   }
 };
@@ -363,6 +346,7 @@ const VisitRepo = {
     if (hasVisitedToday) return;
 
     visits.push({ id, ...visit, timestamp, sessionId: visit.sessionId || null, authType: visit.authType || 'none' });
+    requireLocalStorage();
     await fs.writeJson(FILES.visits, visits);
   },
   updateAuth: async (sessionId: string, userId: string, authType: string) => {
@@ -388,7 +372,7 @@ const VisitRepo = {
         updated = true;
       }
     }
-    if (updated) await fs.writeJson(FILES.visits, visits);
+    if (updated) { requireLocalStorage(); await fs.writeJson(FILES.visits, visits); }
   },
   getAll: async (): Promise<Visit[]> => {
     if (db) {
@@ -449,6 +433,7 @@ const PresenceRepo = {
     } else {
       presences.push(presence);
     }
+    requireLocalStorage();
     await fs.writeJson(FILES.presence, presences);
   },
   cleanup: async () => {
@@ -457,7 +442,7 @@ const PresenceRepo = {
       try {
         const querySnapshot = await getDocs(collection(db, 'presence'));
         for (const docSnap of querySnapshot.docs) {
-          const data = docSnap.data();
+          const data = docSnap.data() || {};
           if (new Date(data.lastSeen).getTime() <= Date.now() - timeout) {
             await deleteDoc(doc(db, 'presence', docSnap.id));
           }
@@ -470,6 +455,7 @@ const PresenceRepo = {
 
     const presences = await fs.readJson(FILES.presence).catch(() => []);
     const filtered = presences.filter((p: Presence) => new Date(p.lastSeen).getTime() > Date.now() - timeout);
+    requireLocalStorage();
     await fs.writeJson(FILES.presence, filtered);
   },
   getAll: async (): Promise<Presence[]> => {
@@ -553,6 +539,7 @@ const ProductRepo = {
     }
     const products = await fs.readJson(FILES.products).catch(() => []);
     products.push(product);
+    requireLocalStorage();
     await fs.writeJson(FILES.products, products);
     cache.products.data = null;
   },
@@ -582,7 +569,8 @@ const ProductRepo = {
     const index = products.findIndex((p: Product) => p.id === product.id);
     if (index !== -1) {
       products[index] = product;
-      await fs.writeJson(FILES.products, products);
+      requireLocalStorage();
+    await fs.writeJson(FILES.products, products);
     }
     cache.products.data = null;
   },
@@ -606,6 +594,7 @@ const ProductRepo = {
     }
     const products = await fs.readJson(FILES.products).catch(() => []);
     const filtered = products.filter((p: Product) => p.id !== id);
+    requireLocalStorage();
     await fs.writeJson(FILES.products, filtered);
     cache.products.data = null;
   }
@@ -621,9 +610,10 @@ const OrderRepo = {
           return data.map((row: any) => ({
             id: row.id,
             date: row.date,
+            submissionKeyHash: row.submissionKeyHash || '',
             scheduledTo: row.scheduledTo || undefined,
             refusalReason: row.refusalReason || undefined,
-            customer: {
+            customer: row.customer || {
               name: row.customerName || '',
               phone: row.customerPhone || '',
               address: row.address || ''
@@ -645,10 +635,11 @@ const OrderRepo = {
       try {
         const querySnapshot = await getDocs(collection(db, 'orders'));
         return querySnapshot.docs.map(docSnap => {
-          const data = docSnap.data();
+          const data = docSnap.data() || {};
           return {
             id: docSnap.id,
             date: data.date,
+            submissionKeyHash: data.submissionKeyHash || '',
             scheduledTo: data.scheduledTo || undefined,
             refusalReason: data.refusalReason || undefined,
             customer: data.customer || { name: '', phone: '', address: '' },
@@ -666,6 +657,7 @@ const OrderRepo = {
         console.error("Firestore Error fetching orders:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     return orders;
   },
@@ -680,11 +672,12 @@ const OrderRepo = {
     } else if (db) {
       try {
         const docSnap = await getDoc(doc(db, 'orders', id));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        if (docSnap.exists) {
+          const data = docSnap.data() || {};
           return {
             id: docSnap.id,
             date: data.date,
+            submissionKeyHash: data.submissionKeyHash || '',
             scheduledTo: data.scheduledTo || undefined,
             refusalReason: data.refusalReason || undefined,
             customer: data.customer || { name: '', phone: '', address: '' },
@@ -703,6 +696,7 @@ const OrderRepo = {
         console.error("Firestore Error getting order status:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     return orders.find((o: Order) => o.id === id) || null;
   },
@@ -714,9 +708,10 @@ const OrderRepo = {
           return data.map((row: any) => ({
             id: row.id,
             date: row.date,
+            submissionKeyHash: row.submissionKeyHash || '',
             scheduledTo: row.scheduledTo || undefined,
             refusalReason: row.refusalReason || undefined,
-            customer: {
+            customer: row.customer || {
               name: row.customerName || '',
               phone: row.customerPhone || '',
               address: row.address || ''
@@ -739,7 +734,7 @@ const OrderRepo = {
         const q = query(collection(db, 'orders'), where('userId', '==', userId));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(docSnap => {
-          const data = docSnap.data();
+          const data = docSnap.data() || {};
           return {
             id: docSnap.id,
             ...data,
@@ -751,6 +746,7 @@ const OrderRepo = {
         console.error("Firestore Error fetching user orders:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     return orders.filter((o: Order) => o.userId === userId && !o.archived);
   },
@@ -774,7 +770,8 @@ const OrderRepo = {
           paymentMethod: formattedOrder.paymentMethod,
           type: formattedOrder.type,
           userId: formattedOrder.userId || '',
-          items: JSON.stringify(formattedOrder.items || [])
+          items: JSON.stringify(formattedOrder.items || []),
+          submissionKeyHash: formattedOrder.submissionKeyHash, scheduledTo: formattedOrder.scheduledTo || ''
         });
         return;
       } catch (e) {
@@ -782,14 +779,16 @@ const OrderRepo = {
       }
     } else if (db) {
       try {
-        await setDoc(doc(db, 'orders', formattedOrder.id), formattedOrder);
+        await doc(db, 'orders', formattedOrder.id).create(formattedOrder);
         return;
       } catch (e) {
         console.error("Firestore Error creating order:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     orders.push(formattedOrder);
+    requireLocalStorage();
     await fs.writeJson(FILES.orders, orders);
   },
   update: async (order: Order) => {
@@ -811,11 +810,13 @@ const OrderRepo = {
         console.error("Firestore Error updating order:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     const index = orders.findIndex((o: Order) => o.id === order.id);
     if (index !== -1) {
       orders[index] = { ...orders[index], ...order };
-      await fs.writeJson(FILES.orders, orders);
+      requireLocalStorage();
+    await fs.writeJson(FILES.orders, orders);
     }
   },
   updateStatus: async (id: string, status: string) => {
@@ -834,11 +835,13 @@ const OrderRepo = {
         console.error("Firestore Error updating status:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     const index = orders.findIndex((o: Order) => o.id === id);
     if (index !== -1) {
       orders[index].status = status;
-      await fs.writeJson(FILES.orders, orders);
+      requireLocalStorage();
+    await fs.writeJson(FILES.orders, orders);
     }
   },
   countActive: async (): Promise<number> => {
@@ -861,11 +864,13 @@ const OrderRepo = {
         console.error("Firestore Error archiving order:", e);
       }
     }
+    requireLocalStorage();
     const orders = await fs.readJson(FILES.orders).catch(() => []);
     const index = orders.findIndex((o: Order) => o.id === id);
     if (index !== -1) {
       orders[index].archived = true;
-      await fs.writeJson(FILES.orders, orders);
+      requireLocalStorage();
+    await fs.writeJson(FILES.orders, orders);
     }
   }
 };
@@ -883,7 +888,7 @@ const UserRepo = {
     } else if (db) {
       try {
         const docSnap = await getDoc(doc(db, 'users', id));
-        if (docSnap.exists()) {
+        if (docSnap.exists) {
           return { id: docSnap.id, ...docSnap.data() } as User;
         }
       } catch (e) {
@@ -944,11 +949,13 @@ const UserRepo = {
         console.error("Firestore Error creating user:", e);
       }
     }
-    // Sempre salvar localmente também como backup/fallback robusto
+    if (savedInFirestore) return;
+    // Arquivo local apenas em desenvolvimento
     const users = await fs.readJson(FILES.users).catch(() => []);
     if (!users.some((u: User) => u.id === user.id)) {
       users.push(user);
-      await fs.writeJson(FILES.users, users);
+      requireLocalStorage();
+    await fs.writeJson(FILES.users, users);
     }
   },
   getAll: async (): Promise<User[]> => {
@@ -960,6 +967,7 @@ const UserRepo = {
             id: row.id,
             name: row.name,
             email: row.email,
+            password: row.password || '',
             phone: row.phone || '',
             address: row.address || '',
             cart: row.cart || '[]'
@@ -993,13 +1001,13 @@ const UserRepo = {
         const existing = await UserRepo.getById(user.id);
         if (existing) {
           const updated = { ...existing, ...user };
-          await callGAS('register', {
+          await callGAS('updateUser', {
             id: updated.id,
             name: updated.name,
             email: updated.email,
             password: updated.password || '',
             phone: updated.phone || '',
-            address: updated.address || ''
+            address: updated.address || '', cart: updated.cart || '[]'
           });
         }
         return;
@@ -1010,6 +1018,7 @@ const UserRepo = {
       try {
         const cleanedUser = cleanForFirestore(user);
         await setDoc(doc(db, 'users', user.id), cleanedUser, { merge: true });
+        return;
       } catch (e) {
         console.error("Firestore Error updating user:", e);
       }
@@ -1018,7 +1027,8 @@ const UserRepo = {
     const index = users.findIndex((u: User) => u.id === user.id);
     if (index !== -1) {
       users[index] = { ...users[index], ...user };
-      await fs.writeJson(FILES.users, users);
+      requireLocalStorage();
+    await fs.writeJson(FILES.users, users);
     }
   }
 };
@@ -1053,7 +1063,8 @@ const ConfigRepo = {
     }
     
     if (Object.keys(configObj).length === 0) {
-      const configs = await fs.readJson(FILES.configs).catch(() => []);
+      requireLocalStorage();
+    const configs = await fs.readJson(FILES.configs).catch(() => []);
       configs.forEach((c: Config) => configObj[c.key] = c.value);
     }
 
@@ -1078,6 +1089,7 @@ const ConfigRepo = {
         console.error("Firestore Error updating config:", e);
       }
     }
+    requireLocalStorage();
     const configs = await fs.readJson(FILES.configs).catch(() => []);
     const index = configs.findIndex((c: Config) => c.key === key);
     if (index !== -1) {
@@ -1085,6 +1097,7 @@ const ConfigRepo = {
     } else {
       configs.push({ key, value });
     }
+    requireLocalStorage();
     await fs.writeJson(FILES.configs, configs);
     cache.configs.data = null;
   }
@@ -1100,50 +1113,29 @@ const vapidKeys = {
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 async function initWebPush() {
-  try {
-    const envPublic = process.env.VAPID_PUBLIC_KEY;
-    const envPrivate = process.env.VAPID_PRIVATE_KEY;
-
-    if (envPublic && envPrivate) {
-      vapidKeys.publicKey = envPublic;
-      vapidKeys.privateKey = envPrivate;
-    } else {
-      const configs = await ConfigRepo.getAll();
-      if (configs['vapid_public_key'] && configs['vapid_private_key']) {
-        vapidKeys.publicKey = configs['vapid_public_key'];
-        vapidKeys.privateKey = configs['vapid_private_key'];
-      } else {
-        const keys = webpush.generateVAPIDKeys();
-        vapidKeys.publicKey = keys.publicKey;
-        vapidKeys.privateKey = keys.privateKey;
-        await ConfigRepo.update('vapid_public_key', keys.publicKey);
-        await ConfigRepo.update('vapid_private_key', keys.privateKey);
-      }
-    }
-
-    webpush.setVapidDetails(
-      'mailto:ale.sobral.cortes@gmail.com',
-      vapidKeys.publicKey,
-      vapidKeys.privateKey
-    );
-    console.log("Web Push: Inicializado com sucesso.");
-  } catch (e) {
-    console.error("Web Push: Erro ao inicializar:", e);
-  }
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!publicKey || !privateKey) throw new Error('As chaves de notificações ainda precisam ser configuradas.');
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:ale.sobral.cortes@gmail.com', publicKey, privateKey);
+  vapidKeys.publicKey = publicKey;
+  vapidKeys.privateKey = privateKey;
 }
 
 async function sendPushNotification(subscription: PushSubscription, payload: any) {
   try {
-    await webpush.sendNotification(subscription, JSON.stringify(payload));
+    await ensureWebPush();
+    await webpush.sendNotification(subscription, JSON.stringify(payload), { timeout: 10000 });
+    return true;
   } catch (e: any) {
-    console.error(`Erro ao enviar push para endpoint ${subscription.endpoint}:`, e.message || e);
+    console.error('Erro ao enviar notificação:', e.statusCode || 'network');
     if (e.statusCode === 410 || e.statusCode === 404) {
       await PushSubscriptionRepo.delete(subscription.endpoint);
     }
+    return false;
   }
 }
 
-async function notifyAdmins(title: string, body: string, url: string = '/') {
+async function notifyAdmins(title: string, body: string, url: string = '/#vovo-secreta') {
   const subscriptions = await PushSubscriptionRepo.getAll();
   const adminSubs = subscriptions.filter(s => s.role === 'admin');
   for (const sub of adminSubs) {
@@ -1160,7 +1152,14 @@ async function notifyUser(userId: string, title: string, body: string, url: stri
 }
 
 // Inicializa Web Push
-initWebPush().catch(console.error);
+let pushReady: Promise<void> | undefined;
+function ensureWebPush() {
+  return pushReady ||= initWebPush().catch(error => { pushReady = undefined; throw error; });
+}
+function backgroundNotification(task: Promise<unknown>) {
+  const safeTask = task.catch(() => console.error('Falha ao enviar avisos de pedidos.'));
+  if (isVercel) waitUntil(safeTask);
+}
 
 const app = express.Router();
 
@@ -1174,15 +1173,43 @@ app.use((req, res, next) => {
   next();
 });
 
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
+app.post('/admin/login', loginLimiter, loginAdmin);
+app.get('/admin/session', requireAdmin, (_req, res) => res.json({ authenticated: true }));
+app.post('/admin/logout', requireAdminWrite, logoutAdmin);
+app.use('/admin', requireAdminWrite);
+
 // --- Rotas de Push ---
-app.get('/push/public-key', (req, res) => {
-  res.json({ publicKey: vapidKeys.publicKey });
+app.get('/push/public-key', async (_req, res) => {
+  try {
+    await ensureWebPush(); res.setHeader('Cache-Control', 'no-store');
+    res.json({ publicKey: vapidKeys.publicKey });
+  } catch { res.status(503).json({ error: 'As notificações ainda precisam ser configuradas.' }); }
 });
 
 app.post('/push/subscribe', async (req, res) => {
   try {
-    const { subscription, userId, role } = req.body;
-    await PushSubscriptionRepo.add({ ...subscription, userId, role });
+    const { subscription, role } = req.body;
+    const userId = customerId(req);
+    if (role !== 'admin' && !userId) return res.status(401).json({ error: 'Entre na sua conta para ativar os avisos.' });
+    if (!subscription?.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+      return res.status(400).json({ error: 'Cadastro de notificações inválido.' });
+    }
+    let endpoint: URL;
+    try { endpoint = new URL(subscription.endpoint); } catch { return res.status(400).json({ error: 'Endpoint inválido.' }); }
+    const trustedHost = endpoint.hostname === 'fcm.googleapis.com' ||
+      endpoint.hostname === 'updates.push.services.mozilla.com' ||
+      endpoint.hostname.endsWith('.notify.windows.com') || endpoint.hostname.endsWith('.push.apple.com');
+    if (endpoint.protocol !== 'https:' || endpoint.port || endpoint.username || endpoint.password || !trustedHost) {
+      return res.status(400).json({ error: 'Serviço de notificações não reconhecido.' });
+    }
+    if (role === 'admin' && (!hasAdminSession(req) || req.headers['x-vovo-admin'] !== '1')) {
+      return res.status(401).json({ error: 'Entre no painel para ativar os alertas.' });
+    }
+    const existing = (await PushSubscriptionRepo.getAll()).find(sub => sub.endpoint === subscription.endpoint);
+    if (existing?.role === 'admin' && role !== 'admin') return res.status(409).json({ error: 'Este navegador está cadastrado para receber pedidos da loja.' });
+    await ensureWebPush();
+    await PushSubscriptionRepo.add({ endpoint: subscription.endpoint, keys: subscription.keys, userId: role === 'admin' ? 'admin-user' : userId, role: role === 'admin' ? 'admin' : 'customer' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -1212,36 +1239,7 @@ app.post('/create-payment-intent', async (req, res) => {
 });
 
 // Health Check
-app.get('/health', async (req, res) => {
-  let firestoreWriteStatus = "not_tested";
-  let firestoreError: string | null = null;
-
-  if (db) {
-    try {
-      const testDocRef = doc(db, 'diagnostics', 'backend_test');
-      await setDoc(testDocRef, {
-        testedAt: new Date().toISOString(),
-        status: 'ok'
-      });
-      firestoreWriteStatus = "success";
-    } catch (e: any) {
-      firestoreWriteStatus = "failed";
-      firestoreError = e.message || String(e);
-      console.error("Firestore self-test error:", e);
-    }
-  }
-
-  res.json({ 
-    status: 'ok', 
-    environment: process.env.VERCEL ? 'vercel' : 'local',
-    sheetsConfigured: !!process.env.GOOGLE_SHEETS_SCRIPT_URL,
-    firestoreConfigured: !!db,
-    firestoreMethod: firestoreLoadMethod,
-    firestoreWriteStatus,
-    firestoreError,
-    timestamp: new Date().toISOString()
-  });
-});
+app.get('/health', (_req, res) => res.json({ status: db || process.env.GOOGLE_SHEETS_SCRIPT_URL || !isVercel ? 'ok' : 'unavailable' }));
 
 // --- Rotas de Produtos ---
 app.get('/products', async (req, res) => {
@@ -1253,7 +1251,7 @@ app.get('/products', async (req, res) => {
   }
 });
 
-app.post('/products', async (req, res) => {
+app.post('/products', requireAdminWrite, async (req, res) => {
   try {
     const product = req.body;
     if (!product.id) product.id = uuidv4();
@@ -1264,9 +1262,9 @@ app.post('/products', async (req, res) => {
   }
 });
 
-app.put('/products/:id', async (req, res) => {
+app.put('/products/:id', requireAdminWrite, async (req, res) => {
   try {
-    const product = { ...req.body, id: req.params.id };
+    const product = { ...req.body, id: String(req.params.id) };
     await ProductRepo.update(product);
     res.json({ success: true });
   } catch (e) {
@@ -1274,9 +1272,9 @@ app.put('/products/:id', async (req, res) => {
   }
 });
 
-app.delete('/products/:id', async (req, res) => {
+app.delete('/products/:id', requireAdminWrite, async (req, res) => {
   try {
-    await ProductRepo.delete(req.params.id);
+    await ProductRepo.delete(String(req.params.id));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -1284,7 +1282,7 @@ app.delete('/products/:id', async (req, res) => {
 });
 
 // --- Rotas de Pedidos ---
-app.get('/orders', async (req, res) => {
+app.get('/orders', requireAdmin, async (req, res) => {
   try {
     const orders = await OrderRepo.getAll();
     const activeOrders = orders.filter(o => !o.archived);
@@ -1312,7 +1310,7 @@ app.get('/orders/batch/status', async (req, res) => {
 
 app.get('/orders/:id/status', async (req, res) => {
   try {
-    const order = await OrderRepo.getById(req.params.id);
+    const order = await OrderRepo.getById(String(req.params.id));
     if (!order) return res.status(404).json({ error: 'Pedido não encontrado' });
     res.json({ status: order.status });
   } catch (e) {
@@ -1320,9 +1318,9 @@ app.get('/orders/:id/status', async (req, res) => {
   }
 });
 
-app.get('/orders/user/:userId', async (req, res) => {
+app.get('/orders/user/:userId', requireCustomer, async (req, res) => {
   try {
-    const orders = await OrderRepo.getByUserId(req.params.userId);
+    const orders = await OrderRepo.getByUserId(String(req.params.userId));
     res.json(orders);
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -1333,19 +1331,42 @@ app.post('/orders', async (req, res) => {
   try {
     const order = req.body;
     if (!order.id) order.id = uuidv4();
+    if (typeof order.id !== 'string' || !/^[a-zA-Z0-9-]{8,64}$/.test(order.id) ||
+        !order.customer?.name || !order.customer?.phone || !order.customer?.address ||
+        !Array.isArray(order.items) || !order.items.length || !Number.isFinite(order.total) || order.total < 0) {
+      return res.status(400).json({ error: 'Confira os itens e os dados do pedido.' });
+    }
+    const requestKey = req.headers['x-order-request'];
+    if (typeof requestKey !== 'string' || !/^[a-zA-Z0-9-]{32,64}$/.test(requestKey)) return res.status(400).json({ error: 'Reabra a sacola e tente novamente.' });
+    const submissionKeyHash = createHash('sha256').update(requestKey).digest('hex');
+    const accessToken = orderToken(order.id);
+    const existing = await OrderRepo.getById(order.id);
+    if (existing) {
+      const previousToken = req.headers['x-order-token'];
+      if (previousToken !== accessToken && existing.submissionKeyHash !== submissionKeyHash) return res.status(409).json({ error: 'Este pedido já foi recebido. Consulte o acompanhamento.' });
+      return res.json({ success: true, id: order.id, accessToken });
+    }
+    order.submissionKeyHash = submissionKeyHash;
+    if (order.payment?.method === 'cartao_online') {
+      if (!stripe || typeof order.paymentIntentId !== 'string') return res.status(400).json({ error: 'Pagamento não confirmado.' });
+      const payment = await stripe.paymentIntents.retrieve(order.paymentIntentId);
+      if (payment.status !== 'succeeded' || payment.currency !== 'brl' || payment.amount !== Math.round(order.total * 100)) return res.status(400).json({ error: 'Pagamento não corresponde ao pedido.' });
+      order.paymentMethod = `Cartão Online (Pago - ID: ${payment.id})`;
+    } else { order.paymentMethod = 'Pix (Conferir Recibo)'; }
+    order.status = 'pendente'; order.archived = false; order.userId = customerId(req) || '';
     await OrderRepo.create(order);
     
-    notifyAdmins('Novo Pedido!', `Pedido #${order.id.slice(-4)} de ${order.customer.name}`).catch(console.error);
-    res.json({ success: true, id: order.id });
+    backgroundNotification(notifyAdmins('Novo pedido', `Pedido #${order.id.slice(-4)}. Abra o painel para conferir.`, `/?order=${encodeURIComponent(order.id)}#vovo-secreta`));
+    res.json({ success: true, id: order.id, accessToken });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
 });
 
-app.put('/orders/:id', async (req, res) => {
+app.put('/orders/:id', requireAdminWrite, async (req, res) => {
   try {
     const order = req.body;
-    order.id = req.params.id;
+    order.id = String(req.params.id);
     
     if (order.status === 'pendente') {
       order.date = new Date().toISOString();
@@ -1421,10 +1442,20 @@ app.post('/chat', async (req, res) => {
 app.patch('/orders/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
-    await OrderRepo.updateStatus(req.params.id, status);
+    if (!hasOrderAccess(req) && customerId(req) !== (await OrderRepo.getById(String(req.params.id)))?.userId) return res.status(401).json({ error: 'Este aparelho não tem acesso a esse pedido.' });
+    if (hasAdminSession(req) && req.headers['x-vovo-admin'] !== '1') return res.status(403).json({ error: 'Solicitação inválida.' });
+    const current = await OrderRepo.getById(String(req.params.id));
+    if (!current) return res.status(404).json({ error: 'Pedido não encontrado.' });
+    if (!hasAdminSession(req) && (status !== 'cancelado' || current.status !== 'pendente')) {
+      return res.status(403).json({ error: 'O preparo já começou. Entre em contato com a loja.' });
+    }
+    if (!['pendente', 'preparando', 'forno', 'entrega', 'saiu_entrega', 'concluido', 'cancelado', 'pix_recusado', 'recusado'].includes(status)) {
+      return res.status(400).json({ error: 'Status inválido.' });
+    }
+    await OrderRepo.updateStatus(String(req.params.id), status);
     
     // Notifica Cliente
-    const order = await OrderRepo.getById(req.params.id);
+    const order = await OrderRepo.getById(String(req.params.id));
     if (order && order.userId) {
       const statusMap: Record<string, string> = {
         'pendente': 'Recebido',
@@ -1435,7 +1466,7 @@ app.patch('/orders/:id/status', async (req, res) => {
         'recusado': 'Recusado'
       };
       const text = statusMap[status] || status;
-      notifyUser(order.userId, `Atualização do Pedido #${order.id.slice(-4)} 🥟`, `Seu pedido está agora: ${text.toUpperCase()}`).catch(console.error);
+      backgroundNotification(notifyUser(order.userId, `Atualização do Pedido #${order.id.slice(-4)} 🥟`, `Seu pedido está agora: ${text.toUpperCase()}`));
     }
 
     res.json({ success: true });
@@ -1446,32 +1477,43 @@ app.patch('/orders/:id/status', async (req, res) => {
 
 app.post('/orders/:id/receive', async (req, res) => {
   try {
-    await OrderRepo.updateStatus(req.params.id, 'concluido');
+    if (!hasOrderAccess(req)) return res.status(401).json({ error: 'Este aparelho não tem acesso a esse pedido.' });
+    const order = await OrderRepo.getById(String(req.params.id));
+    if (!order || !['entrega', 'saiu_entrega'].includes(order.status)) return res.status(409).json({ error: 'O pedido ainda não saiu para entrega.' });
+    await OrderRepo.updateStatus(String(req.params.id), 'concluido');
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
 });
 
-app.post('/orders/:id/archive', async (req, res) => {
+app.post('/orders/:id/archive', requireAdminWrite, async (req, res) => {
   try {
-    await OrderRepo.archive(req.params.id);
+    await OrderRepo.archive(String(req.params.id));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
 });
+
+const publicUser = (user: User) => { const { password, ...profile } = user; return profile; };
+app.use('/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, legacyHeaders: false }));
+app.post('/auth/logout', (_req, res) => { res.clearCookie('vovo_customer_session', { path: '/' }); res.json({ success: true }); });
 
 // --- Autenticação via Google Sheets ---
 app.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password, phone, address } = req.body;
+    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'Preencha nome, e-mail e uma senha com pelo menos 8 caracteres.' });
+    orderToken('configuration-check');
+    const storedPassword = await hashPassword(password);
     
     if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
-        const data = await callGAS('register', { name, email, password, phone, address });
+        const data = await callGAS('register', { name, email, password: storedPassword, phone, address });
         if (data && data.success) {
-          return res.json({ success: true, user: data.user });
+          setCustomerSession(res, data.user.id);
+          return res.json({ success: true, user: publicUser(data.user) });
         } else {
           return res.status(400).json({ error: data?.error || 'Erro ao cadastrar.' });
         }
@@ -1488,7 +1530,7 @@ app.post('/auth/register', async (req, res) => {
       id: uuidv4(), 
       name, 
       email: email.toLowerCase(), 
-      password, 
+      password: storedPassword,
       phone: phone || "", 
       address: address || "", 
       cart: '[]' 
@@ -1502,7 +1544,9 @@ app.post('/auth/register', async (req, res) => {
         details: createErr.message || String(createErr) 
       });
     }
-    res.json({ success: true, user });
+    if (!user.password?.startsWith('scrypt:')) { user.password = await hashPassword(password); await UserRepo.update(user); }
+    setCustomerSession(res, user.id);
+    res.json({ success: true, user: publicUser(user) });
   } catch (e: any) {
     res.status(500).json({ error: String(e) });
   }
@@ -1511,19 +1555,8 @@ app.post('/auth/register', async (req, res) => {
 app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
-      try {
-        const data = await callGAS('login', { email, password });
-        if (data && data.success) {
-          return res.json({ success: true, user: data.user });
-        } else {
-          return res.status(401).json({ error: data?.error || 'E-mail ou senha incorretos.' });
-        }
-      } catch (err: any) {
-        return res.status(401).json({ error: err.message || 'Erro de autenticação no Google Sheets.' });
-      }
-    }
+    if (typeof email !== 'string' || typeof password !== 'string' || password.length > 128) return res.status(400).json({ error: 'Confira e-mail e senha.' });
+    orderToken('configuration-check');
 
     // Fallback local
     let user;
@@ -1540,10 +1573,12 @@ app.post('/auth/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: 'E-mail não cadastrado.' });
     }
-    if (user.password !== password) {
-      return res.status(401).json({ error: 'Senha incorreta.' });
+    if (!user.password || !await verifyPassword(password, user.password)) {
+      return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
     }
-    res.json({ success: true, user });
+    if (!user.password.startsWith('scrypt:')) { user.password = await hashPassword(password); await UserRepo.update(user); }
+    setCustomerSession(res, user.id);
+    res.json({ success: true, user: publicUser(user) });
   } catch (e: any) {
     res.status(500).json({ error: String(e) });
   }
@@ -1552,6 +1587,7 @@ app.post('/auth/login', async (req, res) => {
 app.post('/auth/sync', async (req, res) => {
   try {
     const { uid, email, name, phone, isAnonymous } = req.body;
+    if (customerId(req) !== uid) return res.status(401).json({ error: 'Entre na sua conta.' });
     let user = await UserRepo.getById(uid);
     
     if (!user && email) {
@@ -1578,15 +1614,19 @@ app.post('/auth/sync', async (req, res) => {
       }
     }
     
-    res.json({ success: true, user });
+    setCustomerSession(res, user.id);
+    res.json({ success: true, user: publicUser(user) });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
 });
 
-app.patch('/users/:id', async (req, res) => {
+app.patch('/users/:id', requireCustomer, async (req, res) => {
   try {
-    await UserRepo.update({ id: req.params.id, ...req.body });
+    const current = await UserRepo.getById(String(req.params.id));
+    if (!current) return res.status(404).json({ error: 'Conta não encontrada.' });
+    const { name, phone, address, cart } = req.body;
+    await UserRepo.update({ ...current, name: name ?? current.name, phone: phone ?? current.phone, address: address ?? current.address, cart: cart ?? current.cart });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -1596,7 +1636,8 @@ app.patch('/users/:id', async (req, res) => {
 // --- Configurações ---
 app.get('/configs', async (req, res) => {
   try {
-    const configs = await ConfigRepo.getAll();
+    const allConfigs = await ConfigRepo.getAll();
+    const configs = Object.fromEntries(Object.entries(allConfigs).filter(([key]) => !/vapid|secret|password|token|private/i.test(key)));
     if (!configs['faqs']) {
       configs['faqs'] = JSON.stringify([
         { q: "Vocês entregam em quais bairros?", a: "Entregamos em Colombo e região! Confira a taxa de entrega ao finalizar o pedido." },
@@ -1618,9 +1659,10 @@ app.get('/configs', async (req, res) => {
   }
 });
 
-app.post('/configs', async (req, res) => {
+app.post('/configs', requireAdminWrite, async (req, res) => {
   try {
     const { key, value } = req.body;
+    if (typeof key !== 'string' || /vapid|secret|password|token|private/i.test(key)) return res.status(400).json({ error: 'Configuração inválida.' });
     await ConfigRepo.update(key, value);
     res.json({ success: true });
   } catch (e) {
@@ -1726,18 +1768,21 @@ app.post('/admin/broadcast-push', async (req, res) => {
 
 app.post('/admin/test-push', async (req, res) => {
   try {
-    const { userId } = req.body;
-    await notifyUser(userId, 'Teste de Notificação', 'Se você recebeu isso, as notificações estão funcionando!');
+    const { endpoint } = req.body;
+    const subscription = (await PushSubscriptionRepo.getAll()).find(sub => sub.endpoint === endpoint && sub.role === 'admin');
+    if (!subscription) return res.status(404).json({ error: 'Ative os avisos neste aparelho primeiro.' });
+    const sent = await sendPushNotification(subscription, { title: 'Teste de aviso', body: 'Este é um teste. Não há um pedido novo.', url: '/#vovo-secreta', tag: 'vovo-test' });
+    if (!sent) return res.status(502).json({ error: 'O serviço não aceitou o aviso. Ative novamente e tente outra vez.' });
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
+  } catch {
+    res.status(503).json({ error: 'Não foi possível enviar o aviso de teste.' });
   }
 });
 
 // Cleanup de presença a cada minuto
 setInterval(() => {
   PresenceRepo.cleanup().catch(console.error);
-}, 60000);
+}, 60000).unref();
 
 const mainApp = express();
 mainApp.use('/api', app); 

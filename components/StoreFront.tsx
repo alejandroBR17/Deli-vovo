@@ -287,7 +287,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
                           {p.oldPrice && <span className="text-[9px] md:text-[10px] text-gray-300 line-through font-bold">R$ {Number(p.oldPrice).toFixed(2)}</span>}
                           <span className="text-sm md:text-base font-black text-vovoh-dark">R$ {Number(p.price).toFixed(2)}</span>
                         </div>
-                        <button onClick={(e) => {
+                        <button aria-label={`Adicionar ${p.name} à sacola`} onClick={(e) => {
                           e.stopPropagation();
                           onAddToCart(p, null, [], "", e);
                         }} className="w-8 h-8 md:w-9 md:h-9 bg-gray-50 text-vovoh-red rounded-full flex items-center justify-center hover:bg-vovoh-red hover:text-white transition-all active:scale-90 shadow-sm border border-gray-100">

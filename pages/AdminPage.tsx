@@ -3,11 +3,21 @@ import { ChefHat, Bell, ArrowLeft, RefreshCw, Plus, Edit2, Trash2, Save, X, Uplo
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { GAS_API_URL, CATEGORIES, PLACEHOLDER_IMG } from '../constants/index';
 import { Toast, ConfirmModal } from '../components/UI';
-import { subscribeToPush } from '../src/utils/push';
+import { adminFetch } from '../src/utils/admin-api';
+import { subscribeToPush, getPushSubscription } from '../src/utils/push';
 
 import { normalizeCoordinate } from '../utils/geo';
 
 export default function AdminPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [pushState, setPushState] = useState<'inactive' | 'registering' | 'registered' | 'error'>('inactive');
+  const [pushError, setPushError] = useState('');
+  const [testingPush, setTestingPush] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const ordersLoaded = useRef(false);
   const [tab, setTab] = useState('orders');
   const [orders, setOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -85,7 +95,7 @@ export default function AdminPage() {
     
     setSyncing(true);
     try {
-      const res = await fetch(`${GAS_API_URL}/orders/${order.id}`, {
+      const res = await adminFetch(`/orders/${order.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedOrder)
@@ -107,7 +117,7 @@ export default function AdminPage() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${GAS_API_URL}/admin/stats`);
+      const res = await adminFetch(`/admin/stats`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -118,55 +128,89 @@ export default function AdminPage() {
   };
 
   const requestNotification = async () => {
-    if (!('Notification' in window)) {
-      showMsg("Seu navegador não suporta notificações. No iPhone, adicione o app à Tela de Início primeiro!", "error");
-      return;
-    }
-    const perm = await Notification.requestPermission();
-    setNotifPerm(perm);
-    
-    if (perm === 'granted') {
-      const subscribed = await subscribeToPush('admin-user', 'admin');
-      if (subscribed) {
-        showMsg("Notificações Push ativadas com sucesso!", "success");
-      } else {
-        showMsg("Permissão concedida, mas falha ao registrar Push.", "error");
-      }
+    setPushState('registering'); setPushError('');
+    try {
+      if (!('Notification' in window)) throw new Error('Use um navegador com notificações, como o Chrome no Android.');
+      const permission = await Notification.requestPermission();
+      setNotifPerm(permission);
+      if (permission !== 'granted') throw new Error('Permita as notificações nas configurações do navegador e tente novamente.');
+      await subscribeToPush('admin-user', 'admin');
+      setPushState('registered');
+      showMsg('Aparelho cadastrado. Envie um teste para conferir o aviso.', 'success');
+    } catch (error) {
+      setPushState('error');
+      setPushError(error instanceof Error ? error.message : 'Não foi possível ativar os avisos.');
     }
   };
+  const testNotification = async () => {
+    setTestingPush(true); setPushError('');
+    try {
+      const subscription = await getPushSubscription();
+      if (!subscription) throw new Error('Ative os avisos neste aparelho primeiro.');
+      const response = await adminFetch('/admin/test-push', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Não foi possível enviar o teste.');
+      showMsg('Teste enviado. Confira se o aviso chegou neste aparelho.', 'info');
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : 'Falha no teste.');
+    } finally { setTestingPush(false); }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !('Notification' in window) || Notification.permission !== 'granted') return;
+    let active = true;
+    getPushSubscription().then(async subscription => {
+      if (!subscription || !active) return;
+      await subscribeToPush('admin-user', 'admin');
+      if (active) setPushState('registered');
+    }).catch(error => {
+      if (active) { setPushState('error'); setPushError(error instanceof Error ? error.message : 'Ative os avisos novamente.'); }
+    });
+    return () => { active = false; };
+  }, [isAuthenticated]);
 
   const fetchGlobalOrders = async (silent = false) => {
     try {
-      const res = await fetch(`${GAS_API_URL}/orders`);
+      const res = await adminFetch(`/orders`);
+      if (!res.ok) throw new Error('Não foi possível atualizar os pedidos.');
       const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('Resposta de pedidos inválida.');
       
       // Lógica de Notificação de Novo Pedido!
       const incomingIds = data.map((o: any) => o.id);
       
-      if (knownOrdersRef.current.size > 0) {
+      if (ordersLoaded.current) {
          const newOrders = data.filter((o: any) => !knownOrdersRef.current.has(o.id));
          
          if (newOrders.length > 0) {
-            // Manda Notificação pro celular/PC
-            if ('Notification' in window && Notification.permission === 'granted') {
-               new Notification('🚨 Novo Pedido na Cozinha! 🥟', {
-                 body: `Chegou um pedido de ${newOrders[0].customer?.name} no valor de R$ ${Number(newOrders[0].total).toFixed(2).replace('.', ',')}`,
-                 icon: 'https://i.ibb.co/k6ykwRQ8/Favicon-Vov.png'
-               });
+            if (pushState !== 'registered' && 'Notification' in window && Notification.permission === 'granted') {
+              navigator.serviceWorker?.getRegistration().then(registration =>
+                registration?.showNotification('Novo pedido na cozinha', {
+                  body: 'Abra o painel para conferir.', tag: 'order-' + newOrders[0].id,
+                  data: { url: '/?order=' + encodeURIComponent(newOrders[0].id) + '#vovo-secreta' },
+                })
+              ).catch(() => {});
             }
          }
       }
       
       knownOrdersRef.current = new Set(incomingIds);
+      ordersLoaded.current = true;
       setOrders(data);
+      setOrdersError('');
+      setLastUpdated(new Date());
     } catch (e) {
-      if (!silent) console.error("Erro ao buscar pedidos:", e);
+      setOrdersError('Sem atualização dos pedidos. Confira a internet e toque em atualizar.');
+      if (!silent) console.error('Erro ao buscar pedidos.');
     }
   };
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch(`${GAS_API_URL}/products`);
+      const res = await adminFetch(`/products`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       const parsed = data.map((p: any) => {
@@ -203,7 +247,7 @@ export default function AdminPage() {
 
   const fetchConfigs = async () => {
     try {
-      const res = await fetch(`${GAS_API_URL}/configs`);
+      const res = await adminFetch(`/configs`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       
@@ -258,6 +302,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     fetchGlobalOrders();
     fetchProducts();
     fetchConfigs();
@@ -271,11 +316,16 @@ export default function AdminPage() {
       fetchStats();
     }, 300000); // 5 min (Estatísticas)
 
+    const refreshOnFocus = () => { if (document.visibilityState === 'visible') fetchGlobalOrders(true); };
+    document.addEventListener('visibilitychange', refreshOnFocus);
+    window.addEventListener('online', refreshOnFocus);
     return () => {
+      document.removeEventListener('visibilitychange', refreshOnFocus);
+      window.removeEventListener('online', refreshOnFocus);
       clearInterval(i);
       clearInterval(s);
     };
-  }, []);
+  }, [isAuthenticated, pushState]);
 // ...
 
   // Audio Loop for Pending Orders
@@ -377,7 +427,7 @@ export default function AdminPage() {
   const handleUpdateConfig = async (key: string, value: any, updateState = true) => {
     setSyncing(true);
     try {
-      const res = await fetch(`${GAS_API_URL}/configs`, {
+      const res = await adminFetch(`/configs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, value: String(value) })
@@ -402,7 +452,7 @@ export default function AdminPage() {
     
     try {
       setSyncing(true);
-      const res = await fetch(`${GAS_API_URL}/orders/${orderId}/status`, {
+      const res = await adminFetch(`/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -474,13 +524,13 @@ export default function AdminPage() {
 
     try {
       if (isAdding) {
-        await fetch(`${GAS_API_URL}/products`, {
+        await adminFetch(`/products`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(productToSave)
         });
       } else {
-        await fetch(`${GAS_API_URL}/products/${productToSave.id}`, {
+        await adminFetch(`/products/${productToSave.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(productToSave)
@@ -509,7 +559,7 @@ export default function AdminPage() {
         
         setSyncing(true);
         try {
-          await fetch(`${GAS_API_URL}/products/${id}`, {
+          await adminFetch(`/products/${id}`, {
             method: 'DELETE'
           });
           showMsg("Removido!", "success");
@@ -548,7 +598,7 @@ export default function AdminPage() {
     setSyncing(true);
 
     try {
-      await fetch(`${GAS_API_URL}/configs`, {
+      await adminFetch(`/configs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: 'coupons', value: JSON.stringify(newCoupons) })
@@ -580,7 +630,7 @@ export default function AdminPage() {
         setSyncing(true);
 
         try {
-          await fetch(`${GAS_API_URL}/configs`, {
+          await adminFetch(`/configs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key: 'coupons', value: JSON.stringify(newCoupons) })
@@ -616,7 +666,7 @@ export default function AdminPage() {
     setSyncing(true);
 
     try {
-      await fetch(`${GAS_API_URL}/configs`, {
+      await adminFetch(`/configs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: 'neighborhoods', value: JSON.stringify(newNeighborhoods) })
@@ -648,7 +698,7 @@ export default function AdminPage() {
         setSyncing(true);
 
         try {
-          await fetch(`${GAS_API_URL}/configs`, {
+          await adminFetch(`/configs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key: 'neighborhoods', value: JSON.stringify(newNeighborhoods) })
@@ -665,24 +715,40 @@ export default function AdminPage() {
     });
   };
 
-  const visibleOrders = orders.filter(o => filter === 'ativos' ? (o.status !== 'concluido' && o.status !== 'cancelado') : true);
-
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
+  const pendingOrders = orders.filter(order => order.status === 'pendente').length;
+  const visibleOrders = orders
+    .filter(order => filter === 'novos' ? order.status === 'pendente' : filter === 'ativos' ? !['concluido', 'cancelado', 'pix_recusado'].includes(order.status) : true)
+    .sort((a, b) => Number(b.status === 'pendente') - Number(a.status === 'pendente') || new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('order');
+    if (id && isAuthenticated && orders.length) document.getElementById('order-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [orders.length, isAuthenticated]);
 
   useEffect(() => {
-    const auth = localStorage.getItem('vovoh_admin_auth');
-    if (auth === 'true') setIsAuthenticated(true);
+    localStorage.removeItem('vovoh_admin_auth');
+    adminFetch('/admin/session').then(response => setIsAuthenticated(response.ok)).catch(() => {});
+    const expire = () => { setIsAuthenticated(false); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false; };
+    window.addEventListener('vovo-admin-session-expired', expire);
+    return () => window.removeEventListener('vovo-admin-session-expired', expire);
   }, []);
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordInput === 'vovo123') {
-      setIsAuthenticated(true);
-      localStorage.setItem('vovoh_admin_auth', 'true');
-    } else {
-      showMsg("Senha incorreta!", "error");
-    }
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault(); if (loggingIn) return; setLoggingIn(true);
+    try {
+      const response = await adminFetch('/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: passwordInput }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Não foi possível entrar.');
+      setPasswordInput(''); setIsAuthenticated(true);
+    } catch (error) { showMsg(error instanceof Error ? error.message : 'Não foi possível entrar.', 'error'); }
+    finally { setLoggingIn(false); }
+  };
+  const logout = async () => {
+    try {
+      const response = await adminFetch('/admin/logout', { method: 'POST' });
+      if (!response.ok) throw new Error();
+      setIsAuthenticated(false); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false;
+    } catch { showMsg('Não foi possível sair. Tente novamente.', 'error'); }
   };
 
   if (!isAuthenticated) {
@@ -699,14 +765,15 @@ export default function AdminPage() {
           </div>
           <input 
             type="password" 
+            autoComplete="current-password" aria-label="Senha do painel" required
             placeholder="Senha secreta" 
             className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm text-center text-white"
             value={passwordInput}
             onChange={e => setPasswordInput(e.target.value)}
             autoFocus
           />
-          <button type="submit" className="w-full py-4 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all">
-            Entrar
+          <button type="submit" disabled={loggingIn} className="w-full py-4 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all">
+            {loggingIn ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
       </div>
@@ -941,15 +1008,8 @@ export default function AdminPage() {
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 <span className="text-vovoh-red font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">Gestão de Pedidos</span>
                 <span className="text-zinc-600 font-bold text-[9px] md:text-[10px]">•</span>
-                {notifPerm !== 'granted' ? (
-                  <button onClick={requestNotification} className="flex items-center gap-1.5 px-2.5 py-1 bg-vovoh-gold text-black rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-vovoh-gold/10 animate-pulse hover:scale-105 transition-all">
-                    <Bell size={10} className="fill-black shrink-0" /> Ativar Alertas
-                  </button>
-                ) : (
-                  <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest border border-emerald-500/20">
-                    <CheckCircle2 size={10} className="text-emerald-400 shrink-0" /> Alertas Ativos
-                  </span>
-                )}
+                <span className="text-xs text-zinc-300">{pushState === 'registered' ? 'Aparelho cadastrado para avisos' : 'Avisos ainda não verificados'}</span>
+                <button onClick={logout} className="ml-auto px-3 py-2 rounded-xl bg-white/10 text-xs">Sair</button>
               </div>
             </div>
           </div>
@@ -1124,7 +1184,23 @@ export default function AdminPage() {
 
         {tab === 'orders' ? (
           <div className="space-y-6">
-            <div className="flex justify-end gap-2">
+            <section className="bg-zinc-900 p-5 rounded-2xl space-y-4 border border-white/10" aria-label="Recebimento de pedidos">
+              <div><h2 className="text-xl font-bold">{pendingOrders ? pendingOrders + ' pedido(s) aguardando você' : 'Nenhum pedido novo'}</h2>
+                <p className="text-sm text-zinc-400 mt-1">{lastUpdated ? 'Última atualização: ' + lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Buscando pedidos...'}</p></div>
+              {ordersError && <p role="alert" className="text-amber-300">{ordersError}</p>}
+              <details className="space-y-2 border-t border-white/10 pt-3" open={pushState !== 'registered'}>
+                <summary className="font-bold cursor-pointer min-h-10">Avisos no celular</summary>
+                <p className="text-sm text-zinc-400">Cadastre este aparelho e envie um teste. Depois confira um pedido com a tela bloqueada antes de usar na loja.</p>
+                <p className="text-sm" role="status">{pushState === 'registered' ? 'Cadastro confirmado pelo servidor. Confira o teste no celular.' : notifPerm === 'denied' ? 'Notificações bloqueadas no navegador.' : 'Os avisos ainda precisam ser ativados neste aparelho.'}</p>
+                {pushError && <p role="alert" className="text-amber-300 text-sm">{pushError}</p>}
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={requestNotification} disabled={pushState === 'registering'} className="min-h-12 px-4 bg-amber-400 text-black rounded-xl font-bold disabled:opacity-50">{pushState === 'registering' ? 'Ativando...' : pushState === 'registered' ? 'Cadastrar novamente' : 'Ativar avisos'}</button>
+                  <button onClick={testNotification} disabled={pushState !== 'registered' || testingPush} className="min-h-12 px-4 bg-white/10 rounded-xl font-bold disabled:opacity-40">{testingPush ? 'Enviando...' : 'Enviar teste'}</button>
+                </div>
+              </details>
+            </section>
+            <div className="flex flex-wrap gap-2">
+               <button onClick={() => setFilter('novos')} className={'min-h-12 px-4 py-2 rounded-lg text-sm font-bold ' + (filter === 'novos' ? 'bg-amber-400 text-black' : 'bg-white/10 text-white')}>Novos ({pendingOrders})</button>
                <button onClick={() => setFilter('ativos')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest ${filter === 'ativos' ? 'bg-white/10 text-white' : 'text-zinc-600'}`}>Ativos</button>
                <button onClick={() => setFilter('todos')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest ${filter === 'todos' ? 'bg-white/10 text-white' : 'text-zinc-600'}`}>Histórico</button>
             </div>
@@ -1142,7 +1218,7 @@ export default function AdminPage() {
                   const isVerified = verifiedPayments[o.id] || isOnlineCard;
 
                   return (
-                    <div key={o.id} className="bg-zinc-900/80 backdrop-blur-xl border border-white/5 p-4 sm:p-8 rounded-[2rem] sm:rounded-[3rem] space-y-4 sm:space-y-6 relative overflow-hidden group">
+                    <div key={o.id} id={'order-' + o.id} className="bg-zinc-900/80 backdrop-blur-xl border border-white/5 p-4 sm:p-8 rounded-[2rem] sm:rounded-[3rem] space-y-4 sm:space-y-6 relative overflow-hidden group">
                       {syncing && <div className="absolute inset-0 bg-black/40 z-20 flex items-center justify-center backdrop-blur-sm"><RefreshCw className="animate-spin text-vovoh-red" size={32} /></div>}
                       <div className="flex justify-between items-start gap-4">
                         <div className="min-w-0">
@@ -1187,7 +1263,7 @@ export default function AdminPage() {
                             <span className={`text-[10px] font-bold truncate ${isOnlineCard ? 'text-green-400' : isPix ? 'text-amber-400' : 'text-zinc-300'}`}>{o.paymentMethod}</span>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-zinc-500 uppercase text-[9px] font-black block">Total Pago</span>
+                            <span className="text-zinc-500 uppercase text-[9px] font-black block">Total do pedido</span>
                             <span className="text-vovoh-gold font-black text-sm sm:text-base">R$ {Number(o.total || 0).toFixed(2)}</span>
                           </div>
                         </div>
@@ -1482,7 +1558,7 @@ export default function AdminPage() {
                       onClick={async () => {
                         if (confirm("Tem certeza que deseja enviar um alerta para TODOS os dispositivos?")) {
                           try {
-                            const res = await fetch(`${GAS_API_URL}/admin/broadcast-push`, {
+                            const res = await adminFetch(`/admin/broadcast-push`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ title: '🚨 ALERTA GERAL DA VOVÓ!', body: 'Por favor, verifique o pedido agora!' })
@@ -1503,19 +1579,8 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Notificações</label>
                     <button 
-                      onClick={async () => {
-                        try {
-                          const res = await fetch(`${GAS_API_URL}/admin/test-push`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: 'admin-user' })
-                          });
-                          if (res.ok) showMsg("Notificação de teste enviada!", "success");
-                          else showMsg("Erro ao enviar teste.", "error");
-                        } catch (e) {
-                          showMsg("Erro ao enviar teste.", "error");
-                        }
-                      }}
+                      onClick={testNotification}
+                      disabled={testingPush}
                       className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
                     >
                       Enviar Notificação de Teste

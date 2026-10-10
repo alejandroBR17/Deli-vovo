@@ -7,6 +7,8 @@ import { subscribeToPush } from '../src/utils/push';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
   const [fidelidade, setFidelidade] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [step, setStep] = useState('cart');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
@@ -240,12 +242,16 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     }
   };
 
-  const handleOrder = () => {
+  const handleOrder = async (paymentDetails?: any) => {
+    if (submitLock.current) return false;
+    submitLock.current = true; setSubmitting(true);
+    try {
     let scheduledTo = undefined;
     if (isScheduled && scheduledDate && scheduledTime) {
       scheduledTo = `${scheduledDate}T${scheduledTime}:00`;
     }
-    onOrder({ finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, scheduledTo });
+    return await onOrder({ ...paymentDetails, finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, scheduledTo });
+    } finally { submitLock.current = false; setSubmitting(false); }
   };
 
   return (
@@ -351,12 +357,12 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                           <span>Subtotal</span>
                           <span>R$ {subtotal.toFixed(2)}</span>
                        </div>
-                       {deliveryFee > 0 && (
+                       {feeCalculated ? (
                          <div className="flex justify-between text-xs font-bold text-gray-400">
-                            <span>Taxa de Entrega</span>
-                            <span>R$ {deliveryFee.toFixed(2)}</span>
+                            <span>Taxa de entrega</span>
+                            <span>{deliveryFee === 0 ? 'Grátis' : 'R$ ' + deliveryFee.toFixed(2)}</span>
                          </div>
-                       )}
+                       ) : <p className="text-sm text-gray-600">A taxa de entrega será calculada pelo endereço no próximo passo.</p>}
                        {appliedCoupon && (
                          <div className="flex justify-between text-xs font-bold text-green-600">
                             <span>Desconto</span>
@@ -364,7 +370,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                          </div>
                        )}
                        <div className="flex justify-between items-end pt-2">
-                          <span className="text-gray-400 font-black uppercase tracking-widest text-[10px]">Total a Pagar</span>
+                          <span className="text-gray-400 font-black uppercase tracking-widest text-[10px]">{feeCalculated ? 'Total a pagar' : 'Itens da sacola'}</span>
                           <span className="text-3xl  font-black text-vovoh-dark tracking-tighter leading-none">R$ {total.toFixed(2)}</span>
                        </div>
                     </div>
@@ -526,7 +532,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${method === 'pix' ? 'bg-vovoh-gold text-white' : 'bg-gray-100 text-gray-400'}`}><Zap size={20}/></div>
                     <div>
                       <p className="font-black text-vovoh-dark text-sm leading-tight">Pix Instantâneo</p>
-                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'pix' ? 'text-vovoh-gold' : 'text-gray-400'}`}>Aprovação na hora</p>
+                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'pix' ? 'text-vovoh-gold' : 'text-gray-400'}`}>Pagamento conferido pela loja</p>
                     </div>
                   </div>
                   {method === 'pix' && <CheckCircle2 size={20} className="text-vovoh-gold" />}
@@ -544,7 +550,16 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 </button>
               </div>
 
-              <div className="pt-4">
+              <section aria-label="Resumo do pedido" className="bg-white p-5 rounded-2xl border border-gray-200 space-y-2 text-sm">
+                <h4 className="font-bold text-base">Confira antes de pagar</h4>
+                <p>{customer.address}</p>
+                <div className="flex justify-between"><span>Itens</span><span>R$ {subtotal.toFixed(2)}</span></div>
+                {discount > 0 && <div className="flex justify-between"><span>Desconto</span><span>− R$ {discount.toFixed(2)}</span></div>}
+                <div className="flex justify-between"><span>Entrega</span><span>{deliveryFee === 0 ? 'Grátis' : 'R$ ' + deliveryFee.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total a pagar</span><span>R$ {total.toFixed(2)}</span></div>
+              </section>
+              <div className="pt-4 relative" aria-busy={submitting}>
+                 {submitting && <div role="status" className="absolute inset-0 z-20 bg-white/95 rounded-2xl flex items-center justify-center gap-2"><Loader2 className="animate-spin" /> Enviando pedido...</div>}
                  {method === 'pix' ? (
                    <PixBox pixKey={pixKey} total={total} onComplete={handleOrder} />
                  ) : method === 'cartao_online' ? (
@@ -644,8 +659,8 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
                 const perm = await Notification.requestPermission();
                 if (perm === 'granted') {
                   const userId = selectedOrder?.userId;
-                  const subscribed = await subscribeToPush(userId, 'customer');
-                  if (subscribed) alert("Notificações ativadas! Você será avisado sobre seus pedidos.");
+                  try { await subscribeToPush(userId, 'customer'); alert('Cadastro de notificações confirmado.'); }
+                  catch (error) { alert(error instanceof Error ? error.message : 'Não foi possível ativar os avisos.'); }
                 }
               } else {
                 alert("Seu navegador não suporta notificações.");

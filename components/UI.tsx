@@ -80,7 +80,7 @@ export const Toast = ({ message, type, onClose }: { message: string, type: any, 
   );
 };
 
-export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => void, total: number, customer?: any }) => {
+export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any }) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,10 +143,11 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
   );
 };
 
-const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => void, total: number, customer?: any }) => {
+const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmedPayment, setConfirmedPayment] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const customerZip = customer?.address ? (customer.address.match(/\d{5}-?\d{3}/)?.[0] || '') : '';
@@ -158,20 +159,21 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
     setIsProcessing(true);
     setErrorMessage(null);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: window.location.origin,
-      },
-      redirect: 'if_required',
-    });
-
-    if (error) {
-      setErrorMessage(error.message || 'Erro no processamento.');
-      setIsProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      onComplete({ method: 'cartao_online', id: paymentIntent.id });
-    }
+    try {
+      let paymentId = confirmedPayment;
+      if (!paymentId) {
+        const { error, paymentIntent } = await stripe.confirmPayment({
+          elements, confirmParams: { return_url: window.location.origin }, redirect: 'if_required',
+        });
+        if (error) throw new Error(error.message || 'Erro no processamento.');
+        if (!paymentIntent || paymentIntent.status !== 'succeeded') throw new Error('O pagamento ainda não foi confirmado.');
+        paymentId = paymentIntent.id; setConfirmedPayment(paymentId);
+      }
+      const saved = await onComplete({ method: 'cartao_online', id: paymentId });
+      if (saved === false) setErrorMessage('Pagamento confirmado, mas o pedido ainda não foi salvo. Tente enviar novamente. Você não será cobrado de novo por este botão.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível concluir.');
+    } finally { setIsProcessing(false); }
   };
 
   return (
@@ -224,7 +226,7 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
           {isProcessing ? (
             <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Processando...</>
           ) : (
-            `Pagar R$ ${total.toFixed(2)}`
+            confirmedPayment ? 'Enviar pedido já pago' : `Pagar R$ ${total.toFixed(2)}`
           )}
         </button>
       </form>
@@ -257,8 +259,9 @@ export const PixBox = ({ onComplete, pixKey, total }: { onComplete: () => void, 
           {copied ? <><Check size={16}/> Copiado!</> : <><Copy size={16}/> Copiar Pix Copia e Cola</>}
         </button>
       </div>
+      <p className="text-sm text-gray-600">A loja vai conferir o pagamento antes de iniciar o preparo.</p>
       <button onClick={onComplete} className="w-full py-6 bg-vovoh-red text-white font-black rounded-[2rem] shadow-xl hover:scale-105 transition-transform">
-        Confirmar Pagamento
+        Já fiz o Pix — enviar pedido
       </button>
     </div>
   );

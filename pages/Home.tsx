@@ -14,6 +14,9 @@ const LOGO = "https://i.ibb.co/Rkt5c0zk/Del-cias-Da-Vov.png";
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const submittingOrder = useRef(false);
+  const pendingSubmissionKey = useRef<string | null>(null);
+  const pendingSubmissionId = useRef<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -286,12 +289,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user && !loading) {
-      setIsAuthOpen(true);
-    }
-  }, [user, loading]);
-
-  useEffect(() => {
     const savedNotify = localStorage.getItem('vovoh_notifications');
     if (savedNotify === 'true') setNotificationsEnabled(true);
     const savedUser = localStorage.getItem('vovoh_user');
@@ -299,8 +296,6 @@ export default function Home() {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
       setCustomer({ name: parsedUser.name, phone: parsedUser.phone || '', address: parsedUser.address || '' });
-    } else {
-      setIsAuthOpen(true);
     }
 
     if (window.matchMedia('(display-mode: standalone)').matches) return;
@@ -594,40 +589,36 @@ export default function Home() {
     if (updatedOrders.length === 0) setIsTrackingOpen(false);
     setSelectedOrder(null);
     
-    // Arquiva no backend para não voltar
-    try {
-      fetch(`${GAS_API_URL}/orders/${orderId}/archive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      }).catch(()=>{});
-    } catch(e) {}
+
   };
 
   const cancelOrder = async (orderId: string) => {
     try {
-      await fetch(`${GAS_API_URL}/orders/${orderId}/status`, {
+      const response = await fetch(`${GAS_API_URL}/orders/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Order-Token': orders.find(order => order.id === orderId)?.accessToken || '' },
         body: JSON.stringify({ status: 'cancelado' })
       });
       
+      if (!response.ok) { const result = await response.json(); throw new Error(result.error || 'Não foi possível atualizar o pedido.'); }
       const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: 'cancelado' } : o);
       setOrders(updatedOrders as any);
       localStorage.setItem('vovoh_active_orders', JSON.stringify(updatedOrders));
       
       setToast({ message: "Pedido cancelado com sucesso.", type: 'success' });
     } catch (e) {
-      setToast({ message: "Erro ao cancelar pedido.", type: 'error' });
+      setToast({ message: e instanceof Error ? e.message : 'Erro ao cancelar pedido.', type: 'error' });
     }
   };
 
   const receiveOrder = async (orderId: string) => {
     try {
-      await fetch(`${GAS_API_URL}/orders/${orderId}/receive`, {
+      const response = await fetch(`${GAS_API_URL}/orders/${orderId}/receive`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', 'X-Order-Token': orders.find(order => order.id === orderId)?.accessToken || '' }
       });
       
+      if (!response.ok) { const result = await response.json(); throw new Error(result.error || 'Não foi possível atualizar o pedido.'); }
       const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: 'concluido' } : o);
       setOrders(updatedOrders as any);
       localStorage.setItem('vovoh_active_orders', JSON.stringify(updatedOrders));
@@ -637,11 +628,14 @@ export default function Home() {
       const fid = parseInt(localStorage.getItem('vovoh_fidelidade') || '0');
       localStorage.setItem('vovoh_fidelidade', (fid + 1).toString());
     } catch (e) {
-      setToast({ message: "Erro ao confirmar recebimento.", type: 'error' });
+      setToast({ message: e instanceof Error ? e.message : 'Erro ao confirmar recebimento.', type: 'error' });
     }
   };
 
   const createOrder = async (extraDetails?: any) => {
+    if (submittingOrder.current) return false;
+    submittingOrder.current = true;
+    try {
     if (user && (customer.phone !== user.phone || customer.address !== user.address)) {
       const updatedUser = { ...user, phone: customer.phone, address: customer.address };
       setUser(updatedUser);
@@ -657,9 +651,9 @@ export default function Home() {
     const fullAddress = customer.address;
 
     const newOrder: Order = {
-      id: retryOrderId || Math.random().toString(36).substr(2, 9).toUpperCase(),
+      id: pendingSubmissionId.current ||= crypto.randomUUID(),
       items: cart, 
-      total: extraDetails?.finalTotal || cart.reduce((a,b) => a + (Number(b.price) * b.quantity), 0),
+      total: extraDetails?.finalTotal ?? cart.reduce((a,b) => a + (Number(b.price) * b.quantity), 0),
       status: 'pendente', 
       scheduledTo: extraDetails?.scheduledTo,
       customer: { ...customer, address: fullAddress }, 
@@ -670,24 +664,6 @@ export default function Home() {
       timing: { createdAt: new Date().toISOString() }, 
       type: 'entrega'
     };
-
-    setOrders(prev => {
-      // Se for retry, substitui o existente. Se não, adiciona.
-      const exists = prev.find(o => o.id === newOrder.id);
-      let updated;
-      if (exists) {
-        updated = prev.map(o => o.id === newOrder.id ? newOrder : o);
-      } else {
-        updated = [newOrder, ...prev];
-      }
-      localStorage.setItem('vovoh_active_orders', JSON.stringify(updated));
-      return updated;
-    });
-    
-    // Inicia polling se não estiver rodando
-    if (!pollingRef.current) {
-      pollingRef.current = setInterval(pollOrderStatus, 10000);
-    }
     
     let paymentDetails = '';
     if (extraDetails?.method === 'cartao_online') {
@@ -708,38 +684,31 @@ export default function Home() {
     if (extraDetails?.coupon) itemsSummary += `\n[Cupom: ${extraDetails.coupon}]`;
     if (extraDetails?.deliveryFee !== undefined) itemsSummary += `\n[Taxa de Entrega: R$ ${Number(extraDetails.deliveryFee).toFixed(2)}]`;
 
-    try {
-      const endpoint = retryOrderId ? `/orders/${retryOrderId}` : '/orders';
-      const methodHttp = retryOrderId ? 'PUT' : 'POST';
-
-      fetch(GAS_API_URL + endpoint, {
-        method: methodHttp,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            id: newOrder.id,
-            userId: user ? user.id : '',
-            customer: {
-              name: customer.name,
-              phone: customer.phone,
-              address: fullAddress
-            },
-            total: newOrder.total,
-            paymentMethod: paymentDetails,
-            type: 'entrega',
-            itemsSummary: itemsSummary,
-            items: cart,
-            status: 'pendente', // Garante que volta pra pendente
-            scheduledTo: newOrder.scheduledTo
-        })
-      });
-      if (user) {
-        fetch(GAS_API_URL + '/users/' + user.id, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cart: '[]' })
-        }).catch(()=>{});
+    const response = await fetch(GAS_API_URL + '/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Order-Request': pendingSubmissionKey.current ||= crypto.randomUUID() },
+      body: JSON.stringify({
+        ...newOrder, userId: user ? user.id : '', paymentMethod: paymentDetails,
+        itemsSummary, paymentIntentId: extraDetails?.id,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.success !== true) throw new Error(result.error || 'Não foi possível enviar o pedido.');
+    newOrder.id = result.id;
+    newOrder.accessToken = result.accessToken;
+    pendingSubmissionId.current = null; pendingSubmissionKey.current = null;
+    setOrders(prev => {
+      // Se for retry, substitui o existente. Se não, adiciona.
+      const exists = prev.find(o => o.id === newOrder.id);
+      let updated;
+      if (exists) {
+        updated = prev.map(o => o.id === newOrder.id ? newOrder : o);
+      } else {
+        updated = [newOrder, ...prev];
       }
-    } catch(e) {}
+      localStorage.setItem('vovoh_active_orders', JSON.stringify(updated));
+      return updated;
+    });
+
 
     setCart([]);
     setChangeFor('');
@@ -750,6 +719,11 @@ export default function Home() {
     
     clearInterval(pollingRef.current);
     pollingRef.current = setInterval(pollOrderStatus, 10000);
+    return true;
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'Não foi possível enviar. Sua sacola foi mantida; confira a internet e tente novamente.', type: 'error' });
+      return false;
+    } finally { submittingOrder.current = false; }
   };
 
   const toggleNotifications = async () => {
@@ -1026,6 +1000,7 @@ export default function Home() {
         <div className="relative -top-5">
           <button 
             ref={mobileCartButtonRef}
+            aria-label="Abrir sacola"
             onClick={() => setIsCartOpen(true)}
             className="w-16 h-16 bg-vovoh-red text-white rounded-full shadow-[0_8px_25px_-5px_rgba(214,31,31,0.5)] flex items-center justify-center border-4 border-[#F9F9F9] active:scale-90 transition-all"
           >
