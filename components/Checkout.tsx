@@ -203,6 +203,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     quoteAbort.current?.abort();
     const controller = new AbortController();
     quoteAbort.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
       const quote = await fetch(`${GAS_API_URL}/delivery/quote`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -210,16 +211,18 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
         signal: controller.signal,
       });
       const result = await quote.json().catch(() => ({}));
-      if (sequence !== quoteSequence.current || controller.signal.aborted) return;
+      if (sequence !== quoteSequence.current) return;
+      if (controller.signal.aborted) throw new Error('O cálculo do frete demorou demais. Tente novamente.');
       if (!quote.ok) throw new Error(result.error || 'Não foi possível calcular o frete.');
       if (!Number.isFinite(result.fee) || result.fee < 0 || !Number.isFinite(result.distance) || result.distance < 0 || typeof result.token !== 'string' || !result.token) throw new Error('Não foi possível confirmar o frete. Tente novamente.');
       setDeliveryDistance(result.distance); setDeliveryFee(result.fee);
       setDeliveryProof(result.token); setFeeCalculated(true);
     } catch (e) {
-      if (sequence !== quoteSequence.current || controller.signal.aborted) return;
+      if (sequence !== quoteSequence.current) return;
       setFeeCalculated(false); setDeliveryFee(0);
-      setAddressError(e instanceof Error ? e.message : 'Erro ao calcular o frete. Tente novamente.');
+      setAddressError(controller.signal.aborted ? 'O cálculo do frete demorou demais. Tente novamente.' : e instanceof Error ? e.message : 'Erro ao calcular o frete. Tente novamente.');
     } finally {
+      clearTimeout(timeout);
       if (sequence === quoteSequence.current) setCalculatingFee(false);
     }
   };
