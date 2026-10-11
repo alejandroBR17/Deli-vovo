@@ -1,6 +1,6 @@
 # Primeira etapa — pedidos, avisos e compra no celular
 
-Revisão de 10/10/2026. Projeto em produção: `delivovo`, repositório `alejandroBR17/delivovo`. As mudanças desta branch precisam de configuração e validação em preview antes de publicar. Nenhuma regra do banco ou configuração da Vercel foi aplicada durante o desenvolvimento.
+Revisão de 10/10/2026. Base escolhida para unificação: projeto `deli-vovo`, repositório `alejandroBR17/Deli-vovo`, commit original `b9e064e`. As correções da versão `delivovo` foram incorporadas preservando o layout da base mais recente. As mudanças desta branch precisam de configuração e validação em preview antes de publicar. As duas versões em produção permanecem preservadas.
 
 ## Comportamento proposto
 

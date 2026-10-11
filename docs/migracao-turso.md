@@ -2,7 +2,7 @@
 
 ## Situação
 
-O código foi preparado para Turso/libSQL, com testes em SQLite local. O Firebase não é mais uma dependência da aplicação. O novo banco foi conectado ao Delivovo na Vercel e o acesso remoto foi validado com credenciais privadas locais. O banco estava vazio; oito tabelas e onze índices explícitos foram preparados. Fila, histórico, financeiro e estatísticas funcionaram no banco remoto vazio. A troca da produção não foi realizada. O Observatório do Voto não foi alterado.
+O código foi preparado para Turso/libSQL, com testes em SQLite local. O Firebase não é mais uma dependência da aplicação. O banco foi inicialmente conectado ao projeto antigo `delivovo` na Vercel e o acesso remoto foi validado com credenciais privadas locais. O banco estava vazio; oito tabelas e onze índices explícitos foram preparados. Fila, histórico, financeiro e estatísticas funcionaram no banco remoto vazio. A base agora escolhida é `alejandroBR17/Deli-vovo`, projeto Vercel `deli-vovo`; a conexão desse projeto ao banco ainda precisa ser configurada antes de publicar. A troca da produção não foi realizada. O Observatório do Voto não foi alterado.
 
 O responsável decidiu começar sem importar dados antigos. Produtos, pedidos, usuários e configurações não foram copiados. O banco Firebase antigo permanece preservado. Os passos de exportação/importação abaixo ficam disponíveis para uma recuperação futura; não são necessários para iniciar o novo banco vazio. Antes da publicação, cadastrar e conferir o novo cardápio e as configurações de operação.
 
@@ -25,7 +25,7 @@ Caches em memória são por instância, não um cache compartilhado garantido. O
 
 ## Criar e configurar
 
-1. Na integração Turso da Vercel, criar um banco **exclusivo do delivery** chamado `delivovo`, sem reutilizar o banco do Observatório. Conectar ao projeto Vercel `delivovo`.
+1. Na integração Turso da Vercel, conectar o banco **exclusivo do delivery** já preparado ao projeto Vercel `deli-vovo`. Não criar outro banco para a mesma migração nem reutilizar o banco do Observatório. Usar um banco separado/local nos testes.
 2. Conferir que `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` estejam presentes como variáveis privadas. A integração criada com prefixo STORAGE gerou `STORAGE_TURSO_DATABASE_URL` e `STORAGE_TURSO_AUTH_TOKEN`, que o código também aceita diretamente. Não usar prefixo `VITE_` para o token. Os valores não devem ser enviados pela conversa nem entrar no Git.
 3. Configurar `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET` (pelo menos 32 caracteres aleatórios) e o novo par privado de chaves VAPID. Preservar as configurações Stripe, usando modo de teste no preview.
 4. Usar um banco separado/local para o desenvolvimento. Por exemplo, `TURSO_DATABASE_URL=file:./data/delivery.db`, sem token, é aceito fora da Vercel. Na Vercel, URLs de arquivo são recusadas.
