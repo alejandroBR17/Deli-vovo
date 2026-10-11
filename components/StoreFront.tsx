@@ -1,12 +1,17 @@
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import React, { useState, useEffect, useRef } from 'react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
-import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search } from 'lucide-react';
+import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL } from '../constants/index';
 import { GrandmaLoader } from './UI';
 
-export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs }: any) => {
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const money = (value: number) => currencyFormatter.format(value);
+const searchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
+export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs, isClosed }: any) => {
   const [activeCat, setActiveCat] = useState('todos');
+  const [search, setSearch] = useState('');
+  const [logoFailed, setLogoFailed] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [selectedVariation, setSelectedVariation] = useState<any>(null);
@@ -20,10 +25,10 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
   useModalFocus(imageDialog, Boolean(selectedZoomImage), () => setSelectedZoomImage(null));
 
   const FAQS = [
-    { q: "Qual o tempo médio de entrega?", a: `Nosso tempo médio é de ${dynamicConfigs?.delivery_time || '40 a 60 minutos'}, pois fritamos tudo na hora para chegar bem quentinho!` },
-    { q: "Vocês entregam em quais regiões?", a: "Entregamos em toda a região de Colombo e arredores do São Gabriel. Consulte a taxa no checkout." },
-    { q: "Os salgados são fritos ou assados?", a: "Temos as duas opções! Nossas empanadas são assadas e nossos salgadinhos tradicionais são fritos na hora." },
-    { q: "Como funciona o pagamento online?", a: "Usamos o Stripe, uma das plataformas mais seguras do mundo. Seus dados de cartão nunca ficam salvos conosco." }
+    { q: "Como consulto o frete?", a: "Informe seu endereço na sacola e toque em Calcular Frete para conferir a disponibilidade e o valor antes de pagar." },
+    { q: "Posso agendar um pedido?", a: "Sim. Nos detalhes da sacola, escolha Agendar Entrega e informe uma data e um horário dentro do expediente da loja." },
+    { q: "Quais formas de pagamento estão disponíveis?", a: "As opções disponíveis aparecem na etapa de pagamento, antes de enviar seu pedido." },
+    { q: "Como acompanho meu pedido?", a: "Abra Pedidos para consultar o andamento e entrar em contato com a loja." }
   ];
 
   const testimonials = dynamicConfigs?.testimonials 
@@ -69,115 +74,58 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
   const visibleCategories = CATEGORIES.filter(cat => 
     cat.id === 'todos' || products.some((p: any) => p.category === cat.id)
   );
+  const currentCat = visibleCategories.some(cat => cat.id === activeCat) ? activeCat : 'todos';
+  const query = searchText(search.trim());
+  const filteredProducts = products.filter((product: any) => (currentCat === 'todos' || product.category === currentCat) && searchText(`${product.name || ''} ${product.description || ''}`).includes(query));
 
   return (
     <>
-      <header className="pt-8 md:pt-16 pb-8 md:pb-12 px-4 max-w-7xl mx-auto text-center">
-        <div className="relative inline-block mb-6">
-          <img src={logo} className="w-44 md:w-56 drop-shadow-2xl animate-in zoom-in duration-700" alt="Logo" />
-          <div className="absolute -bottom-2 -right-2 bg-vovoh-gold text-white px-3 py-1 rounded-full shadow-xl rotate-12 flex items-center gap-1 border-2 border-white">
-            <Star size={10} fill="white" />
-            <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest">Artesanal</span>
+      <header className="max-w-7xl mx-auto px-4 md:px-6 pt-3 md:pt-8 pb-5">
+        <div className="rounded-3xl bg-[#FFF5E9] border border-orange-100 p-4 md:p-8 grid md:grid-cols-[1.5fr_1fr] gap-4 md:gap-10 items-center">
+          <div className="min-w-0">
+            <div className="flex items-center gap-4">
+              <div className="relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-vovoh-red/5 flex items-center justify-center">
+                <ChefHat size={32} className="text-vovoh-red" aria-hidden="true" />
+                {!logoFailed && <img src={logo} width={80} height={80} alt="Logo Delícias da Vovó" onError={() => setLogoFailed(true)} className="absolute inset-0 w-full h-full object-contain" />}
+                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-vovoh-gold text-vovoh-dark px-2 py-1 rounded-full text-[10px] font-bold shadow-sm">Artesanal</span>
+              </div>
+              <div className="min-w-0"><p className="text-xs md:text-sm font-semibold text-vovoh-red mb-1">Da cozinha da vovó para você</p><h1 className="font-sans text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-vovoh-dark leading-tight">{String(dynamicConfigs?.store_name || dynamicConfigs?.shop_name || STORE_NAME).replace(/<[^>]*>/g, ' ').trim()}</h1></div>
+            </div>
+            <p className="text-sm md:text-base text-gray-600 mt-3 max-w-lg leading-relaxed">{dynamicConfigs?.store_subtitle || 'Escolha seus salgados, confira o frete e faça seu pedido.'}</p>
+            <a href="#menu" className="hidden md:inline-flex items-center gap-2 min-h-11 mt-1 md:mt-4 text-sm font-bold text-vovoh-red underline underline-offset-4">Escolher meus salgados <Plus size={16} aria-hidden="true" /></a>
           </div>
-        </div>
-        
-        <h2 className="text-2xl md:text-4xl font-black text-vovoh-dark mb-3 tracking-tight leading-tight max-w-2xl mx-auto" dangerouslySetInnerHTML={{__html: dynamicConfigs?.store_name || `Comidinha de vó, <br/><span class="text-vovoh-red italic font-serif">feita com amor.</span>`}}>
-        </h2>
-        
-        <p className="max-w-xl mx-auto text-gray-500 font-medium mb-8 text-xs md:text-sm leading-relaxed px-4">
-          {dynamicConfigs?.store_subtitle || "Salgados fritos na hora, empanadas autênticas e a verdadeira Massa com tempero de Mãe."}
-        </p>
-
-        <div className="flex gap-4 justify-center items-center px-4 max-w-md mx-auto">
-           <a href="#menu" className="flex-1 py-3.5 md:py-4 bg-vovoh-red text-white font-black rounded-full shadow-lg shadow-red-200 hover:brightness-110 active:scale-95 transition-all text-sm md:text-base text-center">
-             Ver Cardápio
-           </a>
-        </div>
-
-        <div className="mt-10 max-w-4xl mx-auto space-y-6">
-          {prepTime && prepTime.forecast && (
-            <div className="animate-in fade-in slide-in-from-bottom-4">
-              <div className="relative overflow-hidden bg-white rounded-3xl shadow-xl shadow-vovoh-red/5 border border-vovoh-red/10 p-5 md:p-6 flex flex-col md:flex-row items-center justify-between gap-4 group">
-                
-                {/* Background Decor */}
-                <div className="absolute top-0 right-0 w-40 h-40 bg-vovoh-gold/5 rounded-full blur-2xl -z-0 pointer-events-none translate-x-1 -translate-y-1"></div>
-                <div className="absolute bottom-0 left-0 w-40 h-40 bg-vovoh-red/5 rounded-full blur-2xl -z-0 pointer-events-none -translate-x-1 translate-y-1"></div>
-
-                <div className="flex items-center gap-4 relative z-10 w-full md:w-auto">
-                  <div className="w-12 h-12 md:w-14 md:h-14 bg-vovoh-red/10 text-vovoh-red rounded-2xl flex items-center justify-center shadow-inner shrink-0">
-                    <Timer size={24} className="animate-pulse" strokeWidth={2.5} />
-                  </div>
-                  <div className="text-left">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-vovoh-gold/10 text-vovoh-gold text-[9px] font-black uppercase tracking-widest mb-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-vovoh-gold animate-ping"></span>
-                      Ao Vivo
-                    </div>
-                    <h3 className="text-lg md:text-xl font-black text-vovoh-dark tracking-tight leading-none">
-                      Tempo de Preparo
-                    </h3>
-                    <p className="text-[10px] md:text-xs text-gray-400 font-bold mt-1">
-                      Estimativa para pedidos feitos agora
-                    </p>
-                  </div>
-                </div>
-
-                <div className="relative z-10 w-full md:w-auto">
-                  <div className="bg-vovoh-dark text-white px-6 py-3.5 rounded-2xl shadow-lg flex items-center justify-between gap-6 w-full md:w-auto">
-                    <div className="text-left">
-                       <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Previsão</p>
-                       <p className="text-2xl md:text-3xl font-black tracking-tighter text-vovoh-gold leading-none">{prepTime.forecast}</p>
-                    </div>
-                    <div className="h-8 w-px bg-white/10"></div>
-                    <Clock size={20} className="text-gray-400" />
-                  </div>
-                </div>
-
-              </div>
+          <div className="min-w-0 rounded-2xl bg-white/80 p-3 md:p-4 border border-white space-y-3">
+            <div className="flex items-start gap-3">
+              <span aria-hidden="true" className={'w-2.5 h-2.5 mt-1.5 rounded-full shrink-0 '+(isClosed ? 'bg-amber-500' : 'bg-green-600')} />
+              <div><p className="text-sm font-bold text-vovoh-dark">{!dynamicConfigs ? 'Consultando atendimento' : isClosed ? 'Fechado agora · você pode agendar' : 'Aberto para pedidos'}</p><p className="hidden md:block text-xs text-gray-600 mt-1">{isClosed ? 'Escolha uma data e um horário dentro do expediente.' : 'Monte sua sacola e confira as opções ao finalizar.'}</p></div>
             </div>
-          )}
-
-          {/* Highlights */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-            <div className="flex items-center gap-3.5 p-4 md:p-5 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="w-11 h-11 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center shrink-0">
-                <Flame size={22} />
-              </div>
-              <div className="text-left">
-                <h4 className="font-black text-vovoh-dark text-xs md:text-sm uppercase tracking-wide">Frito na Hora</h4>
-                <p className="text-[10px] md:text-xs text-gray-500 font-medium leading-tight mt-0.5">Chega quentinho e crocante pra você.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3.5 p-4 md:p-5 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="w-11 h-11 bg-red-50 text-red-500 rounded-xl flex items-center justify-center shrink-0">
-                <Heart size={22} />
-              </div>
-              <div className="text-left">
-                <h4 className="font-black text-vovoh-dark text-xs md:text-sm uppercase tracking-wide">Tempero de Mãe</h4>
-                <p className="text-[10px] md:text-xs text-gray-500 font-medium leading-tight mt-0.5">Receita de família com toque especial.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3.5 p-4 md:p-5 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="w-11 h-11 bg-green-50 text-green-500 rounded-xl flex items-center justify-center shrink-0">
-                <ShieldCheck size={22} />
-              </div>
-              <div className="text-left">
-                <h4 className="font-black text-vovoh-dark text-xs md:text-sm uppercase tracking-wide">Qualidade Real</h4>
-                <p className="text-[10px] md:text-xs text-gray-500 font-medium leading-tight mt-0.5">Ingredientes frescos e selecionados.</p>
-              </div>
+            <div className="border-t border-orange-100 pt-3 grid grid-cols-2 gap-3 text-xs md:text-sm">
+              {prepTime?.forecast && <div className="flex gap-2 items-center"><Clock size={17} className="text-vovoh-red shrink-0" aria-hidden="true" /><div><span className="block text-[10px] md:text-xs text-gray-500">Previsão da cozinha</span><span className="font-semibold text-vovoh-dark">{prepTime.forecast}</span></div></div>}
+              <div className="flex gap-2 items-center"><MapPin size={17} className="text-vovoh-red shrink-0" aria-hidden="true" /><div><span className="block text-xs text-gray-500">Entrega</span><span className="font-semibold text-vovoh-dark">Frete pelo seu endereço</span></div></div>
             </div>
           </div>
         </div>
       </header>
 
-      <main id="menu" className="pb-24 max-w-7xl mx-auto px-4 md:px-6">
+      <main id="menu" className="pb-12 max-w-7xl mx-auto px-4 md:px-6 scroll-mt-20">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
+          <div><h2 className="font-sans text-2xl font-bold text-vovoh-dark">Cardápio</h2><p className="text-sm text-gray-600 mt-1">Escolha o que vai na sua sacola.</p></div>
+          <div className="relative w-full sm:max-w-sm">
+            <label htmlFor="menu-search" className="sr-only">Buscar no cardápio</label>
+            <Search size={19} aria-hidden="true" className="absolute left-4 top-3.5 text-gray-500" />
+            <input id="menu-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Busque um salgado ou sabor" className="w-full h-12 pl-11 pr-12 rounded-2xl border border-gray-300 bg-white text-sm outline-none focus:ring-2 focus:ring-vovoh-red/30 focus:border-vovoh-red [&::-webkit-search-cancel-button]:hidden" />
+            {search && <button type="button" aria-label="Limpar busca" onClick={() => setSearch('')} className="absolute right-1 top-1 w-10 h-10 flex items-center justify-center text-gray-600 rounded-xl hover:bg-gray-100"><X size={18} /></button>}
+          </div>
+        </div>
         
-        <div className="sticky top-[64px] z-[190] bg-[#F9F9F9]/95 backdrop-blur-xl py-3 -mx-4 px-4 md:mx-0 md:px-0 mb-6 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-200/50 shadow-sm transition-all snap-x snap-mandatory scroll-pl-4">
+        <nav aria-label="Categorias do cardápio" className="sticky top-[64px] z-[190] bg-[#F9F9F9]/95 backdrop-blur-xl py-3 -mx-4 px-4 md:mx-0 md:px-0 mb-4 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-200/50 scroll-pl-4">
           {visibleCategories.map(c => (
-            <button key={c.id} onClick={() => setActiveCat(c.id)} className={`px-4 md:px-5 py-2.5 rounded-full font-black text-xs md:text-sm whitespace-nowrap transition-all flex-shrink-0 snap-center ${activeCat === c.id ? 'bg-vovoh-dark text-white shadow-lg shadow-black/10 scale-105' : 'bg-white text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}>
+            <button type="button" aria-pressed={currentCat === c.id} key={c.id} onClick={() => setActiveCat(c.id)} className={`min-h-11 px-5 rounded-full font-semibold text-sm whitespace-nowrap transition-colors flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red ${currentCat === c.id ? 'bg-vovoh-red text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-vovoh-red'}`}>
               {c.label}
             </button>
           ))}
-        </div>
+        </nav>
+        {!isLoading && products.length > 0 && <p role="status" className="text-xs text-gray-500 mb-3">{filteredProducts.length} {filteredProducts.length === 1 ? 'opção disponível' : 'opções disponíveis'}</p>}
 
         {isLoading ? <GrandmaLoader /> : products.length === 0 ? (
           <div role="status" className="bg-white rounded-3xl border border-gray-100 p-8 md:p-12 text-center">
@@ -185,15 +133,17 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
             <h2 className="text-xl font-black text-vovoh-dark">O cardápio está sendo preparado</h2>
             <p className="mt-2 text-sm text-gray-500">Assim que os produtos estiverem disponíveis, você poderá escolher e fazer seu pedido por aqui.</p>
           </div>
+        ) : filteredProducts.length === 0 ? (
+          <div role="status" className="bg-white p-8 rounded-2xl border border-gray-200 text-center"><Search size={28} className="mx-auto text-gray-400 mb-3" aria-hidden="true" /><h3 className="font-sans text-lg font-bold">Nenhum produto encontrado</h3><p className="text-sm text-gray-600 mt-2">Tente outro nome ou escolha uma categoria diferente.</p><button type="button" onClick={() => {setSearch('');setActiveCat('todos');}} className="min-h-11 mt-4 px-5 rounded-xl bg-vovoh-red text-white text-sm font-semibold">Limpar filtros</button></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-            {products.filter((p: any) => activeCat === 'todos' || p.category === activeCat).map((p: any) => (
+            {filteredProducts.map((p: any) => (
               <div key={p.id} className="group bg-white rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-3.5 hover:border-vovoh-red/30 hover:shadow-xl transition-all duration-300 items-stretch">
                 <button type="button" aria-label={`Ampliar foto de ${p.name}`}
                   className="w-24 h-24 md:w-28 md:h-28 flex-shrink-0 rounded-xl md:rounded-2xl overflow-hidden bg-vovoh-cream relative cursor-zoom-in group/img self-center"
                   onClick={() => setSelectedZoomImage(p.image || PLACEHOLDER_IMG)}
                 >
-                   <img src={p.image || PLACEHOLDER_IMG} className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700" alt={p.name} />
+                   <img loading="lazy" decoding="async" src={p.image || PLACEHOLDER_IMG} className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700" alt={p.name} />
                 </button>
                 
                 <div 
@@ -211,17 +161,18 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                 >
                    <div className="flex flex-col h-full">
                      <div className="flex justify-between items-start gap-2">
-                        <h4 className="text-sm md:text-base font-black text-vovoh-dark leading-tight line-clamp-2"><button type="button" aria-label={`Ver opções de ${p.name}`} className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red">{p.name}</button></h4>
+                        <h3 className="font-sans text-base font-bold text-vovoh-dark leading-tight line-clamp-2"><button type="button" aria-label={`Ver opções de ${p.name}`} className="text-left min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red">{p.name}</button></h3>
                         {p.oldPrice && (
                           <span className="bg-vovoh-gold text-white px-1.5 py-0.5 rounded-md text-[8px] md:text-[9px] font-black uppercase tracking-wider shadow-sm shrink-0">Promo</span>
                         )}
                      </div>
-                     <p className="text-[10px] md:text-xs text-gray-400 font-medium line-clamp-2 mt-1 mb-2 leading-relaxed">"{p.description}"</p>
+                     {p.description && <p className="text-xs md:text-sm text-gray-600 line-clamp-2 mt-1 mb-3 leading-relaxed">{p.description}</p>}
                      
                      <div className="mt-auto flex items-end justify-between gap-2 pt-1">
                         <div className="flex flex-col">
-                          {p.oldPrice && <span className="text-[9px] md:text-[10px] text-gray-300 line-through font-bold">R$ {Number(p.oldPrice).toFixed(2)}</span>}
-                          <span className="text-sm md:text-base font-black text-vovoh-dark">R$ {Number(p.price).toFixed(2)}</span>
+                          {p.oldPrice && <span className="text-xs text-gray-500 line-through">{money(Number(p.oldPrice))}</span>}
+                          {(p.variations?.length > 0) && <span className="text-[11px] text-gray-500">Preço base</span>}
+                          <span className="text-base font-bold text-vovoh-dark">{money(Number(p.price))}</span>
                         </div>
                         <button aria-label={`Adicionar ${p.name} à sacola`} onClick={(e) => {
                           e.stopPropagation();
@@ -233,7 +184,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                           } else {
                             onAddToCart(p, null, [], "", e);
                           }
-                        }} className="w-8 h-8 md:w-9 md:h-9 bg-gray-50 text-vovoh-red rounded-full flex items-center justify-center hover:bg-vovoh-red hover:text-white transition-all active:scale-90 shadow-sm border border-gray-100">
+                        }} className="w-11 h-11 shrink-0 bg-red-50 text-vovoh-red rounded-xl flex items-center justify-center hover:bg-vovoh-red hover:text-white transition-colors active:scale-95 border border-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red">
                           <Plus size={16} strokeWidth={3} />
                         </button>
                      </div>
@@ -306,7 +257,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                           </div>
                           <span className={`font-bold text-sm ${selectedVariation?.name === v.name ? 'text-vovoh-dark' : 'text-gray-600'}`}>{v.name}</span>
                         </div>
-                        {v.price !== 0 && <span className="text-xs font-black text-vovoh-red">{v.price > 0 ? '+' : '-'} R$ {Math.abs(Number(v.price)).toFixed(2)}</span>}
+                        {v.price !== 0 && <span className="text-xs font-black text-vovoh-red">{v.price > 0 ? '+' : '-'} {money(Math.abs(Number(v.price)))}</span>}
                         <input 
                           type="radio" 
                           name="variation" 
@@ -337,7 +288,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                             </div>
                             <span className={`font-bold text-sm ${isSelected ? 'text-vovoh-dark' : 'text-gray-600'}`}>{add.name}</span>
                           </div>
-                          {add.price !== 0 && <span className="text-xs font-black text-vovoh-gold">{add.price > 0 ? '+' : '-'} R$ {Math.abs(Number(add.price)).toFixed(2)}</span>}
+                          {add.price !== 0 && <span className="text-xs font-black text-vovoh-gold">{add.price > 0 ? '+' : '-'} {money(Math.abs(Number(add.price)))}</span>}
                           <input 
                             type="checkbox" 
                             className="sr-only"
@@ -380,7 +331,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                 className="w-full py-4  bg-vovoh-dark text-white rounded-2xl font-black text-sm uppercase shadow-xl shadow-black/10 flex items-center justify-between px-6 active:scale-95 transition-all hover:bg-black"
               >
                 <span className="flex items-center gap-2"><Plus size={18} /> Adicionar à Sacola</span>
-                <span className="bg-white0 px-3 py-1 rounded-lg">R$ {(Number(selectedProduct.price) + (selectedVariation ? Number(selectedVariation.price) : 0) + selectedAdditionals.reduce((acc, add) => acc + Number(add.price), 0)).toFixed(2)}</span>
+                <span className="bg-white0 px-3 py-1 rounded-lg">{money(Number(selectedProduct.price) + (selectedVariation ? Number(selectedVariation.price) : 0) + selectedAdditionals.reduce((acc, add) => acc + Number(add.price), 0))}</span>
               </button>
             </div>
           </div>
@@ -475,6 +426,8 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
                 }`}
               >
                 <button 
+                  aria-expanded={openFaq === i}
+                  aria-controls={`faq-answer-${i}`}
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
                   className="w-full p-5 md:p-6 text-left flex justify-between items-center"
                 >
@@ -492,9 +445,7 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
                     <ChevronDown size={18} />
                   </div>
                 </button>
-                <div className={`transition-all duration-300 ease-in-out ${
-                  openFaq === i ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'
-                } overflow-hidden`}>
+                <div id={`faq-answer-${i}`} hidden={openFaq !== i}>
                   <div className="px-6 pb-6 md:pb-8 ml-12">
                     <div className="h-px w-12 bg-vovoh-red/30 mb-4"></div>
                     <p className="text-gray-300 font-medium text-xs md:text-sm leading-relaxed">

@@ -706,6 +706,9 @@ export default function Home() {
     return acc + (itemPrice * item.quantity);
   }, 0);
 
+  const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
+  const cartSubtotal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cartTotal);
+
   return (
     <div className="min-h-screen bg-[#F9F9F9] font-sans flex flex-col relative">
       {dynamicConfigs?.preview_mode === 'true' && <p className="bg-amber-100 text-amber-900 p-3 text-center text-sm font-bold">Prévia local: pedidos de teste. Loja aberta para testar a qualquer hora.</p>}
@@ -761,13 +764,13 @@ export default function Home() {
 
       <nav className="sticky top-0 z-[300] bg-white/85 backdrop-blur-md border-b border-gray-200/50 h-16 px-4 md:px-8 shadow-sm shrink-0 transition-all">
         <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+          <button aria-label="Voltar ao início" className="flex items-center gap-3 group text-left min-h-11" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
             <div className="w-10 h-10 bg-vovoh-red rounded-xl flex items-center justify-center text-white shadow-lg rotate-3 group-active:scale-95 transition-transform"><ChefHat size={20} /></div>
             <div>
-              <h1 className="text-lg md:text-xl font-black text-vovoh-dark tracking-tighter leading-none">Vovó Grazy</h1>
+              <span className="text-lg md:text-xl font-bold text-vovoh-dark tracking-tight leading-none">Vovó Grazy</span>
               <p className="text-[8px] md:text-[9px] font-black text-vovoh-red uppercase tracking-[0.2em] mt-0.5">Salgados & Empanadas</p>
             </div>
-          </div>
+          </button>
 
           {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center gap-8">
@@ -794,7 +797,8 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <button 
               onClick={toggleNotifications} 
-              className={`p-2 rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}
+              className={`min-w-11 min-h-11 flex items-center justify-center rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}
+              aria-label={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
               title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
             >
               {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
@@ -817,10 +821,10 @@ export default function Home() {
               className="hidden md:flex items-center gap-2.5 px-4 py-2 bg-vovoh-red text-white rounded-full font-black text-xs uppercase tracking-wider shadow-md hover:bg-red-600 transition-all active:scale-95 relative"
             >
               <ShoppingCart size={16} />
-              <span>Sacola</span>
+              <span>{cartCount > 0 ? cartSubtotal : "Sacola"}</span>
               {cart.length > 0 && (
                 <span className="bg-vovoh-gold text-white text-[10px] font-black px-1.5 py-0.5 rounded-full ml-1">
-                  {cart.length}
+                  {cartCount}
                 </span>
               )}
             </button>
@@ -859,18 +863,7 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      <div className="px-4 mt-4 space-y-3 relative z-[200]">
-        {isClosed && (
-          <div className="bg-vovoh-dark text-white px-4 py-3 rounded-2xl shadow-xl flex justify-center items-center gap-3 animate-in slide-in-from-top-2 mx-auto max-w-md border border-white/10">
-            <Clock size={18} className="text-vovoh-gold animate-pulse shrink-0" />
-            <span className="text-xs font-black uppercase tracking-widest text-center leading-tight">
-              {isForceClosed 
-                ? "A vovó tirou o dia de folga! Voltamos amanhã." 
-                : `A vovó tá dormindo! Abrimos das ${formatTime(dynamicConfigs?.opening_start, OPENING_HOURS.start)}h às ${formatTime(dynamicConfigs?.opening_end, OPENING_HOURS.end)}h.`}
-            </span>
-          </div>
-        )}
-
+      {deferredPrompt && <div className="px-4 mt-4 space-y-3 relative z-[200]">
         {deferredPrompt && (
           <div className="bg-white border border-gray-100 px-4 py-3 rounded-2xl shadow-xl flex justify-between items-center animate-in slide-in-from-top-2 mx-auto max-w-md">
             <div className="flex items-center gap-3">
@@ -892,13 +885,13 @@ export default function Home() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Wrapper para o conteúdo crescer e empurrar o rodapé */}
-      <div className="flex-grow pb-24">
-         <div className="max-w-7xl mx-auto px-4 mt-2">
+      <div className={cartCount > 0 ? "flex-grow pb-48 md:pb-24" : "flex-grow pb-24"}>
+         {user && <div className="max-w-7xl mx-auto px-4 mt-2">
             <QuickReorder user={user} onReorder={handleReorder} />
-         </div>
+         </div>}
          <StoreFront 
            products={products} 
            isLoading={loading} 
@@ -908,6 +901,15 @@ export default function Home() {
            isClosed={isClosed} 
          />
       </div>
+
+      {cartCount > 0 && !isCartOpen && (
+        <div className="md:hidden fixed left-4 right-4 bottom-[calc(7rem+env(safe-area-inset-bottom))] z-[250]">
+          <button aria-label="Ver sacola" onClick={() => setIsCartOpen(true)} className="w-full min-h-14 px-4 py-3 rounded-2xl bg-vovoh-red text-white shadow-lg flex items-center justify-between gap-3 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vovoh-red">
+            <span className="flex items-center gap-3"><span className="bg-black/15 rounded-lg min-w-8 px-2 py-1 text-sm">{cartCount}</span><span>Ver sacola</span></span>
+            <span className="text-right"><span className="block text-[10px] font-normal">Subtotal</span><span className="text-sm">{cartSubtotal}</span></span>
+          </button>
+        </div>
+      )}
 
       {/* Bottom Navigation Bar (Mobile Only) */}
       <div className="safe-area-nav md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-white border-t border-gray-100 flex justify-around items-end h-20 pb-2 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)]">
@@ -932,7 +934,7 @@ export default function Home() {
             <ShoppingCart size={24} />
             {cart.length > 0 && (
               <span className="absolute top-0 right-0 bg-vovoh-gold text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-bounce">
-                {cart.length}
+                {cartCount}
               </span>
             )}
           </button>
