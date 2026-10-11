@@ -9,6 +9,7 @@ import { Checkout, TrackingModal } from '../components/Checkout';
 import { AuthModal } from '../components/Auth';
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import { QuickReorder } from '../components/QuickReorder';
+import { storeAvailability, openingTime } from '../src/utils/store-hours';
 
 const LOGO = "https://i.ibb.co/Rkt5c0zk/Del-cias-Da-Vov.png";
 
@@ -73,17 +74,7 @@ export default function Home() {
   };
 
   const formatTime = (timeStr: string | number | undefined, defaultHour: number) => {
-    if (!timeStr) return `${defaultHour}:00`;
-    if (typeof timeStr === 'string' && timeStr.includes('T')) {
-      // It's a full ISO date string from Google Sheets
-      const date = new Date(timeStr);
-      const roundedDate = new Date(date.getTime() + 30000); // Arredonda para o minuto mais próximo (corrige o bug de 1899 do fuso horário)
-      return `${roundedDate.getHours().toString().padStart(2, '0')}:${roundedDate.getMinutes().toString().padStart(2, '0')}`;
-    }
-    if (typeof timeStr === 'string' && timeStr.includes(':')) {
-      return timeStr.substring(0, 5);
-    }
-    return `${timeStr}:00`;
+    return openingTime(timeStr, defaultHour) || '--:--';
   };
 
   const trackVisit = async () => {
@@ -209,55 +200,7 @@ export default function Home() {
         console.error("Erro ao verificar saúde do banco:", e);
       }
 
-      const configs = await fetchConfigs();
-      if (configs?.preview_mode === 'true') {
-        setIsClosed(false);
-        setIsForceClosed(false);
-        return;
-      }
-      
-      if (configs?.force_closed === 'true' || configs?.force_closed === true) {
-        setIsClosed(true);
-        setIsForceClosed(true);
-        return;
-      } else {
-        setIsForceClosed(false);
-      }
-
-      const now = new Date();
-      const day = now.getDay();
-      
-      let workingDays = [0, 1, 2, 3, 4, 5, 6];
-      if (configs?.working_days) {
-        try {
-          workingDays = typeof configs.working_days === 'string' ? JSON.parse(configs.working_days) : configs.working_days;
-        } catch(e) {}
-      }
-
-      const startFormatted = formatTime(configs?.opening_start, OPENING_HOURS.start);
-      const endFormatted = formatTime(configs?.opening_end, OPENING_HOURS.end);
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      if (startFormatted > endFormatted) {
-        // Overnight shift (e.g., 18:00 to 02:00)
-        if (currentTime >= startFormatted) {
-          // It's evening, check if today is a working day
-          setIsClosed(!workingDays.includes(day));
-        } else if (currentTime <= endFormatted) {
-          // It's past midnight, check if yesterday was a working day
-          const prevDay = day === 0 ? 6 : day - 1;
-          setIsClosed(!workingDays.includes(prevDay));
-        } else {
-          setIsClosed(true);
-        }
-      } else {
-        // Normal shift (e.g., 08:00 to 18:00)
-        if (!workingDays.includes(day)) {
-          setIsClosed(true);
-        } else {
-          setIsClosed(currentTime < startFormatted || currentTime >= endFormatted);
-        }
-      }
+      await fetchConfigs();
     };
 
     checkOpeningHours();
@@ -271,6 +214,16 @@ export default function Home() {
       productsPollingRef.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!dynamicConfigs) return;
+    // The clock updates locally; it does not read the database every minute.
+    return startVisiblePolling(async () => {
+      const availability = storeAvailability(dynamicConfigs);
+      setIsClosed(!availability.open);
+      setIsForceClosed(availability.forceClosed);
+    }, 60000);
+  }, [dynamicConfigs]);
 
   useEffect(() => {
     const savedNotify = localStorage.getItem('vovoh_notifications');

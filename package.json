@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "start": "node server.ts",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
     "db:migrate": "tsx scripts/migrate-db.ts",
     "db:import": "tsx scripts/import-data.ts",
     "db:export-legacy": "tsx scripts/export-legacy.ts"

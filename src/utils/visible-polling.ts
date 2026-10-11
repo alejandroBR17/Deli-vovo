@@ -13,7 +13,7 @@ export function startVisiblePolling(task: () => Promise<unknown>, interval: numb
     catch { failures = Math.min(failures + 1, 4); }
     finally {
       running = false;
-      if (!stopped && available()) timer = setTimeout(run, Math.min(interval * 2 ** failures, 300000));
+      if (!stopped && available()) timer = setTimeout(run, Math.min(interval * 2 ** failures, Math.max(interval, 300000)));
     }
   };
   const resume = () => { clearTimeout(timer); if (available()) void run(); };

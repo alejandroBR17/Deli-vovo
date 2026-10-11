@@ -29,6 +29,20 @@ Validação: 17 testes passaram; novos testes cobrem configurações ausentes/in
 
 Esta rodada foi validada localmente e ainda não implantada. A próxima rodada pode consolidar estes ajustes com novas correções antes de criar uma prévia, evitando bancos/implantações redundantes. A prévia online mais recente continua sendo a do commit 0268b7e acima. As credenciais e a produção continuam preservadas. O helper `verify-store-setup.cjs` está na pasta pai do repositório.
 
+## Rodadas 02h15 e 03h15 — horários e consumo de consultas
+
+A rodada das 02h15 iniciou a correção de horários, mas a validação foi interrompida por falta de memória no computador: os processos de testes falharam com heap esgotado enquanto o build também estava em execução. Essas tentativas não são contabilizadas como sucesso. Às 03h15, o trabalho pendente foi retomado e validado executando testes e build em sequência. O comando npm test também passa a executar os arquivos sequencialmente, para evitar vários processos concorrentes nessa máquina.
+
+- A disponibilidade exibida na loja agora usa America/Sao_Paulo, independentemente do fuso do aparelho do cliente. Meia-noite é um horário válido. Turnos que passam da meia-noite usam o dia em que abriram, inclusive na passagem de domingo para segunda. O fechamento é exclusivo: às 22h exatas, o turno que acaba às 22h já está fechado. Configurações inválidas ou nenhum dia de funcionamento deixam a loja fechada. Os valores padrão existentes de 10h–22h foram preservados; não representam confirmação de horários reais.
+- O relógio da loja é recalculado localmente a cada minuto, pausando com aba oculta/offline e retomando ao voltar. Essa atualização não consulta o banco. Alterações de configuração continuam chegando pelo intervalo de dez minutos existente.
+- Foi corrigido o limite do backoff: ele encurtava polls configurados para dez minutos para cinco minutos após a primeira execução. Agora o intervalo nunca é encurtado pelo teto. Isso reduz pela metade as repetições estáveis desses polls em abas que permanecem visíveis, sem prometer uma cota global.
+
+Validação concluída na retomada: **21 testes passaram**, com arquivos executados sequencialmente, e **build passou**. Os quatro testes acrescentados cobrem fusos diferentes, limites exatos do turno, madrugada/dias da semana, configurações inválidas e o intervalo de dez minutos. No navegador Edge, simulando os fusos de Tóquio e Los Angeles em tela de 390 px, a loja estava aberta às 21h59 de São Paulo e fechou às 22h após avançar o relógio; nenhum novo GET de configurações foi feito nessa passagem, sem erro JavaScript ou rolagem horizontal. O helper `verify-store-hours.cjs` está fora do repositório e usa respostas simuladas, sem gravações remotas.
+
+**Limitação explícita:** esta correção é da disponibilidade exibida no navegador. A API ainda não bloqueia pedidos por horário; isso exige tratar o agendamento e pagamentos iniciados antes do fechamento, para não rejeitar um pedido já pago inadvertidamente. Não anunciar essa validação como concluída. O teste Android bloqueado continua pendente.
+
+Os ajustes do painel e desta rodada ainda estão apenas na branch da PR; a prévia verificada continua `0268b7e`. Foi adiada uma nova implantação para consolidar as próximas correções, pois a integração Turso cria branches por deployment. Produção permanece preservada. Para a próxima retomada, revisar os ícones/metadados PWA ou outra falha demonstrável e concluir uma única prévia consolidada antes do relatório final.
+
 ## Prioridades independentes para as próximas rodadas
 
 1. Revisar fluxo de configuração inicial do painel: facilitar identificar cardápio/localização/frete/horários/Pix pendentes, sem criar valores de negócio inventados. O endereço foi confirmado na conversa, mas não deve ser colocado em arquivos Git ou HTML público. A apresentação pública continua Curitiba - PR.
