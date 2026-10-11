@@ -18,6 +18,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   const [calculatingFee, setCalculatingFee] = useState(false);
   const [feeCalculated, setFeeCalculated] = useState(false);
   const [addressError, setAddressError] = useState('');
+  const quoteSequence = useRef(0);
+  const quoteAbort = useRef<AbortController | null>(null);
   
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
@@ -49,11 +51,16 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   }, []);
 
   useEffect(() => {
+    quoteSequence.current++;
+    quoteAbort.current?.abort();
+    setCalculatingFee(false);
+    setDeliveryFee(0); setDeliveryDistance(0);
     if (street && number && city) {
       const newAddress = `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}`;
       setCustomer((prev: any) => ({ ...prev, address: newAddress }));
     }
     setFeeCalculated(false); setDeliveryProof('');
+    return () => { quoteSequence.current++; quoteAbort.current?.abort(); };
   }, [street, number, neighborhood, city, state, cep]);
 
   const searchCep = async () => {
@@ -163,20 +170,28 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
       return;
     }
     setCalculatingFee(true);
+    const sequence = ++quoteSequence.current;
+    quoteAbort.current?.abort();
+    const controller = new AbortController();
+    quoteAbort.current = controller;
     try {
       const quote = await fetch(`${GAS_API_URL}/delivery/quote`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: customer.address }),
+        signal: controller.signal,
       });
-      const result = await quote.json();
+      const result = await quote.json().catch(() => ({}));
+      if (sequence !== quoteSequence.current || controller.signal.aborted) return;
       if (!quote.ok) throw new Error(result.error || 'Não foi possível calcular o frete.');
+      if (!Number.isFinite(result.fee) || result.fee < 0 || !Number.isFinite(result.distance) || result.distance < 0 || typeof result.token !== 'string' || !result.token) throw new Error('Não foi possível confirmar o frete. Tente novamente.');
       setDeliveryDistance(result.distance); setDeliveryFee(result.fee);
       setDeliveryProof(result.token); setFeeCalculated(true);
     } catch (e) {
+      if (sequence !== quoteSequence.current || controller.signal.aborted) return;
       setFeeCalculated(false); setDeliveryFee(0);
       setAddressError(e instanceof Error ? e.message : 'Erro ao calcular o frete. Tente novamente.');
     } finally {
-      setCalculatingFee(false);
+      if (sequence === quoteSequence.current) setCalculatingFee(false);
     }
   };
 
