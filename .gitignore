@@ -33,3 +33,4 @@ data/
 .vercel/
 test-results/
 playwright-report/
+preview/

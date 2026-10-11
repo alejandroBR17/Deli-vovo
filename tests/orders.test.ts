@@ -54,10 +54,31 @@ test('administrative data and writes require a real session on both mount paths'
   assert.equal((await request('/orders', undefined, { Cookie: adminCookie + 'invalid' })).status, 401);
 });
 test('private configuration never appears in public responses', async () => {
-  await writeFile(path.join(directory, 'configs.json'), JSON.stringify([{ key: 'vapid_private_key', value: 'private-test-value' }, { key: 'store_name', value: 'Loja de teste' }]));
+  await writeFile(path.join(directory, 'configs.json'), JSON.stringify([
+    { key: 'vapid_private_key', value: 'private-test-value' }, { key: 'store_name', value: 'Loja de teste' },
+    { key: 'store_street', value: 'Rua interna de teste' }, { key: 'store_number', value: '123' },
+    { key: 'store_lat', value: '-25.35' }, { key: 'store_lng', value: '-49.2' },
+    { key: 'max_delivery_radius', value: '5' }, { key: 'fee_per_km', value: '2' },
+  ]));
   const response = await request('/configs');
   const text = await response.text();
   assert.ok(!text.includes('private-test-value')); assert.ok(text.includes('Loja de teste'));
+  assert.ok(!text.includes('Rua interna de teste')); assert.ok(!text.includes('store_lat'));
+  const internal = await request('/configs', undefined, { Cookie: adminCookie });
+  const internalText = await internal.text();
+  assert.ok(internalText.includes('Rua interna de teste')); assert.ok(!internalText.includes('private-test-value'));
+});
+
+test('delivery quote uses private store coordinates and enforces delivery radius', async () => {
+  const nearby = await request('/delivery/quote', { latitude: '-25.35', longitude: '-49.2' });
+  assert.equal(nearby.status, 200); assert.deepEqual(await nearby.json(), { fee: 0, distance: 0 });
+  const extra = await request('/delivery/quote', { latitude: '-25.36', longitude: '-49.2' });
+  const quote = await extra.json(); assert.ok(quote.fee > 2 && quote.fee < 3);
+  assert.ok(!('store_lat' in quote));
+  assert.equal((await request('/delivery/quote', { latitude: 95, longitude: 0 })).status, 400);
+  assert.equal((await request('/delivery/quote', { latitude: 0, longitude: 0 })).status, 400);
+  assert.equal((await request('/delivery/quote', { latitude: null, longitude: null })).status, 400);
+  assert.equal((await request('/chat', { message: 'oi' })).status, 404);
 });
 test('customer registration hashes credentials and protects customer profiles', async () => {
   const result = await request('/auth/register', { name: 'Cliente teste', email: 'test@example.com', password: 'customer-test-password' });

@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
 import { PixBox, StripePaymentBox } from './UI';
-import { PLACEHOLDER_IMG } from '../constants/index';
-import { normalizeCoordinate } from '../utils/geo';
+import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
@@ -161,11 +160,6 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
       setAddressError("Por favor, preencha seu endereço completo primeiro.");
       return;
     }
-    if (!dynamicConfigs?.store_lat || !dynamicConfigs?.store_lng) {
-      setAddressError("A loja ainda não configurou o endereço de entrega.");
-      return;
-    }
-
     setCalculatingFee(true);
     try {
       // Busca mais precisa usando os campos separados
@@ -189,43 +183,21 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
       }
       
       if (data && data.length > 0) {
-        const customerLat = parseFloat(data[0].lat);
-        const customerLng = parseFloat(data[0].lon);
-        const storeLat = normalizeCoordinate(dynamicConfigs.store_lat);
-        const storeLng = normalizeCoordinate(dynamicConfigs.store_lng);
-
-        const R = 6371; // Radius of the earth in km
-        const dLat = (customerLat - storeLat) * (Math.PI/180);
-        const dLon = (customerLng - storeLng) * (Math.PI/180);
-        const a = 
-          Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(storeLat * (Math.PI/180)) * Math.cos(customerLat * (Math.PI/180)) * 
-          Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-        const distance = R * c; // Distance in km
-
-        const freeRadius = parseFloat(dynamicConfigs.free_delivery_radius || '0');
-        const feePerKm = parseFloat(dynamicConfigs.fee_per_km || '0');
-        const maxRadius = parseFloat(dynamicConfigs.max_delivery_radius || '999');
-
-        if (distance > maxRadius) {
-          setAddressError(`Desculpe, só entregamos até ${maxRadius}km. Sua distância é de ${distance.toFixed(1)}km.`);
-          setFeeCalculated(false);
-          setDeliveryFee(0);
-        } else {
-          let fee = 0;
-          if (distance > freeRadius) {
-            fee = (distance - freeRadius) * feePerKm;
-          }
-          setDeliveryDistance(distance);
-          setDeliveryFee(fee);
-          setFeeCalculated(true);
-        }
+        const quote = await fetch(`${GAS_API_URL}/delivery/quote`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latitude: data[0].lat, longitude: data[0].lon }),
+        });
+        const result = await quote.json();
+        if (!quote.ok) throw new Error(result.error || 'Não foi possível calcular o frete.');
+        setDeliveryDistance(result.distance);
+        setDeliveryFee(result.fee);
+        setFeeCalculated(true);
       } else {
         setAddressError("Não conseguimos encontrar seu endereço. Por favor, seja mais específico (Rua, Número, Cidade).");
       }
     } catch (e) {
-      setAddressError("Erro ao calcular o frete. Tente novamente.");
+      setFeeCalculated(false); setDeliveryFee(0);
+      setAddressError(e instanceof Error ? e.message : 'Erro ao calcular o frete. Tente novamente.');
     } finally {
       setCalculatingFee(false);
     }
@@ -289,7 +261,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                       </div>
                     ))}
                   </div>
-                  <p className="text-[9px] [10px] font-bold opacity-80 leading-tight">Complete seu cartão e ganhe um lanche grátis! 🥟</p>
+                  <p className="text-[9px] [10px] font-bold opacity-80 leading-tight">Complete seu cartão e ganhe um lanche grátis! </p>
                </div>
             </div>
           )}

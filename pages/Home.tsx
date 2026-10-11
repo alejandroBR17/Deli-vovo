@@ -216,6 +216,11 @@ export default function Home() {
       }
 
       const configs = await fetchConfigs();
+      if (configs?.preview_mode === 'true') {
+        setIsClosed(false);
+        setIsForceClosed(false);
+        return;
+      }
       
       if (configs?.force_closed === 'true' || configs?.force_closed === true) {
         setIsClosed(true);
@@ -455,7 +460,7 @@ export default function Home() {
           if (newStatus === 'concluido') {
              const fid = parseInt(localStorage.getItem('vovoh_fidelidade') || '0');
              localStorage.setItem('vovoh_fidelidade', (fid + 1).toString());
-             setToast({ message: `Pedido #${order.id.slice(-4)} chegou! Bom apetite. 🥟`, type: 'success' });
+             setToast({ message: `Pedido #${order.id.slice(-4)} chegou! Bom apetite. `, type: 'success' });
           } else {
              setToast({ message: `Pedido #${order.id.slice(-4)} atualizado: ${newStatus.toUpperCase()}`, type: 'info' });
           }
@@ -611,7 +616,7 @@ export default function Home() {
       setOrders(updatedOrders as any);
       localStorage.setItem('vovoh_active_orders', JSON.stringify(updatedOrders));
       
-      setToast({ message: "Que bom que recebeu! Bom apetite! 🥟", type: 'success' });
+      setToast({ message: "Que bom que recebeu! Bom apetite! ", type: 'success' });
       
       const fid = parseInt(localStorage.getItem('vovoh_fidelidade') || '0');
       localStorage.setItem('vovoh_fidelidade', (fid + 1).toString());
@@ -741,14 +746,9 @@ export default function Home() {
     return acc + (itemPrice * item.quantity);
   }, 0);
 
-  const handleAddSuggestedItems = (items: any[]) => {
-    setCart(prev => [...prev, ...items]);
-    setToast({ message: "Sugestão da Vovó adicionada com sucesso!", type: 'success' });
-    setIsCartOpen(true);
-  };
-
   return (
     <div className="min-h-screen bg-[#F9F9F9] font-sans flex flex-col relative">
+      {dynamicConfigs?.preview_mode === 'true' && <p className="bg-amber-100 text-amber-900 p-3 text-center text-sm font-bold">Prévia local: pedidos de teste. Loja aberta para testar a qualquer hora.</p>}
       
       {/* Botão de permissão de notificação */}
       {typeof Notification !== 'undefined' && 'Notification' in window && !notificationsEnabled && Notification.permission !== 'granted' && (
@@ -787,7 +787,7 @@ export default function Home() {
             <div className="space-y-4">
               <h2 className="text-4xl font-black text-white tracking-tight">Cozinha em Manutenção</h2>
               <p className="text-zinc-400 text-lg leading-relaxed">
-                Estamos organizando as prateleiras! 🧹<br/>
+                <RefreshCw size={20} className="inline mr-2" aria-hidden="true" /> Estamos organizando as prateleiras!<br/>
                 O app voltará a funcionar <b>automaticamente</b> assim que terminarmos.
               </p>
             </div>
@@ -839,12 +839,6 @@ export default function Home() {
               className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
             >
               Cardápio
-            </button>
-            <button 
-              onClick={() => document.getElementById('vovoh-ai')?.scrollIntoView({behavior: 'smooth'})} 
-              className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
-            >
-              Dica da Vovó
             </button>
             <button 
               onClick={() => setIsTrackingOpen(true)} 
@@ -964,8 +958,7 @@ export default function Home() {
          <StoreFront 
            products={products} 
            isLoading={loading} 
-           onAddToCart={handleAddToCart} 
-           onAddSuggestedItems={handleAddSuggestedItems}
+           onAddToCart={handleAddToCart}
            logo={LOGO} 
            dynamicConfigs={dynamicConfigs} 
            isClosed={isClosed} 
@@ -1083,7 +1076,6 @@ export default function Home() {
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-vovoh-gold">Navegação</h4>
                   <ul className="space-y-4 text-sm font-bold text-zinc-400">
                     <li><a href="#menu" className="hover:text-white transition-colors">Cardápio</a></li>
-                    <li><a href="#vovoh-ai" className="hover:text-white transition-colors">Dica da Vovó</a></li>
                     <li><button onClick={() => setIsAuthOpen(true)} className="hover:text-white transition-colors">Minha Conta</button></li>
                   </ul>
                </div>
@@ -1132,9 +1124,9 @@ export default function Home() {
                    });
                  }} 
                  className="opacity-10 hover:opacity-100 transition-opacity text-base select-none"
-                 title="👵"
+                 title="Painel da Vovó" aria-label="Painel da Vovó"
                >
-                 👵
+                 <ChefHat size={18} aria-hidden="true" />
                </button>
                <div className="flex gap-6 text-[10px] font-black uppercase tracking-widest text-zinc-600">
                   <a href="#" className="hover:text-zinc-400 transition-colors">Privacidade</a>

@@ -53,11 +53,6 @@ export interface Order {
   type: 'entrega' | 'retirada';
 }
 
-export interface RecommendationResponse {
-  message: string;
-  suggestedItems: string[];
-}
-
 export interface ScheduleData {
   date: string;
   time: string;

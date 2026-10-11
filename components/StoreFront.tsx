@@ -1,9 +1,8 @@
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import React, { useState, useEffect } from 'react';
-import { Star, Plus, Send, ChefHat, Loader2, Sparkles, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search } from 'lucide-react';
+import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL } from '../constants/index';
 import { GrandmaLoader } from './UI';
-import ReactMarkdown from 'react-markdown';
 
 const TESTIMONIALS = [
   { name: "Mariana Silva", text: "A melhor coxinha de Colombo! Massa fininha e recheio super temperado. Lembra muito a comida da minha avó.", rating: 5 },
@@ -11,11 +10,8 @@ const TESTIMONIALS = [
   { name: "Ana Paula", text: "Sempre peço os combos para as festinhas aqui em casa. Chega tudo quentinho e no horário combinado.", rating: 5 }
 ];
 
-export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedItems, logo, dynamicConfigs }: any) => {
+export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs }: any) => {
   const [activeCat, setActiveCat] = useState('todos');
-  const [aiInput, setAiInput] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiRes, setAiRes] = useState<any>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [selectedVariation, setSelectedVariation] = useState<any>(null);
@@ -75,67 +71,6 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
     cat.id === 'todos' || products.some((p: any) => p.category === cat.id)
   );
 
-  const askGrandma = async () => {
-    if (!aiInput.trim()) return;
-    setAiLoading(true);
-    setAiRes(null);
-    try {
-      const res = await fetch(`${GAS_API_URL}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: aiInput })
-      });
-      
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.details || data.error || "Erro desconhecido");
-      }
-      
-      if (data.text) {
-        let text = data.text;
-        let suggestedItems = null;
-        
-        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          try {
-            const json = JSON.parse(jsonMatch[1]);
-            if (json.suggestedItems) {
-              suggestedItems = json.suggestedItems;
-              text = text.replace(/```json\n[\s\S]*?\n```/, '').trim();
-            }
-          } catch (e) {
-            console.error("Erro ao parsear sugestão:", e);
-          }
-        }
-        setAiRes({ message: text, suggestedItems });
-      }
-    } catch (e: any) {
-      console.error(e);
-      setAiRes({ message: `A vovó está um pouco esquecida agora... (${e.message || "Erro desconhecido"})` });
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleAddSuggestion = () => {
-    if (!aiRes?.suggestedItems) return;
-    
-    const itemsToAdd: any[] = [];
-    aiRes.suggestedItems.forEach((sug: any) => {
-      const product = products.find((p: any) => p.name.toLowerCase().includes(sug.name.toLowerCase()));
-      if (product) {
-        itemsToAdd.push({ ...product, quantity: sug.quantity });
-      }
-    });
-
-    if (itemsToAdd.length > 0) {
-      onAddSuggestedItems(itemsToAdd);
-    } else {
-      alert("Vovó não encontrou esses produtos no cardápio exato, mas tente procurar manualmente!");
-    }
-  };
-
   return (
     <>
       <header className="pt-8 md:pt-16 pb-8 md:pb-12 px-4 max-w-7xl mx-auto text-center">
@@ -158,9 +93,6 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
            <a href="#menu" className="flex-1 py-3.5 md:py-4 bg-vovoh-red text-white font-black rounded-full shadow-lg shadow-red-200 hover:brightness-110 active:scale-95 transition-all text-sm md:text-base text-center">
              Ver Cardápio
            </a>
-           <button onClick={() => document.getElementById('vovoh-ai')?.scrollIntoView({behavior:'smooth'})} className="flex-1 py-3.5 md:py-4 bg-white text-vovoh-dark font-black rounded-full shadow-sm border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all text-sm md:text-base flex items-center justify-center gap-2">
-             <Sparkles size={16} className="text-vovoh-gold" /> Dica da Vovó
-           </button>
         </div>
 
         <div className="mt-10 max-w-4xl mx-auto space-y-6">
@@ -441,66 +373,6 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
           </div>
         </div>
       )}
-
-      <section id="vovoh-ai" className="py-12 md:py-20 max-w-7xl mx-auto px-4 md:px-6">
-         <div className="bg-vovoh-dark rounded-3xl md:rounded-[3.5rem] p-6 md:p-12 shadow-2xl flex flex-col md:flex-row gap-8 md:gap-12 items-center relative overflow-hidden border border-white/10">
-            
-            <div className="absolute top-0 right-0 w-64 h-64 bg-vovoh-red/20 rounded-full blur-[80px] -z-0 pointer-events-none"></div>
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-vovoh-gold/10 rounded-full blur-[80px] -z-0 pointer-events-none"></div>
-            
-            <div className="w-28 h-28 md:w-36 md:h-36 bg-vovoh-red rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-red-900/50 flex-shrink-0 z-10 border border-red-400/20">
-               <ChefHat size={56} className="animate-pulse" />
-            </div>
-            
-            <div className="flex-grow z-10 w-full text-center md:text-left">
-               <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-                  <Sparkles size={24} className="text-vovoh-gold" />
-                  <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight">Dica da Vovó!</h3>
-               </div>
-               <p className="text-zinc-400 text-xs md:text-sm font-medium mb-4">Diga o que você precisa e a Vovó sugere o pedido ideal na hora:</p>
-               
-               <div className="relative group">
-                  <textarea 
-                    value={aiInput}
-                    onChange={e => setAiInput(e.target.value)}
-                    placeholder="Ex: Vovó, vou receber 10 amigos hoje à noite, o que eu peço?"
-                    className="w-full p-5 md:p-6 bg-white/5 rounded-2xl md:rounded-3xl min-h-[110px] md:min-h-[120px] outline-none border border-white/10 focus:border-vovoh-red/50 focus:bg-white/10 transition-all font-bold text-sm md:text-base text-white placeholder:text-gray-500 backdrop-blur-md resize-none"
-                  />
-                  <button onClick={askGrandma} disabled={aiLoading} className="absolute bottom-4 right-4 w-12 h-12 bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-lg hover:bg-red-600 hover:scale-105 active:scale-90 transition-all">
-                    {aiLoading ? <Loader2 className="animate-spin" /> : <Send size={22} />}
-                  </button>
-               </div>
-               
-               {aiRes && (
-                 <div className="mt-6 p-6 bg-white rounded-3xl border border-gray-100 animate-in fade-in slide-in-from-top-4 text-left shadow-xl shadow-black/5 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-vovoh-gold/5 rounded-full blur-[40px] -z-0 pointer-events-none"></div>
-                    
-                    <div className="text-sm md:text-base font-medium text-gray-600 leading-relaxed mb-6 prose prose-p:my-2 prose-strong:text-vovoh-dark prose-strong:font-black prose-ul:list-disc prose-ul:pl-4 prose-li:marker:text-vovoh-gold relative z-10">
-                      <ReactMarkdown>{aiRes.message}</ReactMarkdown>
-                    </div>
-                    
-                    {aiRes.suggestedItems && aiRes.suggestedItems.length > 0 && (
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-100 relative z-10">
-                        <div className="flex flex-wrap gap-2">
-                           {aiRes.suggestedItems.map((item: any, i: number) => (
-                             <span key={i} className="px-3 py-1.5 bg-vovoh-red/5 rounded-xl text-[10px] font-black text-vovoh-red uppercase shadow-sm border border-vovoh-red/10 flex items-center gap-2">
-                               {item.name} <span className="bg-vovoh-red text-white px-1.5 rounded-md">x{item.quantity}</span>
-                             </span>
-                           ))}
-                        </div>
-                        <button 
-                          onClick={handleAddSuggestion}
-                          className="w-full sm:w-auto px-6 py-3.5 bg-vovoh-gold text-white font-black rounded-2xl text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 shrink-0"
-                        >
-                          <Plus size={16} /> Adicionar à Sacola
-                        </button>
-                      </div>
-                    )}
-                 </div>
-               )}
-            </div>
-         </div>
-      </section>
 
       <section className="py-16 md:py-24 bg-white border-y border-gray-100">
         <div className="max-w-7xl mx-auto px-4 md:px-6">

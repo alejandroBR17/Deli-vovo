@@ -13,11 +13,11 @@ export default function App() {
       
       // Atualização dinâmica de Metadados
       if (hash === '#vovo-secreta') {
-        document.title = "Painel Secreto da Vovó 👵🔒 | Gestão & KDS";
+        document.title = "Painel Secreto da Vovó  | Gestão & KDS";
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc) metaDesc.setAttribute('content', 'Painel de gestão operacional, KDS de cozinha, pedidos e financeiro da Delícias da Vovó Grazy.');
       } else {
-        document.title = "Delícias da Vovó Grazy 🥟 | Salgados, Empanadas & Doces";
+        document.title = "Delícias da Vovó Grazy  | Salgados, Empanadas & Doces";
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc) metaDesc.setAttribute('content', 'O melhor tempero da cidade! Salgados fritos na hora, empanadas autênticas e Massa com tempero de Mãe.');
       }

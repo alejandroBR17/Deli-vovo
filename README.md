@@ -33,7 +33,6 @@ O **Delícias da Vovó Grazy** foi concebido para resolver os gargalos reais de 
 - **Agendamento Inteligente:** Possibilidade de pedir para agora ou agendar entrega para datas e horários futuros.
 - **Rastreamento em Tempo Real:** Linha do tempo visual de 4 etapas (Recebido ➔ Na Cozinha ➔ A Caminho ➔ Entregue).
 - **Fidelidade & Cupons:** Aplicação instantânea de cupons promocionais (fixos ou percentuais).
-- **IA Consultora da Vovó:** Assistente gastronômica para recomendações de porções por número de convidados.
 
 ### 👩‍🍳 Painel da Cozinha & Gestão (`#vovo-secreta`)
 - **Quadro de Pedidos Operacional:** Separação de pedidos pendentes, em preparo e concluídos com ações de 1 clique.

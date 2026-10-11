@@ -1,3 +1,4 @@
+import { internalStoreFields, quoteDelivery } from '../server/delivery';
 import { createHash } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
@@ -5,7 +6,6 @@ import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import webpush from 'web-push';
-import { GoogleGenAI } from "@google/genai";
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import { separateImage } from '../server/media';
@@ -1423,66 +1423,6 @@ app.put('/orders/:id', requireAdminWrite, async (req, res) => {
   }
 });
 
-// Chat Gemini com a Vovó Grazy
-app.post('/chat', async (req, res) => {
-  try {
-    const { message, history } = req.body;
-    const products = await ProductRepo.getAll();
-    const productsList = products.map(p => `- ${p.name} (R$ ${p.price.toFixed(2)})`).join('\n');
-
-    const systemPrompt = `Você é a Vovó Grazy, dona da 'Delícias da Vovó'.
-    
-    DIRETRIZES DE PERSONALIDADE:
-    - Seja UMA VOVÓ CRISTÃ, SÁBIA E MUITO DIRETA. Não enrole.
-    - Use "filho" ou "filha". Nada de "meu anjo" ou "meu amor".
-    - NUNCA use "de comer rezando". Use "uma benção".
-    
-    DIRETRIZES DE RESPOSTA (IMPORTANTE):
-    - SEJA BREVE. Máximo de 3 frases curtas antes da sugestão.
-    - OBRIGATÓRIO: Use listas com marcadores ( - ) para sugerir os itens. Pule linha entre os parágrafos.
-    
-    DIRETRIZES DE VENDA:
-    - Se sugerir produtos, OBRIGATORIAMENTE inclua o JSON no final.
-    - Formato JSON estrito:
-    \`\`\`json
-    { "suggestedItems": [{"name": "Nome Exato", "quantity": 10}] }
-    \`\`\`
-    
-    Produtos:
-    ${productsList}
-    
-    Se não souber o nome exato, use o mais próximo.`;
-
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("API Key do Gemini não encontrada.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const models = ["gemini-2.5-flash", "gemini-3-flash", "gemini-3"];
-    let lastError = null;
-
-    for (const modelName of models) {
-      try {
-        const chat = ai.chats.create({
-          model: modelName,
-          config: { systemInstruction: systemPrompt },
-          history: history || []
-        });
-
-        const result = await chat.sendMessage({ message });
-        return res.json({ text: result.text });
-      } catch (e: any) {
-        lastError = e;
-      }
-    }
-
-    throw lastError || new Error("Nenhum modelo disponível.");
-  } catch (e: any) {
-    console.error("Erro no Chat da Vovó:", e);
-    res.status(500).json({ error: "A vovó está tirando um cochilo agora, tente depois!", details: e.message || String(e) });
-  }
-});
-
 app.patch('/orders/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
@@ -1510,7 +1450,7 @@ app.patch('/orders/:id/status', async (req, res) => {
         'recusado': 'Recusado'
       };
       const text = statusMap[status] || status;
-      backgroundNotification(notifyUser(order.userId, `Atualização do Pedido #${order.id.slice(-4)} 🥟`, `Seu pedido está agora: ${text.toUpperCase()}`));
+      backgroundNotification(notifyUser(order.userId, `Atualização do Pedido #${order.id.slice(-4)} `, `Seu pedido está agora: ${text.toUpperCase()}`));
     }
 
     res.json({ success: true });
@@ -1678,10 +1618,20 @@ app.patch('/users/:id', requireCustomer, async (req, res) => {
 });
 
 // --- Configurações ---
+app.post('/delivery/quote', async (req, res) => {
+  try {
+    const configs = await ConfigRepo.getAll();
+    res.json(quoteDelivery(configs, req.body.latitude, req.body.longitude));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Não foi possível calcular o frete.' });
+  }
+});
+
 app.get('/configs', async (req, res) => {
   try {
     const allConfigs = await ConfigRepo.getAll();
-    const configs = Object.fromEntries(Object.entries(allConfigs).filter(([key]) => !/vapid|secret|password|token|private/i.test(key)));
+    const configs = Object.fromEntries(Object.entries(allConfigs).filter(([key]) => !/vapid|secret|password|token|private/i.test(key) && (hasAdminSession(req) || !internalStoreFields.has(key))));
+    configs.preview_mode = process.env.DELIVERY_PREVIEW_MODE === 'true' && !process.env.VERCEL ? 'true' : 'false';
     if (!configs['faqs']) {
       configs['faqs'] = JSON.stringify([
         { q: "Vocês entregam em quais bairros?", a: "Entregamos em Colombo e região! Confira a taxa de entrega ao finalizar o pedido." },

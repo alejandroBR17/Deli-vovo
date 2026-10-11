@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ChefHat, Bell, ArrowLeft, RefreshCw, Plus, Edit2, Trash2, Save, X, Upload, Loader2, AlertTriangle, CheckCircle2, ChevronDown, DollarSign, TrendingUp, Wallet, CreditCard, Calendar, PieChart, MessageCircle, Clock, MapPin, ArrowRight, ShoppingBag, Settings, Utensils, ClipboardList, Tag, Menu, MoreHorizontal } from 'lucide-react';
+import { ChefHat, Bell, ArrowLeft, RefreshCw, Plus, Edit2, Trash2, Save, X, Upload, Loader2, AlertTriangle, CheckCircle2, ChevronDown, DollarSign, TrendingUp, Wallet, CreditCard, Calendar, PieChart, MessageCircle, Clock, MapPin, ArrowRight, ShoppingBag, Settings, Utensils, ClipboardList, Tag, Menu, MoreHorizontal, Flame, Bike, PackageCheck, Eye } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { GAS_API_URL, CATEGORIES, PLACEHOLDER_IMG } from '../constants/index';
 import { Toast, ConfirmModal } from '../components/UI';
@@ -7,7 +7,6 @@ import { startVisiblePolling } from '../src/utils/visible-polling';
 import { adminFetch } from '../src/utils/admin-api';
 import { subscribeToPush, getPushSubscription } from '../src/utils/push';
 
-import { normalizeCoordinate } from '../utils/geo';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -76,6 +75,11 @@ export default function AdminPage() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [isAlarmMuted, setIsAlarmMuted] = useState(false);
+  const [soundPlaying, setSoundPlaying] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundRetry, setSoundRetry] = useState(0);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const pendingOrderIds = orders.filter(o => o.status === 'pendente').map(o => o.id).sort().join(',');
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
@@ -355,49 +359,66 @@ export default function AdminPage() {
 
 // ...
 
-  // Audio Loop for Pending Orders
+  // The browser chime and background push registration are independent.
   useEffect(() => {
-    if (!audioRef.current) {
-      // Usando um som de alarme mais compatível e de uma fonte mais confiável
-      audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audioRef.current.load();
-    }
-    
-    const pendingCount = orders.filter(o => o.status === 'pendente').length;
-
-    const playAlarm = async () => {
-      if (pendingCount === 0 || isAlarmMuted) return;
+    const audio = audioRef.current ||= new Audio('/sounds/order-chime.wav');
+    let active = true;
+    audio.onplaying = () => { if (active) { setSoundPlaying(true); setSoundEnabled(true); setAudioBlocked(false); } };
+    audio.onpause = audio.onended = () => { if (active) setSoundPlaying(false); };
+    const play = async () => {
+      if (!active || !isAuthenticated || !pendingOrderIds || isAlarmMuted) return;
       try {
-        await audioRef.current?.play();
-        setAudioBlocked(false);
-        audioRef.current!.onended = () => {
-          timeoutRef.current = setTimeout(() => {
-            if (orders.filter(o => o.status === 'pendente').length > 0 && !isAlarmMuted) {
-              playAlarm();
-            }
-          }, 2000); // Wait only 2 seconds before ringing again (more annoying)
-        };
-      } catch (e) {
-        // Browser might block autoplay if no interaction
-        setAudioBlocked(true);
+        audio.currentTime = 0;
+        await audio.play();
+        if (active) timeoutRef.current = setTimeout(play, 15000);
+      } catch {
+        if (active) { setAudioBlocked(true); setSoundEnabled(false); setSoundPlaying(false); }
       }
     };
-
-    if (pendingCount > 0 && !isAlarmMuted) {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      playAlarm();
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    }
-
+    void play();
     return () => {
+      active = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      audio.onplaying = audio.onpause = audio.onended = null;
+      audio.pause(); audio.currentTime = 0;
+      setSoundPlaying(false);
     };
-  }, [orders, isAlarmMuted]);
+  }, [pendingOrderIds, isAlarmMuted, isAuthenticated, soundRetry]);
+
+  const testOrderSound = async () => {
+    try {
+      const audio = audioRef.current ||= new Audio('/sounds/order-chime.wav');
+      audio.currentTime = 0;
+      await audio.play();
+      setSoundEnabled(true); setAudioBlocked(false);
+      if (audioBlocked && pendingOrderIds && !isAlarmMuted) setSoundRetry(previous => previous + 1);
+    } catch {
+      setSoundEnabled(false); setAudioBlocked(true);
+      showMsg('O navegador bloqueou o som. Confira a permissão de áudio.', 'error');
+    }
+  };
+
+  const saveStoreAddress = async () => {
+    setSavingAddress(true);
+    try {
+      const lat = Number(String(configs.store_lat ?? '').replace(',', '.'));
+      const lng = Number(String(configs.store_lng ?? '').replace(',', '.'));
+      if (!configs.store_street?.trim() || !configs.store_number?.trim() || !configs.store_city?.trim()) throw new Error('Preencha rua, número e cidade da loja.');
+      if (String(configs.store_lat ?? '').trim() === '' || String(configs.store_lng ?? '').trim() === '' || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error('Confirme a latitude e longitude da loja no Google Maps.');
+      const values: Record<string, any> = { ...configs, store_lat: String(lat), store_lng: String(lng) };
+      for (const key of ['store_cep', 'store_street', 'store_number', 'store_neighborhood', 'store_city', 'store_state', 'store_lat', 'store_lng']) {
+        const response = await adminFetch('/configs', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: String(values[key] ?? '') }),
+        });
+        if (!response.ok) throw new Error('Não foi possível salvar tudo. Confira o endereço e tente novamente.');
+      }
+      setConfigs(previous => ({ ...previous, store_lat: String(lat), store_lng: String(lng) }));
+      showMsg('Endereço e localização salvos para calcular as entregas.', 'success');
+    } catch (error) {
+      showMsg(error instanceof Error ? error.message : 'Não foi possível salvar o endereço.', 'error');
+    } finally { setSavingAddress(false); }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (base64: string) => void) => {
     const file = e.target.files?.[0];
@@ -988,38 +1009,29 @@ export default function AdminPage() {
       )}
 
       {audioBlocked && (
-        <div className="mb-8 bg-vovoh-red/20 border border-vovoh-red/50 p-4 rounded-2xl text-red-200 text-sm flex items-start gap-3 cursor-pointer" onClick={async () => {
-          try {
-            await audioRef.current?.play();
-            audioRef.current?.pause();
-            audioRef.current!.currentTime = 0;
-            setAudioBlocked(false);
-          } catch (e) {
-            console.error("Erro ao desbloquear áudio:", e);
-          }
-        }}>
+        <div className="mb-8 bg-vovoh-red/20 border border-vovoh-red/50 p-4 rounded-2xl text-red-200 text-sm flex items-start gap-3 cursor-pointer" onClick={testOrderSound}>
           <div className="mt-0.5"><Bell size={18} /></div>
           <div>
-            <p className="font-bold mb-1">O Som do Alarme está Bloqueado!</p>
-            <p className="opacity-90">O navegador bloqueou o som do alarme. <b>Clique aqui</b> para permitir que o alarme toque sozinho.</p>
+            <p className="font-bold mb-1">Permita o som de pedidos</p>
+            <p className="opacity-90">O navegador bloqueou a campainha. <b>Toque aqui</b> para testar o som com o painel aberto.</p>
           </div>
         </div>
       )}
 
-      {orders.filter(o => o.status === 'pendente').length > 0 && !audioBlocked && (
+      {pendingOrderIds && (
         <div className="mb-8 bg-amber-500/20 border border-amber-500/50 p-4 rounded-2xl text-amber-200 text-sm flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="mt-0.5"><Bell size={18} className="animate-pulse" /></div>
             <div>
               <p className="font-bold mb-1">Novo Pedido na Cozinha!</p>
-              <p className="opacity-90">O alarme está tocando para novos pedidos.</p>
+              <p className="opacity-90">{isAlarmMuted ? 'Som silenciado.' : soundPlaying ? 'Campainha tocando agora.' : soundEnabled ? 'Campainha habilitada enquanto o painel estiver aberto.' : 'Som ainda não liberado neste navegador.'}</p>
             </div>
           </div>
           <button 
             onClick={() => setIsAlarmMuted(!isAlarmMuted)}
             className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/40 rounded-xl font-bold transition-all"
           >
-            {isAlarmMuted ? 'Desmutar' : 'Silenciar'}
+            {isAlarmMuted ? 'Ativar som' : 'Silenciar'}
           </button>
         </div>
       )}
@@ -1217,7 +1229,7 @@ export default function AdminPage() {
               {ordersError && <p role="alert" className="text-amber-300">{ordersError}</p>}
               <details className="space-y-2 border-t border-white/10 pt-3" open={pushState !== 'registered'}>
                 <summary className="font-bold cursor-pointer min-h-10">Avisos no celular</summary>
-                <p className="text-sm text-zinc-400">Cadastre este aparelho e envie um teste. Depois confira um pedido com a tela bloqueada antes de usar na loja.</p>
+                <p className="text-sm text-zinc-400">O som da campainha funciona com o painel aberto. Para receber avisos com ele fechado, cadastre este aparelho e confira o teste com a tela bloqueada.</p>
                 <p className="text-sm" role="status">{pushState === 'registered' ? 'Cadastro confirmado pelo servidor. Confira o teste no celular.' : notifPerm === 'denied' ? 'Notificações bloqueadas no navegador.' : 'Os avisos ainda precisam ser ativados neste aparelho.'}</p>
                 {pushError && <p role="alert" className="text-amber-300 text-sm">{pushError}</p>}
                 <div className="flex flex-wrap gap-3">
@@ -1258,7 +1270,7 @@ export default function AdminPage() {
                               <button 
                                 onClick={() => {
                                   const cleanPhone = String(o.customer.phone).replace(/\D/g, '');
-                                  const msg = `Oi ${o.customer.name}, aqui é da Delícias da Vovó! 🥟 Sobre o seu pedido #${String(o.id).slice(-4)}...`;
+                                  const msg = `Oi ${o.customer.name}, aqui é da Delícias da Vovó!  Sobre o seu pedido #${String(o.id).slice(-4)}...`;
                                   window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                                 }}
                                 className="w-6 h-6 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors shrink-0"
@@ -1283,7 +1295,7 @@ export default function AdminPage() {
                         )}
                         <p className="text-xs font-bold text-zinc-300 whitespace-pre-line leading-relaxed break-words">{o.itemsSummary}</p>
                         {o.customer?.address && (
-                          <p className="text-[10px] font-medium text-zinc-500 mt-2 pt-2 border-t border-white/5 break-words">📍 {o.customer.address}</p>
+                          <p className="text-[10px] font-medium text-zinc-500 mt-2 pt-2 border-t border-white/5 break-words"><MapPin size={12} className="inline mr-1" aria-hidden="true" /> {o.customer.address}</p>
                         )}
                         <div className="pt-2 mt-2 border-t border-white/5 flex justify-between items-center gap-4">
                           <div className="flex flex-col min-w-0">
@@ -1356,28 +1368,32 @@ export default function AdminPage() {
                                 case 'pendente':
                                   return {
                                     nextStatus: 'preparando',
-                                    label: 'Começar Preparo 👨‍🍳',
+                                    label: 'Começar Preparo',
+                                    icon: ChefHat,
                                     color: 'bg-vovoh-red text-white hover:bg-red-600 shadow-md shadow-vovoh-red/10',
                                     checkBefore: true
                                   };
                                 case 'preparando':
                                   return {
                                     nextStatus: 'forno',
-                                    label: 'Enviar p/ Forno 🥖',
+                                    label: 'Enviar p/ Forno',
+                                    icon: Flame,
                                     color: 'bg-amber-500 text-black hover:bg-amber-400 shadow-md shadow-amber-500/5',
                                     checkBefore: false
                                   };
                                 case 'forno':
                                   return {
                                     nextStatus: 'entrega',
-                                    label: 'Pronto p/ Entrega 🛵',
+                                    label: 'Pronto p/ Entrega',
+                                    icon: Bike,
                                     color: 'bg-sky-500 text-white hover:bg-sky-600 shadow-md shadow-sky-500/10',
                                     checkBefore: false
                                   };
                                 case 'entrega':
                                   return {
                                     nextStatus: 'concluido',
-                                    label: 'Finalizar Pedido 📦',
+                                    label: 'Finalizar Pedido',
+                                    icon: PackageCheck,
                                     color: 'bg-green-500 text-white hover:bg-green-600 shadow-md shadow-green-500/10',
                                     checkBefore: false
                                   };
@@ -1403,7 +1419,7 @@ export default function AdminPage() {
                                         if (scheduled > today) {
                                           setConfirmModal({
                                             isOpen: true,
-                                            title: "⚠️ Pedido Agendado",
+                                            title: " Pedido Agendado",
                                             message: `Vovó, este pedido é para ${scheduledDate.toLocaleDateString('pt-BR')} às ${scheduledDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.\n\nTem certeza que quer começar a preparar hoje?`,
                                             onConfirm: () => {
                                               setConfirmModal(null);
@@ -1433,7 +1449,7 @@ export default function AdminPage() {
                                     }}
                                     className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 ${flow.color}`}
                                   >
-                                    {flow.label}
+                                    <flow.icon size={16} aria-hidden="true" /> {flow.label}
                                   </button>
 
                                   <div className="text-center">
@@ -1589,7 +1605,7 @@ export default function AdminPage() {
                             const res = await adminFetch(`/admin/broadcast-push`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ title: '🚨 ALERTA GERAL DA VOVÓ!', body: 'Por favor, verifique o pedido agora!' })
+                              body: JSON.stringify({ title: ' ALERTA GERAL DA VOVÓ!', body: 'Por favor, verifique o pedido agora!' })
                             });
                             if (res.ok) showMsg("Alerta enviado para todos!", "success");
                             else showMsg("Erro ao enviar alerta.", "error");
@@ -1618,10 +1634,7 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Campainha</label>
                     <button 
-                      onClick={() => {
-                        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-                        audio.play().catch(e => console.error("Erro ao tocar som:", e));
-                      }}
+                      onClick={testOrderSound}
                       className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
                     >
                       Tocar Som de Pedido
@@ -1774,33 +1787,8 @@ export default function AdminPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-6 bg-white/5 rounded-[2rem] border border-white/10">
-                      <div>
-                        <h4 className="font-black text-sm text-white flex items-center gap-2">
-                          Console de Depuração
-                          <span className="px-1.5 py-0.5 text-[8px] bg-amber-500 text-slate-950 rounded font-black uppercase tracking-widest">Suporte</span>
-                        </h4>
-                        <p className="text-[10px] font-bold text-zinc-400 mt-1">Ative para exibir o console de depuração técnica na loja (canto inferior direito).</p>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          const current = localStorage.getItem('vovo_debug') === 'true';
-                          const newVal = !current;
-                          localStorage.setItem('vovo_debug', newVal.toString());
-                          window.dispatchEvent(new Event('vovo_toggle_debug'));
-                          // Forçar re-render simulando atualização nas configs locais
-                          setConfigs(prev => ({...prev, _vovo_debug_active: newVal.toString()}));
-                          showMsg(newVal ? "Console de depuração ativado para o site do cliente!" : "Console de depuração desativado.", "success");
-                        }}
-                        className={`w-14 h-8 rounded-full transition-colors relative ${localStorage.getItem('vovo_debug') === 'true' ? 'bg-amber-500' : 'bg-zinc-700'}`}
-                      >
-                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${localStorage.getItem('vovo_debug') === 'true' ? 'right-1' : 'left-1'}`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Endereço da Loja</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Endereço da loja para calcular o frete</label>
+                    <p className="text-sm text-zinc-400">Este endereço é interno. A localização pública da loja continua separada. Ao mudar de endereço, confirme também o ponto no mapa.</p>
                     <div className="grid grid-cols-1  gap-3">
                       <input 
                         type="text" 
@@ -1864,53 +1852,19 @@ export default function AdminPage() {
                         onChange={e => setConfigs({...configs, store_state: e.target.value})}
                       />
                     </div>
+                    <label className="block text-sm font-bold">Link do ponto no Google Maps
+                      <input type="url" placeholder="Cole o link completo do ponto da loja" className="w-full mt-2 p-4 bg-white/5 rounded-2xl border border-white/10 text-sm" onChange={event => {
+                        const match = event.target.value.match(/!3d(-?[\d.]+)!4d(-?[\d.]+)/);
+                        if (match) setConfigs(previous => ({...previous, store_lat: match[1], store_lng: match[2]}));
+                      }} />
+                    </label>
+                    <p className="text-xs text-zinc-400">Use o link completo do local. Links curtos devem ser abertos primeiro; você também pode preencher as coordenadas abaixo.</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="text-sm">Latitude<input aria-label="Latitude da loja" type="text" inputMode="decimal" className="w-full mt-2 p-4 bg-white/5 rounded-2xl border border-white/10" value={configs.store_lat || ''} onChange={event => setConfigs({...configs, store_lat: event.target.value})} /></label>
+                      <label className="text-sm">Longitude<input aria-label="Longitude da loja" type="text" inputMode="decimal" className="w-full mt-2 p-4 bg-white/5 rounded-2xl border border-white/10" value={configs.store_lng || ''} onChange={event => setConfigs({...configs, store_lng: event.target.value})} /></label>
+                    </div>
                     <div className="flex justify-end mt-2">
-                      <button onClick={async () => {
-                        await handleUpdateConfig('store_cep', configs.store_cep);
-                        await handleUpdateConfig('store_street', configs.store_street);
-                        await handleUpdateConfig('store_number', configs.store_number);
-                        await handleUpdateConfig('store_neighborhood', configs.store_neighborhood);
-                        await handleUpdateConfig('store_city', configs.store_city);
-                        await handleUpdateConfig('store_state', configs.store_state);
-                        
-                        try {
-                          const params = new URLSearchParams({
-                            format: 'json',
-                            street: `${configs.store_number} ${configs.store_street}`,
-                            city: configs.store_city,
-                            state: configs.store_state,
-                            country: 'Brazil',
-                            postalcode: configs.store_cep?.replace(/\D/g, '') || ''
-                          });
-                          
-                          const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
-                          const data = await res.json();
-                          
-                          if (data && data.length > 0) {
-                            const lat = data[0].lat;
-                            const lon = data[0].lon;
-                            await handleUpdateConfig('store_lat', String(lat).replace('.', ','));
-                            await handleUpdateConfig('store_lng', String(lon).replace('.', ','));
-                            
-                            setConfigs(prev => ({...prev, store_lat: lat, store_lng: lon}));
-                            showMsg(`GPS Salvo! Lat: ${lat}, Lng: ${lon}`, "success");
-                          } else {
-                            const searchQuery = `${configs.store_street}, ${configs.store_number}, ${configs.store_city}, ${configs.store_state}, Brasil`;
-                            const res2 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-                            const data2 = await res2.json();
-                            
-                            if (data2 && data2.length > 0) {
-                               const lat = data2[0].lat;
-                               const lon = data2[0].lon;
-                               await handleUpdateConfig('store_lat', String(lat).replace('.', ','));
-                               await handleUpdateConfig('store_lng', String(lon).replace('.', ','));
-                               
-                               setConfigs(prev => ({...prev, store_lat: lat, store_lng: lon}));
-                               showMsg(`GPS Salvo (Busca Genérica)! Lat: ${lat}, Lng: ${lon}`, "success");
-                            }
-                          }
-                        } catch(e) {}
-                      }} className="w-full sm:w-auto px-6 py-4 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase">Salvar Endereço</button>
+                      <button onClick={saveStoreAddress} disabled={savingAddress} className="w-full sm:w-auto px-6 py-4 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase disabled:opacity-50">{savingAddress ? 'Salvando...' : 'Salvar Endereço'}</button>
                     </div>
                   </div>
                 </div>
@@ -2269,7 +2223,7 @@ export default function AdminPage() {
                           <div>
                             <p className="font-black text-sm">{p.userName || 'Visitante Anônimo'}</p>
                             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                              {p.isShopping ? '🛒 Montando Sacola' : '👀 Navegando'}
+                              {p.isShopping ? <ShoppingBag size={12} className="inline mr-1" aria-hidden="true" /> : <Eye size={12} className="inline mr-1" aria-hidden="true" />} {p.isShopping ? 'Montando Sacola' : 'Navegando'}
                             </p>
                           </div>
                         </div>

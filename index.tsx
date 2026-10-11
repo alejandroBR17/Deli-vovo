@@ -1,4 +1,3 @@
-import './utils/logger'; // Inicializa a interceptação de logs o quanto antes
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
