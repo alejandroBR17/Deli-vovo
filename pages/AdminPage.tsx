@@ -3,6 +3,7 @@ import { ChefHat, Bell, ArrowLeft, RefreshCw, Plus, Edit2, Trash2, Save, X, Uplo
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { GAS_API_URL, CATEGORIES, PLACEHOLDER_IMG } from '../constants/index';
 import { Toast, ConfirmModal } from '../components/UI';
+import { startVisiblePolling } from '../src/utils/visible-polling';
 import { adminFetch } from '../src/utils/admin-api';
 import { subscribeToPush, getPushSubscription } from '../src/utils/push';
 
@@ -41,6 +42,11 @@ export default function AdminPage() {
   
   const [isCatMenuOpen, setIsCatMenuOpen] = useState(false);
   const [verifiedPayments, setVerifiedPayments] = useState<Record<string, boolean>>({});
+  const [financeData, setFinanceData] = useState<any>(null);
+  const [financeError, setFinanceError] = useState('');
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const historyOrders = useRef<any[]>([]);
   const [financePeriod, setFinancePeriod] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [isKDS, setIsKDS] = useState(false);
   const [configTab, setConfigTab] = useState<'geral' | 'entrega' | 'conteudo'>('geral');
@@ -115,15 +121,49 @@ export default function AdminPage() {
     }
   };
 
+  const loadHistory = async (more = false) => {
+    if (loadingHistory) return;
+    setLoadingHistory(true);
+    try {
+      const response = await adminFetch('/orders/history' + (more && historyCursor ? '?cursor=' + encodeURIComponent(historyCursor) : ''));
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      historyOrders.current = more ? [...historyOrders.current, ...data.orders] : data.orders;
+      setHistoryCursor(data.nextCursor);
+      setOrders(previous => Array.from(new Map([...historyOrders.current, ...previous].map(order => [order.id,order])).values()));
+    } catch { showMsg('Não foi possível carregar o histórico.', 'error'); }
+    finally { setLoadingHistory(false); }
+  };
+  useEffect(() => {
+    if (isAuthenticated && tab === 'orders' && filter === 'todos') void loadHistory();
+  }, [isAuthenticated, tab, filter]);
+  useEffect(() => {
+    if (!isAuthenticated || tab !== 'finance') return;
+    const controller = new AbortController();
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (financePeriod === 'week') start.setDate(start.getDate() - start.getDay());
+    if (financePeriod === 'month') start.setDate(1);
+    const since = financePeriod === 'all' ? '' : start.toISOString();
+    setFinanceData(null); setFinanceError('');
+    adminFetch('/admin/finance?since=' + encodeURIComponent(since), { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (!controller.signal.aborted) setFinanceData(data);
+    }).catch(() => { if (!controller.signal.aborted) setFinanceError('Não foi possível atualizar o financeiro. Abra esta tela novamente.'); });
+    return () => controller.abort();
+  }, [isAuthenticated, tab, financePeriod]);
+
   const fetchStats = async () => {
     try {
       const res = await adminFetch(`/admin/stats`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
-      }
+      } else return false;
     } catch (e) {
       console.error("Erro ao buscar estatísticas:", e);
+      return false;
     }
   };
 
@@ -199,12 +239,13 @@ export default function AdminPage() {
       
       knownOrdersRef.current = new Set(incomingIds);
       ordersLoaded.current = true;
-      setOrders(data);
+      setOrders(Array.from(new Map([...historyOrders.current, ...data].map(order => [order.id, order])).values()));
       setOrdersError('');
       setLastUpdated(new Date());
     } catch (e) {
       setOrdersError('Sem atualização dos pedidos. Confira a internet e toque em atualizar.');
       if (!silent) console.error('Erro ao buscar pedidos.');
+      return false;
     }
   };
 
@@ -303,29 +344,15 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetchGlobalOrders();
     fetchProducts();
     fetchConfigs();
-    fetchStats();
-    
-    const i = setInterval(() => {
-      fetchGlobalOrders(true);
-    }, 30000); // 30 segundos (Polling otimizado)
-
-    const s = setInterval(() => {
-      fetchStats();
-    }, 300000); // 5 min (Estatísticas)
-
-    const refreshOnFocus = () => { if (document.visibilityState === 'visible') fetchGlobalOrders(true); };
-    document.addEventListener('visibilitychange', refreshOnFocus);
-    window.addEventListener('online', refreshOnFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', refreshOnFocus);
-      window.removeEventListener('online', refreshOnFocus);
-      clearInterval(i);
-      clearInterval(s);
-    };
+    return startVisiblePolling(() => fetchGlobalOrders(true), 60000);
   }, [isAuthenticated, pushState]);
+  useEffect(() => {
+    if (!isAuthenticated || tab !== 'stats') return;
+    return startVisiblePolling(fetchStats, 300000);
+  }, [isAuthenticated, tab]);
+
 // ...
 
   // Audio Loop for Pending Orders
@@ -727,7 +754,7 @@ export default function AdminPage() {
   useEffect(() => {
     localStorage.removeItem('vovoh_admin_auth');
     adminFetch('/admin/session').then(response => setIsAuthenticated(response.ok)).catch(() => {});
-    const expire = () => { setIsAuthenticated(false); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false; };
+    const expire = () => { setIsAuthenticated(false); historyOrders.current = []; setHistoryCursor(null); setFinanceData(null); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false; };
     window.addEventListener('vovo-admin-session-expired', expire);
     return () => window.removeEventListener('vovo-admin-session-expired', expire);
   }, []);
@@ -747,7 +774,7 @@ export default function AdminPage() {
     try {
       const response = await adminFetch('/admin/logout', { method: 'POST' });
       if (!response.ok) throw new Error();
-      setIsAuthenticated(false); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false;
+      setIsAuthenticated(false); historyOrders.current = []; setHistoryCursor(null); setFinanceData(null); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false;
     } catch { showMsg('Não foi possível sair. Tente novamente.', 'error'); }
   };
 
@@ -1203,6 +1230,7 @@ export default function AdminPage() {
                <button onClick={() => setFilter('novos')} className={'min-h-12 px-4 py-2 rounded-lg text-sm font-bold ' + (filter === 'novos' ? 'bg-amber-400 text-black' : 'bg-white/10 text-white')}>Novos ({pendingOrders})</button>
                <button onClick={() => setFilter('ativos')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest ${filter === 'ativos' ? 'bg-white/10 text-white' : 'text-zinc-600'}`}>Ativos</button>
                <button onClick={() => setFilter('todos')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest ${filter === 'todos' ? 'bg-white/10 text-white' : 'text-zinc-600'}`}>Histórico</button>
+               {filter === 'todos' && historyCursor && <button disabled={loadingHistory} onClick={() => loadHistory(true)} className="px-4 py-2 text-xs text-zinc-300">{loadingHistory ? 'Carregando...' : 'Carregar anteriores'}</button>}
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
@@ -2305,26 +2333,10 @@ export default function AdminPage() {
           ) : null}
 
         {tab === 'finance' && (() => {
-          const completedOrders = orders.filter(o => o.status === 'concluido');
-          
-          const now = new Date();
-          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-          const filteredOrders = completedOrders.filter(o => {
-            const orderDate = new Date(o.timing?.createdAt || o.date || Date.now());
-            if (financePeriod === 'today') return orderDate >= startOfToday;
-            if (financePeriod === 'week') return orderDate >= startOfWeek;
-            if (financePeriod === 'month') return orderDate >= startOfMonth;
-            return true;
-          });
-
-          const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-          const averageOrder = filteredOrders.length > 0 ? totalRevenue / filteredOrders.length : 0;
-          
-          const pixRevenue = filteredOrders.filter(o => o.paymentMethod?.toLowerCase().includes('pix')).reduce((sum, o) => sum + Number(o.total || 0), 0);
-          const cardRevenue = filteredOrders.filter(o => o.paymentMethod?.toLowerCase().includes('cartão')).reduce((sum, o) => sum + Number(o.total || 0), 0);
+          if (!financeData) return <p className="p-8 text-zinc-400">{financeError || 'Carregando o resumo financeiro...'}</p>;
+          const filteredOrders = financeData.recent as any[];
+          const { totalRevenue, pixRevenue, cardRevenue } = financeData;
+          const averageOrder = financeData.count ? totalRevenue / financeData.count : 0;
 
           return (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 pb-20">
@@ -2369,7 +2381,7 @@ export default function AdminPage() {
                   <div className="w-12 h-12 bg-purple-500/20 text-purple-500 rounded-2xl flex items-center justify-center"><CreditCard size={24} /></div>
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Pedidos Concluídos</p>
-                    <h3 className="text-3xl font-black text-white">{filteredOrders.length}</h3>
+                    <h3 className="text-3xl font-black text-white">{financeData.count}</h3>
                   </div>
                 </div>
 

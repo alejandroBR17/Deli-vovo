@@ -8,50 +8,32 @@ import webpush from 'web-push';
 import { GoogleGenAI } from "@google/genai";
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import firebaseConfig from '../firebase-applet-config.json';
-import { initializeApp, getApps, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore, Firestore, Query, DocumentReference } from 'firebase-admin/firestore';
+import { separateImage } from '../server/media';
+import { configuredDatabase, Database, Query, DocumentReference } from '../server/database';
 import { waitUntil } from '@vercel/functions';
 import { rateLimit } from 'express-rate-limit';
 import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin } from '../server/admin-auth';
 
 dotenv.config();
 
-let db: Firestore | null = null;
-let firestoreLoadMethod = 'none';
-try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    const credential = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-      ? cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) : applicationDefault();
-    const firebaseApp = getApps()[0] || initializeApp({ credential });
-    const databaseId = process.env.FIREBASE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId;
-    db = databaseId ? getFirestore(firebaseApp, databaseId) : getFirestore(firebaseApp);
-    db.settings({ ignoreUndefinedProperties: true });
-    firestoreLoadMethod = 'admin';
-  }
-} catch {
-  console.error('Não foi possível inicializar o acesso privado ao Firestore.');
-}
-
-// Keep the repository calls uniform while using server credentials exclusively.
-const collection = (database: Firestore, name: string) => database.collection(name);
-const doc = (database: Firestore, name: string, id: string) => database.collection(name).doc(id);
+const db = configuredDatabase();
+export function closeDatabase() { db?.client.close(); }
+const collection = (database: Database, name: string) => database.collection(name);
+const doc = (database: Database, name: string, id: string) => database.collection(name).doc(id);
 const getDocs = (reference: Query) => reference.get();
 const getDoc = (reference: DocumentReference) => reference.get();
-const setDoc = (reference: DocumentReference, data: any, options?: { merge: boolean }) =>
-  options ? reference.set(data, options) : reference.set(data);
+const setDoc = (reference: DocumentReference, data: any, options?: { merge: boolean }) => reference.set(data, options);
 const updateDoc = (reference: DocumentReference, data: any) => reference.update(data);
 const deleteDoc = (reference: DocumentReference) => reference.delete();
 const where = (field: string, operation: '==', value: string) => ({ field, operation, value });
-const query = (reference: Query, filter: ReturnType<typeof where>) =>
-  reference.where(filter.field, filter.operation, filter.value);
+const query = (reference: Query, filter: ReturnType<typeof where>) => reference.where(filter.field, filter.operation, filter.value);
 
 const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23FFFBF2'/%3E%3Ccircle cx='200' cy='180' r='100' fill='%23fef3c7' stroke='%23D97706' stroke-width='4' stroke-dasharray='10 10'/%3E%3Cpath d='M200 140 C 200 140 170 110 140 140 C 110 170 200 240 200 240 C 200 240 290 170 260 140 C 230 110 200 140 200 140 Z' fill='%23D61F1F' opacity='0.8'/%3E%3Ctext x='50%25' y='80%25' font-family='sans-serif' font-weight='900' font-size='22' fill='%23D97706' text-anchor='middle'%3EMistério Gostoso%3C/text%3E%3Ctext x='50%25' y='88%25' font-family='sans-serif' font-weight='500' font-size='14' fill='%23999' text-anchor='middle'%3E(Logo a Vovó põe a foto)%3C/text%3E%3C/svg%3E";
 
-function cleanForFirestore<T>(obj: T): T {
+function cleanRecord<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) {
-    return obj.map(item => cleanForFirestore(item)) as any;
+    return obj.map(item => cleanRecord(item)) as any;
   }
   if (typeof obj === 'object') {
     const cleaned: any = {};
@@ -59,7 +41,7 @@ function cleanForFirestore<T>(obj: T): T {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
         const val = obj[key];
         if (val !== undefined) {
-          cleaned[key] = cleanForFirestore(val);
+          cleaned[key] = cleanRecord(val);
         }
       }
     }
@@ -70,7 +52,7 @@ function cleanForFirestore<T>(obj: T): T {
 
 const isVercel = !!process.env.VERCEL;
 function requireLocalStorage() {
-  if (isVercel) throw new Error('Armazenamento persistente indisponível. Tente novamente mais tarde.');
+  if (isVercel || db) throw new Error('Armazenamento persistente indisponível. Tente novamente mais tarde.');
 }
 
 const DATA_DIR = process.env.NODE_ENV === 'test' && process.env.TEST_DATA_DIR ? process.env.TEST_DATA_DIR : (process.env.NODE_ENV === 'production' || isVercel) ? '/tmp/data' : path.join(process.cwd(), 'data');
@@ -242,7 +224,8 @@ const PushSubscriptionRepo = {
         const querySnapshot = await getDocs(collection(db, 'push_subscriptions'));
         return querySnapshot.docs.map(docSnap => docSnap.data()) as PushSubscription[];
       } catch (e) {
-        console.error("Firestore: Erro ao listar push subscriptions:", e);
+        console.error("Turso: Erro ao listar push subscriptions:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -256,7 +239,8 @@ const PushSubscriptionRepo = {
         await setDoc(doc(db, 'push_subscriptions', docId), subscription);
         return;
       } catch (e) {
-        console.error("Firestore: Erro ao adicionar push subscription:", e);
+        console.error("Turso: Erro ao adicionar push subscription:", e);
+        throw e;
       }
     }
     const subscriptions = await fs.readJson(FILES.push_subscriptions).catch(() => []);
@@ -276,7 +260,8 @@ const PushSubscriptionRepo = {
         await deleteDoc(doc(db, 'push_subscriptions', docId));
         return;
       } catch (e) {
-        console.error("Firestore: Erro ao deletar push subscription:", e);
+        console.error("Turso: Erro ao deletar push subscription:", e);
+        throw e;
       }
     }
     const subscriptions = await fs.readJson(FILES.push_subscriptions).catch(() => []);
@@ -314,12 +299,7 @@ const VisitRepo = {
     
     if (db) {
       try {
-        const q = query(collection(db, 'visits'), where('sessionId', '==', visit.sessionId || ''));
-        const querySnapshot = await getDocs(q);
-        const hasVisitedToday = querySnapshot.docs.some(docSnap => {
-          const t = docSnap.data().timestamp;
-          return t && t.startsWith(today);
-        });
+        const hasVisitedToday = (await db.rows("SELECT 1 FROM visits WHERE json_extract(payload,'$.sessionId')=? AND json_extract(payload,'$.timestamp')>=? AND json_extract(payload,'$.timestamp')<? LIMIT 1", [visit.sessionId || '', today + 'T00:00:00.000Z', new Date(Date.parse(today) + 86400000).toISOString()])).length > 0;
 
         if (hasVisitedToday) return;
 
@@ -332,7 +312,8 @@ const VisitRepo = {
         });
         return;
       } catch (e) {
-        console.error("Firestore: Erro ao registrar visita:", e);
+        console.error("Turso: Erro ao registrar visita:", e);
+        throw e;
       }
     }
 
@@ -359,7 +340,8 @@ const VisitRepo = {
         }
         return;
       } catch (e) {
-        console.error("Firestore: Erro ao atualizar auth da visita:", e);
+        console.error("Turso: Erro ao atualizar auth da visita:", e);
+        throw e;
       }
     }
 
@@ -381,7 +363,8 @@ const VisitRepo = {
         const visits = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as Visit[];
         return visits.filter((v: Visit) => !VisitRepo.isBot(v.userAgent || ''));
       } catch (e) {
-        console.error("Firestore: Erro ao obter visitas:", e);
+        console.error("Turso: Erro ao obter visitas:", e);
+        throw e;
       }
     }
     const visits = await fs.readJson(FILES.visits).catch(() => []);
@@ -421,7 +404,8 @@ const PresenceRepo = {
         await setDoc(doc(db, 'presence', presence.id), presence);
         return;
       } catch (e) {
-        console.error("Firestore: Erro ao atualizar presença:", e);
+        console.error("Turso: Erro ao atualizar presença:", e);
+        throw e;
       }
     }
 
@@ -449,7 +433,8 @@ const PresenceRepo = {
         }
         return;
       } catch (e) {
-        console.error("Firestore: Erro no cleanup de presença:", e);
+        console.error("Turso: Erro no cleanup de presença:", e);
+        throw e;
       }
     }
 
@@ -464,7 +449,8 @@ const PresenceRepo = {
         const querySnapshot = await getDocs(collection(db, 'presence'));
         return querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as Presence[];
       } catch (e) {
-        console.error("Firestore: Erro ao obter presença:", e);
+        console.error("Turso: Erro ao obter presença:", e);
+        throw e;
       }
     }
     return fs.readJson(FILES.presence).catch(() => []);
@@ -480,7 +466,7 @@ const ProductRepo = {
     }
 
     let products: Product[] = [];
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const data = await callGAS('getProducts');
         if (Array.isArray(data)) {
@@ -504,11 +490,12 @@ const ProductRepo = {
         const querySnapshot = await getDocs(collection(db, 'products'));
         products = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as Product[];
       } catch (e) {
-        console.error("Firestore Error fetching products:", e);
+        console.error("Turso Error fetching products:", e);
+        throw e;
       }
     }
 
-    if (products.length === 0) {
+    if (products.length === 0 && !db) {
       products = await fs.readJson(FILES.products).catch(() => []);
     }
 
@@ -516,7 +503,8 @@ const ProductRepo = {
     return products;
   },
   add: async (product: Product) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (db) product.image = await separateImage(db, product.image);
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('addProduct', {
           ...product,
@@ -534,7 +522,8 @@ const ProductRepo = {
         cache.products.data = null;
         return;
       } catch (e) {
-        console.error("Firestore Error adding product:", e);
+        console.error("Turso Error adding product:", e);
+        throw e;
       }
     }
     const products = await fs.readJson(FILES.products).catch(() => []);
@@ -544,7 +533,8 @@ const ProductRepo = {
     cache.products.data = null;
   },
   update: async (product: Product) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (db) product.image = await separateImage(db, product.image);
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('updateProduct', {
           ...product,
@@ -562,7 +552,8 @@ const ProductRepo = {
         cache.products.data = null;
         return;
       } catch (e) {
-        console.error("Firestore Error updating product:", e);
+        console.error("Turso Error updating product:", e);
+        throw e;
       }
     }
     const products = await fs.readJson(FILES.products).catch(() => []);
@@ -575,7 +566,7 @@ const ProductRepo = {
     cache.products.data = null;
   },
   delete: async (id: string) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('deleteProduct', { id });
         cache.products.data = null;
@@ -589,7 +580,8 @@ const ProductRepo = {
         cache.products.data = null;
         return;
       } catch (e) {
-        console.error("Firestore Error deleting product:", e);
+        console.error("Turso Error deleting product:", e);
+        throw e;
       }
     }
     const products = await fs.readJson(FILES.products).catch(() => []);
@@ -603,7 +595,8 @@ const ProductRepo = {
 // Pedidos
 const OrderRepo = {
   getAll: async (): Promise<Order[]> => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (db) return db.panelOrders() as Promise<Order[]>;
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const data = await callGAS('getOrders');
         if (Array.isArray(data)) {
@@ -654,7 +647,8 @@ const OrderRepo = {
           };
         }) as Order[];
       } catch (e) {
-        console.error("Firestore Error fetching orders:", e);
+        console.error("Turso Error fetching orders:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -662,7 +656,7 @@ const OrderRepo = {
     return orders;
   },
   getById: async (id: string): Promise<Order | null> => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const orders = await OrderRepo.getAll();
         return orders.find(o => o.id === id) || null;
@@ -693,7 +687,8 @@ const OrderRepo = {
         }
         return null;
       } catch (e) {
-        console.error("Firestore Error getting order status:", e);
+        console.error("Turso Error getting order status:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -701,7 +696,8 @@ const OrderRepo = {
     return orders.find((o: Order) => o.id === id) || null;
   },
   getByUserId: async (userId: string): Promise<Order[]> => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (db) return db.customerOrders(userId) as Promise<Order[]>;
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const data = await callGAS('getUserOrders', undefined, { userId });
         if (Array.isArray(data)) {
@@ -731,7 +727,7 @@ const OrderRepo = {
       }
     } else if (db) {
       try {
-        const q = query(collection(db, 'orders'), where('userId', '==', userId));
+        const q = query(collection(db, 'orders'), where('userId', '==', userId)).orderBy('date').limit(50);
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(docSnap => {
           const data = docSnap.data() || {};
@@ -743,7 +739,8 @@ const OrderRepo = {
           };
         }).filter((o: any) => !o.archived) as Order[];
       } catch (e) {
-        console.error("Firestore Error fetching user orders:", e);
+        console.error("Turso Error fetching user orders:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -758,7 +755,7 @@ const OrderRepo = {
       archived: false
     };
 
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('order', {
           id: formattedOrder.id,
@@ -782,7 +779,8 @@ const OrderRepo = {
         await doc(db, 'orders', formattedOrder.id).create(formattedOrder);
         return;
       } catch (e) {
-        console.error("Firestore Error creating order:", e);
+        console.error("Turso Error creating order:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -792,7 +790,7 @@ const OrderRepo = {
     await fs.writeJson(FILES.orders, orders);
   },
   update: async (order: Order) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('updateStatus', {
           orderId: order.id,
@@ -807,7 +805,8 @@ const OrderRepo = {
         await setDoc(doc(db, 'orders', order.id), order, { merge: true });
         return;
       } catch (e) {
-        console.error("Firestore Error updating order:", e);
+        console.error("Turso Error updating order:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -820,7 +819,7 @@ const OrderRepo = {
     }
   },
   updateStatus: async (id: string, status: string) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('updateStatus', { orderId: id, status });
         return;
@@ -832,7 +831,8 @@ const OrderRepo = {
         await updateDoc(doc(db, 'orders', id), { status });
         return;
       } catch (e) {
-        console.error("Firestore Error updating status:", e);
+        console.error("Turso Error updating status:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -845,11 +845,12 @@ const OrderRepo = {
     }
   },
   countActive: async (): Promise<number> => {
+    if (db) return db.activeCount();
     const orders = await OrderRepo.getAll();
     return orders.filter((o: Order) => o.status === 'pendente' || o.status === 'preparando').length;
   },
   archive: async (id: string) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('archiveOrder', { id });
         return;
@@ -861,7 +862,8 @@ const OrderRepo = {
         await updateDoc(doc(db, 'orders', id), { archived: true });
         return;
       } catch (e) {
-        console.error("Firestore Error archiving order:", e);
+        console.error("Turso Error archiving order:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -878,7 +880,7 @@ const OrderRepo = {
 // Usuários (Auth via Google Sheets!)
 const UserRepo = {
   getById: async (id: string): Promise<User | null> => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const users = await UserRepo.getAll();
         return users.find(u => u.id === id) || null;
@@ -892,14 +894,16 @@ const UserRepo = {
           return { id: docSnap.id, ...docSnap.data() } as User;
         }
       } catch (e) {
-        console.error("Firestore Error getting user by ID:", e);
+        console.error("Turso Error getting user by ID:", e);
+        throw e;
       }
     }
+    requireLocalStorage();
     const users = await fs.readJson(FILES.users).catch(() => []);
     return users.find((u: User) => u.id === id) || null;
   },
   findByEmail: async (email: string): Promise<User | null> => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const users = await UserRepo.getAll();
         return users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
@@ -908,22 +912,24 @@ const UserRepo = {
       }
     } else if (db) {
       try {
-        const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase()));
+        const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase())).limit(1);
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
           const docSnap = querySnapshot.docs[0];
           return { id: docSnap.id, ...docSnap.data() } as User;
         }
       } catch (e) {
-        console.error("Firestore Error getting user by email:", e);
+        console.error("Turso Error getting user by email:", e);
+        throw e;
       }
     }
+    requireLocalStorage();
     const users = await fs.readJson(FILES.users).catch(() => []);
     return users.find((u: User) => u.email.toLowerCase() === email.toLowerCase()) || null;
   },
   create: async (user: User) => {
-    let savedInFirestore = false;
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    let savedInTurso = false;
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('register', {
           id: user.id,
@@ -939,18 +945,20 @@ const UserRepo = {
       }
     } else if (db) {
       try {
-        const cleanedUser = cleanForFirestore({
+        const cleanedUser = cleanRecord({
           ...user,
           email: user.email.toLowerCase()
         });
         await setDoc(doc(db, 'users', user.id), cleanedUser);
-        savedInFirestore = true;
+        savedInTurso = true;
       } catch (e) {
-        console.error("Firestore Error creating user:", e);
+        console.error("Turso Error creating user:", e);
+        throw e;
       }
     }
-    if (savedInFirestore) return;
+    if (savedInTurso) return;
     // Arquivo local apenas em desenvolvimento
+    requireLocalStorage();
     const users = await fs.readJson(FILES.users).catch(() => []);
     if (!users.some((u: User) => u.id === user.id)) {
       users.push(user);
@@ -959,7 +967,7 @@ const UserRepo = {
     }
   },
   getAll: async (): Promise<User[]> => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const data = await callGAS('getUsers');
         if (Array.isArray(data)) {
@@ -979,23 +987,18 @@ const UserRepo = {
     } else if (db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'users'));
-        const firestoreUsers = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as User[];
-        const localUsers = await fs.readJson(FILES.users).catch(() => []);
-        const merged = [...firestoreUsers];
-        localUsers.forEach((lu: User) => {
-          if (!merged.some(u => u.id === lu.id)) {
-            merged.push(lu);
-          }
-        });
-        return merged;
+        const databaseUsers = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as User[];
+        return databaseUsers;
       } catch (e) {
-        console.error("Firestore Error listing users:", e);
+        console.error("Turso Error listing users:", e);
+        throw e;
       }
     }
+    requireLocalStorage();
     return fs.readJson(FILES.users).catch(() => []);
   },
   update: async (user: Partial<User> & { id: string }) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         // Buscamos o usuário para atualizar as propriedades e mandar de volta
         const existing = await UserRepo.getById(user.id);
@@ -1016,13 +1019,15 @@ const UserRepo = {
       }
     } else if (db) {
       try {
-        const cleanedUser = cleanForFirestore(user);
+        const cleanedUser = cleanRecord(user);
         await setDoc(doc(db, 'users', user.id), cleanedUser, { merge: true });
         return;
       } catch (e) {
-        console.error("Firestore Error updating user:", e);
+        console.error("Turso Error updating user:", e);
+        throw e;
       }
     }
+    requireLocalStorage();
     const users = await fs.readJson(FILES.users).catch(() => []);
     const index = users.findIndex((u: User) => u.id === user.id);
     if (index !== -1) {
@@ -1042,7 +1047,7 @@ const ConfigRepo = {
     }
 
     let configObj: Record<string, string> = {};
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const res = await callGAS('getConfigs');
         if (res && typeof res === 'object') {
@@ -1058,11 +1063,12 @@ const ConfigRepo = {
           configObj[docSnap.id] = docSnap.data().value;
         });
       } catch (e) {
-        console.error("Firestore Error fetching configs:", e);
+        console.error("Turso Error fetching configs:", e);
+        throw e;
       }
     }
     
-    if (Object.keys(configObj).length === 0) {
+    if (Object.keys(configObj).length === 0 && !db) {
       requireLocalStorage();
     const configs = await fs.readJson(FILES.configs).catch(() => []);
       configs.forEach((c: Config) => configObj[c.key] = c.value);
@@ -1072,7 +1078,8 @@ const ConfigRepo = {
     return configObj;
   },
   update: async (key: string, value: string) => {
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (db && key === "story_image") value = await separateImage(db, value) || "";
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('updateConfig', { key, value });
         cache.configs.data = null;
@@ -1086,7 +1093,8 @@ const ConfigRepo = {
         cache.configs.data = null;
         return;
       } catch (e) {
-        console.error("Firestore Error updating config:", e);
+        console.error("Turso Error updating config:", e);
+        throw e;
       }
     }
     requireLocalStorage();
@@ -1165,7 +1173,7 @@ const app = express.Router();
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use((req, res, next) => {
@@ -1242,6 +1250,19 @@ app.post('/create-payment-intent', async (req, res) => {
 app.get('/health', (_req, res) => res.json({ status: db || process.env.GOOGLE_SHEETS_SCRIPT_URL || !isVercel ? 'ok' : 'unavailable' }));
 
 // --- Rotas de Produtos ---
+app.get('/media/:id', async (req, res) => {
+  if (!db || !/^[a-f0-9]{64}$/.test(String(req.params.id))) return res.sendStatus(404);
+  try {
+    const image = await doc(db, 'media', String(req.params.id)).get();
+    if (!image.exists) return res.sendStatus(404);
+    const data = image.data();
+    res.setHeader('Content-Type', data.type);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(Buffer.from(data.base64, 'base64'));
+  } catch { return res.sendStatus(503); }
+});
+
 app.get('/products', async (req, res) => {
   try {
     const products = await ProductRepo.getAll();
@@ -1292,11 +1313,34 @@ app.get('/orders', requireAdmin, async (req, res) => {
   }
 });
 
-app.get('/orders/batch/status', async (req, res) => {
+app.get('/orders/history', requireAdmin, async (req, res) => {
+  try {
+    if (db) return res.json(await db.history(typeof req.query.cursor === 'string' ? req.query.cursor : undefined));
+    const all = (await OrderRepo.getAll()).filter(order => !order.archived).sort((a,b) => String(b.date).localeCompare(String(a.date)) || b.id.localeCompare(a.id));
+    const index = req.query.cursor ? all.findIndex(order => order.id === req.query.cursor) + 1 : 0;
+    const page = all.slice(index, index + 100);
+    return res.json({ orders: page, nextCursor: all.length > index + 100 ? page.at(-1)?.id : null });
+  } catch { res.status(503).json({ error: 'Não foi possível carregar o histórico.' }); }
+});
+app.get('/admin/finance', async (req, res) => {
+  try {
+    const since = typeof req.query.since === 'string' ? req.query.since : '';
+    if (since && (!Number.isFinite(Date.parse(since)) || since.length > 40)) return res.sendStatus(400);
+    if (db) return res.json(await db.finance(since));
+    const orders = (await OrderRepo.getAll()).filter(order => order.status === 'concluido' && (!since || String(order.date) >= since));
+    const total = (values: Order[]) => values.reduce((sum, order) => sum + Number(order.total),0);
+    res.json({ count: orders.length, totalRevenue: total(orders), pixRevenue: total(orders.filter(order => order.paymentMethod.toLowerCase().includes('pix'))),
+      cardRevenue: total(orders.filter(order => /cart|stripe/i.test(order.paymentMethod))), recent: orders.sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0,20) });
+  } catch { res.status(503).json({ error: 'Não foi possível carregar o financeiro.' }); }
+});
+
+app.get('/orders/batch/status', rateLimit({ windowMs: 60000, limit: 60, legacyHeaders: false }), async (req, res) => {
   try {
     const ids = (req.query.ids as string || '').split(',').filter(id => id.trim().length > 0);
     if (!ids.length) return res.json({});
     
+    if (ids.length > 50) return res.status(400).json({ error: 'Consulte no máximo 50 pedidos.' });
+    if (db) return res.json(await db.statuses(ids));
     const orders = await OrderRepo.getAll();
     const statuses: Record<string, string> = {};
     orders.forEach((o: any) => {
@@ -1508,7 +1552,7 @@ app.post('/auth/register', async (req, res) => {
     orderToken('configuration-check');
     const storedPassword = await hashPassword(password);
     
-    if (process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         const data = await callGAS('register', { name, email, password: storedPassword, phone, address });
         if (data && data.success) {
@@ -1540,7 +1584,7 @@ app.post('/auth/register', async (req, res) => {
     } catch (createErr: any) {
       console.error("Erro ao gravar usuário no banco:", createErr);
       return res.status(500).json({ 
-        error: 'Erro no banco de dados ao salvar o cadastro. Por favor, verifique se o Firestore está ativo e configurado corretamente.', 
+        error: 'Não foi possível criar sua conta agora. Tente novamente em alguns instantes.',
         details: createErr.message || String(createErr) 
       });
     }
@@ -1565,7 +1609,7 @@ app.post('/auth/login', async (req, res) => {
     } catch (fetchErr: any) {
       console.error("Erro ao buscar usuário por email:", fetchErr);
       return res.status(500).json({ 
-        error: 'Erro no banco de dados ao buscar o usuário. Verifique se o Firestore está ativo.', 
+        error: 'Não foi possível entrar agora. Tente novamente em alguns instantes.',
         details: fetchErr.message || String(fetchErr) 
       });
     }
@@ -1707,8 +1751,15 @@ app.post('/presence', async (req, res) => {
   }
 });
 
+let statsCache: { value: any; expires: number } | undefined;
+let statsRequest: Promise<any> | undefined;
 app.get('/admin/stats', async (req, res) => {
   try {
+    if (db) {
+      if (statsCache && statsCache.expires > Date.now()) return res.json(statsCache.value);
+      statsRequest ||= db.stats().then(value => { statsCache = { value, expires: Date.now() + 60000 }; return value; }).finally(() => { statsRequest = undefined; });
+      return res.json(await statsRequest);
+    }
     const visitStats = await VisitRepo.getStats();
     const onlineUsers = await PresenceRepo.getAll();
     const totalUsers = await UserRepo.getAll();
@@ -1742,15 +1793,17 @@ app.get('/admin/stats', async (req, res) => {
   }
 });
 
-app.get('/stats/prep-time', async (req, res) => {
+let prepCache: { value: any; expires: number } | undefined;
+let prepRequest: Promise<any> | undefined;
+app.get('/stats/prep-time', async (_req, res) => {
   try {
-    const activeOrders = await OrderRepo.countActive();
-    const configs = await ConfigRepo.getAll();
-    const kitchenForecast = configs['kitchen_forecast'] || '40-50 min';
-    res.json({ activeOrders, forecast: kitchenForecast });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
+    if (prepCache && prepCache.expires > Date.now()) return res.json(prepCache.value);
+    prepRequest ||= Promise.all([OrderRepo.countActive(), ConfigRepo.getAll()]).then(([activeOrders, configs]) => {
+      const value = { activeOrders, forecast: configs['kitchen_forecast'] || '40-50 min' };
+      prepCache = { value, expires: Date.now() + 60000 }; return value;
+    }).finally(() => { prepRequest = undefined; });
+    res.json(await prepRequest);
+  } catch { res.status(503).json({ error: 'Previsão indisponível.' }); }
 });
 
 app.post('/admin/broadcast-push', async (req, res) => {
@@ -1779,10 +1832,6 @@ app.post('/admin/test-push', async (req, res) => {
   }
 });
 
-// Cleanup de presença a cada minuto
-setInterval(() => {
-  PresenceRepo.cleanup().catch(console.error);
-}, 60000).unref();
 
 const mainApp = express();
 mainApp.use('/api', app); 

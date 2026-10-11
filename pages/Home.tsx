@@ -7,6 +7,7 @@ import { Toast } from '../components/UI';
 import { StoreFront } from '../components/StoreFront';
 import { Checkout, TrackingModal } from '../components/Checkout';
 import { AuthModal } from '../components/Auth';
+import { startVisiblePolling } from '../src/utils/visible-polling';
 import { QuickReorder } from '../components/QuickReorder';
 
 const LOGO = "https://i.ibb.co/Rkt5c0zk/Del-cias-Da-Vov.png";
@@ -44,7 +45,6 @@ export default function Home() {
   const [isForceClosed, setIsForceClosed] = useState(false);
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [dynamicConfigs, setDynamicConfigs] = useState<any>(null);
-  const [prepTime, setPrepTime] = useState<{baseTime: number, activeOrders: number, estimatedTime: number} | null>(null);
   const [flyingItems, setFlyingItems] = useState<{id: number, x: number, y: number, image: string}[]>([]);
   const [clickCount, setClickCount] = useState(0);
   
@@ -134,16 +134,6 @@ export default function Home() {
     } catch (e) {}
   };
 
-  const fetchPrepTime = async () => {
-    try {
-      const res = await fetch(`${GAS_API_URL}/stats/prep-time`);
-      if (res.ok) {
-        const data = await res.json();
-        setPrepTime(data);
-      }
-    } catch (e) {}
-  };
-
   useEffect(() => {
     trackVisit();
 
@@ -163,11 +153,6 @@ export default function Home() {
 
   useEffect(() => {
     trackPresence();
-    fetchPrepTime();
-
-    const prepTimeInterval = setInterval(fetchPrepTime, 600000); // 10 min
-
-    return () => clearInterval(prepTimeInterval);
   }, [user?.id, user?.name]);
 
   // Dispara presença apenas quando o carrinho muda (evento importante)
@@ -195,7 +180,7 @@ export default function Home() {
     if (!isMaintenance) return;
 
     // Polling rápido (5s) quando em manutenção para detectar retorno automático
-    const interval = setInterval(async () => {
+    const stopMaintenance = startVisiblePolling(async () => {
       try {
         const res = await fetch(`${GAS_API_URL}/health`);
         const health = await res.json();
@@ -204,9 +189,9 @@ export default function Home() {
           window.location.reload(); // Recarrega para garantir que tudo seja reinicializado
         }
       } catch (e) {}
-    }, 5000);
+    }, 60000);
 
-    return () => clearInterval(interval);
+    return stopMaintenance;
   }, [isMaintenance]);
 
   useEffect(() => {
@@ -277,14 +262,14 @@ export default function Home() {
     };
 
     checkOpeningHours();
-    const timer = setInterval(checkOpeningHours, 300000); // 5 min
+    const stopOpeningHours = startVisiblePolling(checkOpeningHours, 600000, false);
     
     // Polling de produtos (a cada 5 min)
-    productsPollingRef.current = setInterval(fetchProducts, 300000);
+    productsPollingRef.current = startVisiblePolling(fetchProducts, 600000, false);
 
     return () => {
-      clearInterval(timer);
-      clearInterval(productsPollingRef.current);
+      stopOpeningHours();
+      productsPollingRef.current?.();
     };
   }, []);
 
@@ -339,8 +324,8 @@ export default function Home() {
              const active = data.some((o: any) => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado');
              if (active) {
                 setIsTrackingOpen(true);
-                clearInterval(pollingRef.current);
-                pollingRef.current = setInterval(pollOrderStatus, 10000);
+                pollingRef.current?.();
+                pollingRef.current = startVisiblePolling(pollOrderStatus, 60000, false);
              }
           }
         } catch(e) { /* silent fail */ }
@@ -355,17 +340,21 @@ export default function Home() {
     }
   }, [user]);
 
+  const savedCart = useRef('');
   useEffect(() => {
-    if (user && lastSyncedUser === user.id) {
-      fetch(`${GAS_API_URL}/users/${user.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          cart: JSON.stringify(cart) 
-        })
-      }).catch(()=>{});
-    }
-  }, [cart, user, lastSyncedUser]);
+    if (!user || lastSyncedUser !== user.id) return;
+    const serialized = JSON.stringify(cart);
+    if (savedCart.current === user.id + serialized) return;
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`${GAS_API_URL}/users/${user.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cart: serialized }),
+        });
+        if (response.ok) savedCart.current = user.id + serialized;
+      } catch {}
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [cart, user?.id, lastSyncedUser]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -431,17 +420,15 @@ export default function Home() {
     
     const activeOrders = currentOrders.filter(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado');
     if (activeOrders.length === 0) {
-      clearInterval(pollingRef.current);
+      pollingRef.current?.();
       return;
     }
 
-    // Polling de status a cada 15 segundos para maior agilidade
-    clearInterval(pollingRef.current);
-    pollingRef.current = setInterval(pollOrderStatus, 15000);
 
     try {
       const ids = activeOrders.map(o => o.id).join(',');
       const res = await fetch(`${GAS_API_URL}/orders/batch/status?ids=${ids}&t=${Date.now()}`);
+      if (!res.ok) return false;
       const statuses = await res.json();
       
       let hasChanges = false;
@@ -484,6 +471,7 @@ export default function Home() {
       }
     } catch (e) {
       console.error("Erro ao atualizar status dos pedidos:", e);
+      return false;
     }
   };
 
@@ -516,11 +504,11 @@ export default function Home() {
     
     if (initialOrders.some(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado')) {
       setIsTrackingOpen(true);
-      clearInterval(pollingRef.current);
-      pollingRef.current = setInterval(pollOrderStatus, 120000);
+      pollingRef.current?.();
+      pollingRef.current = startVisiblePolling(pollOrderStatus, 60000, false);
     }
 
-    return () => clearInterval(pollingRef.current);
+    return () => pollingRef.current?.();
   }, []);
 
   const handleAddToCart = (p: Product, variation?: any, additionals?: any[], observation?: string, event?: React.MouseEvent) => {
@@ -717,8 +705,8 @@ export default function Home() {
     setRetryOrderId(null);
     setToast({ message: "Pedido enviado para a cozinha com sucesso!", type: 'success' });
     
-    clearInterval(pollingRef.current);
-    pollingRef.current = setInterval(pollOrderStatus, 10000);
+    pollingRef.current?.();
+    pollingRef.current = startVisiblePolling(pollOrderStatus, 60000, false);
     return true;
     } catch (error) {
       setToast({ message: error instanceof Error ? error.message : 'Não foi possível enviar. Sua sacola foi mantida; confira a internet e tente novamente.', type: 'error' });

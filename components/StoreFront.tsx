@@ -1,3 +1,4 @@
+import { startVisiblePolling } from '../src/utils/visible-polling';
 import React, { useState, useEffect } from 'react';
 import { Star, Plus, Send, ChefHat, Loader2, Sparkles, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL } from '../constants/index';
@@ -58,18 +59,16 @@ export const StoreFront = ({ products, isLoading, onAddToCart, onAddSuggestedIte
         const res = await fetch(`${GAS_API_URL}/stats/prep-time`);
         if (res.ok) {
           const data = await res.json();
-          console.log("DEBUG: fetchPrepTime data:", data);
+
           setPrepTime(data);
         } else {
-          console.log("DEBUG: fetchPrepTime failed:", res.status);
+          return false;
         }
       } catch (e) {
-        console.error("DEBUG: fetchPrepTime error:", e);
+        return false;
       }
     };
-    fetchPrepTime();
-    const interval = setInterval(fetchPrepTime, 60000);
-    return () => clearInterval(interval);
+    return startVisiblePolling(fetchPrepTime, 600000);
   }, []);
 
   const visibleCategories = CATEGORIES.filter(cat => 
