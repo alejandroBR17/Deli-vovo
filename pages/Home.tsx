@@ -10,6 +10,7 @@ import { AuthModal } from '../components/Auth';
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import { QuickReorder } from '../components/QuickReorder';
 import { storeAvailability, openingTime } from '../src/utils/store-hours';
+import { CustomerDetails, lastCustomer, rememberCustomer } from '../src/utils/saved-checkout';
 
 const LOGO = "https://i.ibb.co/Rkt5c0zk/Del-cias-Da-Vov.png";
 
@@ -29,7 +30,7 @@ export default function Home() {
   const [lastSyncedUser, setLastSyncedUser] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const [customer, setCustomer] = useState({ name: '', phone: '', address: '' });
+  const [customer, setCustomer] = useState<CustomerDetails>(() => lastCustomer());
   const [method, setMethod] = useState('pix');
   const [changeFor, setChangeFor] = useState('');
   const [toast, setToast] = useState<any>(null);
@@ -232,7 +233,8 @@ export default function Home() {
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
-      setCustomer({ name: parsedUser.name, phone: parsedUser.phone || '', address: parsedUser.address || '' });
+      const remembered = lastCustomer();
+      setCustomer(remembered.name ? remembered : { name: parsedUser.name, phone: parsedUser.phone || '', address: parsedUser.address || '' });
     }
 
     if (window.matchMedia('(display-mode: standalone)').matches) return;
@@ -248,7 +250,7 @@ export default function Home() {
 
   useEffect(() => {
     if (user && user.id !== lastSyncedUser) {
-      setCustomer(prev => ({ ...prev, name: user.name, phone: user.phone || prev.phone, address: user.address || prev.address }));
+      setCustomer(prev => prev.name ? prev : { name: user.name, phone: user.phone || '', address: user.address || '' });
       setLastSyncedUser(user.id);
       setIsSyncing(true);
 
@@ -287,7 +289,7 @@ export default function Home() {
 
       runSync();
     } else if (!user) {
-      setCustomer({ name: '', phone: '', address: '' });
+      setCustomer(lastCustomer());
       setLastSyncedUser(null);
     }
   }, [user]);
@@ -638,6 +640,7 @@ export default function Home() {
     if (!response.ok || result.success !== true) throw new Error(result.error || 'Não foi possível enviar o pedido.');
     newOrder.id = result.id;
     newOrder.accessToken = result.accessToken;
+    rememberCustomer(customer);
     pendingSubmissionId.current = null; pendingSubmissionKey.current = null;
     setOrders(prev => {
       // Se for retry, substitui o existente. Se não, adiciona.

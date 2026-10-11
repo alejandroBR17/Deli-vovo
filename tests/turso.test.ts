@@ -106,6 +106,15 @@ test('API stores orders durably, isolates images from catalog responses and prot
     assert.deepEqual(await (await request('/orders/batch/status?ids='+id)).json(),{[id]:'pendente'});
     assert.equal((await request('/orders/batch/status?ids='+Array(51).fill(id).join(','))).status,400);
     assert.equal((await (await request('/orders/history',undefined,headers)).json()).orders.length,1);
+    await database.collection('orders').doc(id).update({status:'entrega',payment:{method:'dinheiro',paid:false}});
+    await client.execute("CREATE TRIGGER fail_payment_save BEFORE UPDATE ON orders WHEN json_extract(NEW.payload,'$.payment.paid')=1 BEGIN SELECT RAISE(ABORT,'simulated receipt failure'); END");
+    assert.equal((await request('/orders/'+id+'/payment/confirm',{},headers)).status,503);
+    assert.equal((await database.collection('orders').doc(id).get()).data().payment.paid,false);
+    await client.execute('DROP TRIGGER fail_payment_save');
+    const confirmation=await request('/orders/'+id+'/payment/confirm',{},headers);
+    assert.equal(confirmation.status,200);
+    const persisted=(await database.collection('orders').doc(id).get()).data();
+    assert.equal(persisted.status,'entrega');assert.equal(persisted.total,10);assert.equal(persisted.payment.paid,true);assert.ok(persisted.payment.verifiedAt);
     // DB errors must fail, never acknowledge a write to ephemeral filesystem storage.
     await client.execute('DROP TABLE orders');
     const failure=await request('/orders',{...body,id:randomUUID()},{'X-Order-Request':randomUUID()});

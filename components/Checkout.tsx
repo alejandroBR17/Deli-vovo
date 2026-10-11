@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
-import { Banknote } from 'lucide-react';
+import { Banknote, Bell } from 'lucide-react';
 import { PixBox, StripePaymentBox } from './UI';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
 import { lookupCep, formatCep } from '../src/utils/cep';
 import { formatWhatsApp } from '../src/utils/phone-input';
+import { PhoneInput } from './PhoneInput';
+import { addressParts, emptyCustomer, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
   const cashEnabled = dynamicConfigs?.cash_enabled === 'true';
@@ -35,30 +37,28 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
 
-  const [cep, setCep] = useState('');
+  const [cep, setCep] = useState(() => addressParts(customer).cep);
   const [searchingCep, setSearchingCep] = useState(false);
-  const [street, setStreet] = useState('');
-  const [number, setNumber] = useState('');
+  const [street, setStreet] = useState(() => addressParts(customer).street);
+  const [number, setNumber] = useState(() => addressParts(customer).number);
   const numberRef = useRef<HTMLInputElement>(null);
-  const [neighborhood, setNeighborhood] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [neighborhood, setNeighborhood] = useState(() => addressParts(customer).neighborhood);
+  const [city, setCity] = useState(() => addressParts(customer).city);
+  const [state, setState] = useState(() => addressParts(customer).state);
+  const [savedCustomers, setSavedCustomers] = useState<SavedCustomer[]>([]);
+  const applyCustomer = (details: CustomerDetails) => {
+    const parts = addressParts(details);
+    setCustomer({...details, phone: details.phone.replace(/\D/g, '')}); setStreet(parts.street); setNumber(parts.number);
+    setNeighborhood(parts.neighborhood); setCity(parts.city); setState(parts.state); setCep(parts.cep);
+    setAddressError('');
+  };
+  useEffect(() => {
+    if (isOpen) { setSavedCustomers(readSavedCustomers()); applyCustomer(customer); }
+  }, [isOpen]);
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (customer.address && !street && !city) {
-      // Tenta fazer um parse básico se já vier preenchido do banco
-      const parts = customer.address.split(',');
-      if (parts.length > 1) {
-        setStreet(parts[0].trim());
-        const numAndRest = parts[1].split('-');
-        if (numAndRest.length > 0) setNumber(numAndRest[0].trim());
-      } else {
-        setStreet(customer.address);
-      }
-    }
-  }, []);
+
 
   useEffect(() => {
     quoteSequence.current++;
@@ -68,10 +68,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     addressSearchSequence.current++;
     addressSearchAbort.current?.abort();
     setSearchingCep(false); setIsGettingLocation(false);
-    if (street && number && city) {
-      const newAddress = `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}`;
-      setCustomer((prev: any) => ({ ...prev, address: newAddress }));
-    }
+    const newAddress = street && number && city ? `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}` : '';
+    setCustomer((prev: any) => ({ ...prev, address: newAddress, deliveryAddress: {street,number,neighborhood,city,state,cep} }));
     setFeeCalculated(false); setDeliveryProof('');
     return () => {
       quoteSequence.current++; quoteAbort.current?.abort();
@@ -263,7 +261,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
         </div>
 
-        <header className="px-6 py-4 md:py-5 flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
+        <header className="px-4 sm:px-6 py-4 md:py-5 flex flex-wrap gap-3 justify-between items-center bg-white border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-3 md:gap-4">
             <div className="w-10 h-10 md:w-12 md:h-12 bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-100"><ShoppingCart size={20}/></div>
             <h3 className="text-xl md:text-2xl font-black text-vovoh-dark">Sua Sacola</h3>
@@ -396,6 +394,19 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
               )}
 
               <div className="space-y-4">
+                {savedCustomers.length > 0 && <details className="p-4 rounded-2xl bg-white border border-gray-200 space-y-3">
+                  <summary className="font-bold cursor-pointer">Usar dados salvos</summary>
+                  <p className="text-xs text-gray-500">Salvos somente neste navegador. Escolha um cadastro completo ou troque apenas um dado.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(['Cadastro completo','Pessoa salva','WhatsApp salvo','Endereço salvo'] as const).map(label => <label className="block min-w-0 text-sm font-bold" key={label}>{label}<select aria-label={label} value="" className="w-full min-w-0 p-3 mt-1 rounded-xl border border-gray-200 bg-white" onChange={event => {
+                      const saved = savedCustomers.find(item => item.id === event.target.value); if (!saved) return;
+                      if (label === 'Cadastro completo') applyCustomer(saved);
+                      else if (label === 'Endereço salvo') applyCustomer({...customer,address:saved.address,deliveryAddress:saved.deliveryAddress});
+                      else setCustomer({...customer,...(label === 'Pessoa salva' ? {name:saved.name} : {phone:saved.phone})});
+                    }}><option value="">Escolher</option>{savedCustomers.map(item => <option key={item.id} value={item.id}>{label === 'Endereço salvo' ? item.address : label === 'WhatsApp salvo' ? formatWhatsApp(item.phone) : label === 'Pessoa salva' ? item.name : `${item.name} — ${formatWhatsApp(item.phone)}`}</option>)}</select></label>)}
+                  </div>
+                  <button type="button" onClick={() => applyCustomer({...emptyCustomer})} className="text-vovoh-red font-bold text-sm py-2">Trocar todos os dados</button>
+                </details>}
                 <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm"><User size={16} className="text-vovoh-red"/> Nome Completo</label>
                 <input 
                   type="text" 
@@ -406,15 +417,15 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 />
                 
                 <label htmlFor="checkout-whatsapp" className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><Zap size={16} className="text-vovoh-red"/> WhatsApp</label>
-                <input 
+                <PhoneInput
                   type="tel" 
                   id="checkout-whatsapp"
                   autoComplete="tel"
                   inputMode="tel"
                   placeholder="(41) 99999-9999"
                   className="w-full p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" 
-                  value={formatWhatsApp(customer.phone || '')}
-                  onChange={e => setCustomer({...customer, phone: e.target.value.replace(/\D/g, '').slice(0,13)})}
+                  value={customer.phone || ''}
+                  onValueChange={phone => setCustomer({...customer, phone})}
                 />
                 
                 <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><MapPin size={16} className="text-vovoh-red"/> Endereço de Entrega Completo</label>
@@ -516,6 +527,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                        setAddressError("Por favor, calcule o frete antes de prosseguir para o pagamento.");
                        return;
                      }
+                     rememberCustomer(customer);
                      setStep('payment');
                    }} 
                    className="flex-grow py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-200 text-sm active:scale-95 transition-all"
@@ -595,6 +607,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 };
 
 export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCancelOrder, onReceiveOrder, onReorder, onRetryPayment, onRefresh, dynamicConfigs }: any) => {
+  const [activatingNotices, setActivatingNotices] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -669,21 +683,21 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={async () => {
-              if (typeof Notification !== 'undefined' && 'Notification' in window) {
-                const perm = await Notification.requestPermission();
-                if (perm === 'granted') {
-                  const userId = selectedOrder?.userId;
-                  try { await subscribeToPush(userId, 'customer'); alert('Cadastro de notificações confirmado.'); }
-                  catch (error) { alert(error instanceof Error ? error.message : 'Não foi possível ativar os avisos.'); }
-                }
-              } else {
-                alert("Seu navegador não suporta notificações.");
-              }
-            }} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:scale-90">
-              <Zap size={20} />
+            <button type="button" aria-label="Ativar avisos do pedido" title="Ativar avisos do pedido" disabled={activatingNotices} onClick={async () => {
+              setActivatingNotices(true); setNoticeMessage('');
+              try {
+                if (!orders.some((order: any) => order.userId) || (selectedOrder && !selectedOrder.userId)) throw new Error('Avisos automáticos exigem um pedido feito com conta. Para este pedido, use Atualizar rastreio.');
+                if (typeof Notification === 'undefined') throw new Error('Seu navegador não suporta avisos. Use Atualizar rastreio.');
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') throw new Error('Avisos não permitidos. Libere as notificações nas configurações do navegador para ativar.');
+                await subscribeToPush(selectedOrder?.userId, 'customer');
+                setNoticeMessage('Avisos cadastrados neste aparelho.');
+              } catch (error) { setNoticeMessage(error instanceof Error ? error.message : 'Não foi possível ativar os avisos.'); }
+              finally {setActivatingNotices(false);}
+            }} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:scale-90 disabled:opacity-50">
+              {activatingNotices ? <Loader2 size={20} className="animate-spin" /> : <Bell size={20} />}
             </button>
-            <button onClick={onRefresh} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:rotate-180 duration-500">
+            <button aria-label="Atualizar rastreio" title="Atualizar rastreio" onClick={onRefresh} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:rotate-180 duration-500">
               <RefreshCw size={20} />
             </button>
             <button aria-label="Fechar sacola" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark transition-colors active:scale-90"><X size={20}/></button>
@@ -692,6 +706,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
 
         <div className="flex-grow overflow-y-auto min-h-0 p-4 sm:p-6 space-y-8 bg-[#F5F5F7] no-scrollbar pb-32 ">
             
+            {noticeMessage && <p role="status" className="p-4 rounded-2xl bg-white border border-gray-200 text-sm text-gray-700">{noticeMessage}</p>}
             {!selectedOrder ? (
               <div className="space-y-4">
                 <h3 className="text-lg font-black text-vovoh-dark px-2">Seus Pedidos Ativos</h3>

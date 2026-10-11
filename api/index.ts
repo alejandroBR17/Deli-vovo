@@ -98,6 +98,7 @@ export interface Product {
 }
 
 export interface Order {
+  payment?: {method: string; paid: boolean; changeFor?: number; verifiedAt?: string};
   id: string;
   date?: string;
   scheduledTo?: string;
@@ -640,6 +641,7 @@ const OrderRepo = {
             itemsSummary: data.itemsSummary || '',
             items: typeof data.items === 'string' ? JSON.parse(data.items || '[]') : data.items || [],
             paymentMethod: data.paymentMethod || '',
+            payment: data.payment,
             status: data.status || 'pendente',
             type: data.type || '',
             userId: data.userId || '',
@@ -679,6 +681,7 @@ const OrderRepo = {
             itemsSummary: data.itemsSummary || '',
             items: typeof data.items === 'string' ? JSON.parse(data.items || '[]') : data.items || [],
             paymentMethod: data.paymentMethod || '',
+            payment: data.payment,
             status: data.status || 'pendente',
             type: data.type || '',
             userId: data.userId || '',
@@ -1457,6 +1460,20 @@ app.put('/orders/:id', requireAdminWrite, async (req, res) => {
   }
 });
 
+app.post('/orders/:id/payment/confirm', requireAdminWrite, async (req, res) => {
+  try {
+    const current = await OrderRepo.getById(String(req.params.id));
+    if (!current) return res.status(404).json({ error: 'Pedido não encontrado.' });
+    if (!current.payment || !['pix','dinheiro'].includes(current.payment.method) || ['cancelado','recusado','pix_recusado'].includes(current.status)) return res.status(409).json({ error: 'Este pagamento não pode ser confirmado manualmente.' });
+    if (current.payment.paid === true) return res.json({success:true,payment:current.payment});
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) return res.status(503).json({ error: 'Confirmação indisponível no banco legado.' });
+    const payment = {...current.payment, paid:true, verifiedAt:new Date().toISOString()};
+    if (db) await updateDoc(doc(db,'orders',current.id), {payment});
+    else await OrderRepo.update({...current,payment});
+    res.json({success:true,payment});
+  } catch { res.status(503).json({error:'Não foi possível confirmar o recebimento. Tente novamente.'}); }
+});
+
 app.patch('/orders/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
@@ -1464,6 +1481,7 @@ app.patch('/orders/:id/status', async (req, res) => {
     if (hasAdminSession(req) && req.headers['x-vovo-admin'] !== '1') return res.status(403).json({ error: 'Solicitação inválida.' });
     const current = await OrderRepo.getById(String(req.params.id));
     if (!current) return res.status(404).json({ error: 'Pedido não encontrado.' });
+    if (status === 'concluido' && current.payment?.method === 'dinheiro' && current.payment.paid !== true) return res.status(409).json({error:'Confirme o dinheiro recebido antes de finalizar o pedido.'});
     if (!hasAdminSession(req) && (status !== 'cancelado' || current.status !== 'pendente')) {
       return res.status(403).json({ error: 'O preparo já começou. Entre em contato com a loja.' });
     }
@@ -1498,6 +1516,7 @@ app.post('/orders/:id/receive', async (req, res) => {
     if (!hasOrderAccess(req)) return res.status(401).json({ error: 'Este aparelho não tem acesso a esse pedido.' });
     const order = await OrderRepo.getById(String(req.params.id));
     if (!order || !['entrega', 'saiu_entrega'].includes(order.status)) return res.status(409).json({ error: 'O pedido ainda não saiu para entrega.' });
+    if (order.payment?.method === 'dinheiro' && order.payment.paid !== true) return res.status(409).json({error:'A loja ainda precisa confirmar o dinheiro recebido. Entre em contato para concluir.'});
     await OrderRepo.updateStatus(String(req.params.id), 'concluido');
     res.json({ success: true });
   } catch (e) {

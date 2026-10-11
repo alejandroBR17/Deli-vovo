@@ -11,7 +11,7 @@ import { AdminDialog } from '../components/AdminDialog';
 import { ProductEditor, CouponEditor } from '../components/AdminEditors';
 import { DeliverySettings, HoursSettings, AddressSettings, PaymentSettings } from '../components/AdminSettings';
 import { parseMoneyInput, formatMoneyInput } from '../src/utils/money-input';
-import { formatWhatsApp } from '../src/utils/phone-input';
+import { PhoneInput } from '../components/PhoneInput';
 
 
 export default function AdminPage() {
@@ -48,7 +48,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<any>(null);
   
   const [isCatMenuOpen, setIsCatMenuOpen] = useState(false);
-  const [verifiedPayments, setVerifiedPayments] = useState<Record<string, boolean>>({});
+
   const [financeData, setFinanceData] = useState<any>(null);
   const [financeError, setFinanceError] = useState('');
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
@@ -509,6 +509,24 @@ export default function AdminPage() {
   };
   const settingsProps = {configs,saved:savedConfigs,onChange:setConfigs,onSave:handleUpdateConfig,onSaveMany:handleUpdateConfigs,saving:syncing};
 
+  const confirmPayment = async (orderId: string) => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const response = await adminFetch(`/orders/${orderId}/payment/confirm`, {method:'POST'});
+      const result = await response.json();
+      if (!response.ok || result.success !== true) throw new Error(result.error || 'Recebimento não confirmado.');
+      setOrders(previous => previous.map(order => order.id === orderId ? {...order,payment:result.payment} : order));
+      showMsg('Recebimento confirmado e salvo.', 'success');
+    } catch(error) { showMsg(error instanceof Error ? error.message : 'Não foi possível confirmar.', 'error'); }
+    finally {setSyncing(false);}
+  };
+  const cashReceipt = (order: any, isCash: boolean, isVerified: boolean) => isCash && !isVerified && !['concluido','cancelado','recusado'].includes(order.status) && <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 space-y-2">
+    <p className="text-sm font-bold">Dinheiro na entrega</p>
+    <p className="text-xs text-zinc-400">Pode preparar e sair para entrega. Confirme somente quando receber o dinheiro.</p>
+    <button type="button" disabled={syncing} onClick={() => confirmPayment(order.id)} className="w-full p-3 rounded-xl bg-green-600 text-white font-bold text-sm disabled:opacity-50">Confirmar dinheiro recebido</button>
+  </div>;
+
   const updateStatusAPI = async (orderId: string, newStatus: string) => {
     // Atualização Otimista: Muda na hora pra Vovó não esperar
     const oldOrders = [...orders];
@@ -831,7 +849,8 @@ export default function AdminPage() {
 
                 const isPix = String(o.paymentMethod).toLowerCase().includes('pix');
                 const isOnlineCard = String(o.paymentMethod).toLowerCase().includes('cartão online');
-                const isVerified = verifiedPayments[o.id] || isOnlineCard;
+                const isCash = o.payment?.method === 'dinheiro' || String(o.paymentMethod).toLowerCase().includes('dinheiro');
+                  const isVerified = o.payment?.paid === true;
 
                 return (
                   <div key={o.id} className={`w-[85vw] [380px] h-full flex flex-col rounded-[2rem] [2.5rem] border-2 ${urgencyColor} transition-all duration-500 animate-in slide-in-from-right-8`}>
@@ -876,6 +895,7 @@ export default function AdminPage() {
                     </div>
 
                     <div className="p-4  pt-0 shrink-0 space-y-4">
+                      {cashReceipt(o, isCash, isVerified)}
                       {/* PIX VERIFICATION IN KDS */}
                       {o.status !== 'concluido' && o.status !== 'entrega' && o.status !== 'cancelado' && !isVerified && isPix && (
                         <div className="p-3 rounded-2xl border bg-amber-500/10 border-amber-500/30 animate-pulse">
@@ -887,7 +907,7 @@ export default function AdminPage() {
                              <button onClick={() => updateStatusAPI(o.id, 'pix_recusado')} className="flex-1 py-2 rounded-xl font-black text-[8px] uppercase tracking-widest bg-white/5 text-vovoh-red border border-vovoh-red/20">
                                Recusar
                              </button>
-                             <button onClick={() => setVerifiedPayments(prev => ({...prev, [o.id]: true}))} className="flex-1 py-2 rounded-xl font-black text-[8px] uppercase tracking-widest bg-amber-500 text-black">
+                             <button onClick={() => confirmPayment(o.id)} className="flex-1 py-2 rounded-xl font-black text-[8px] uppercase tracking-widest bg-amber-500 text-black">
                                Recebido
                              </button>
                            </div>
@@ -907,8 +927,8 @@ export default function AdminPage() {
                       
                       <button 
                         onClick={() => {
-                          if (isPix && !isVerified) {
-                            showMsg("Vovó, confere o Pix primeiro!", "error");
+                          if ((isPix || (isCash && nextStatus === 'concluido')) && !isVerified) {
+                            showMsg(isCash ? 'Confirme o dinheiro recebido antes de finalizar.' : 'Vovó, confere o Pix primeiro!', 'error');
                             return;
                           }
                           updateStatusAPI(o.id, nextStatus);
@@ -1146,7 +1166,8 @@ export default function AdminPage() {
                 visibleOrders.map(o => {
                   const isPix = String(o.paymentMethod).toLowerCase().includes('pix');
                   const isOnlineCard = String(o.paymentMethod).toLowerCase().includes('cartão online');
-                  const isVerified = verifiedPayments[o.id] || isOnlineCard;
+                  const isCash = o.payment?.method === 'dinheiro' || String(o.paymentMethod).toLowerCase().includes('dinheiro');
+                  const isVerified = o.payment?.paid === true;
 
                   return (
                     <div key={o.id} id={'order-' + o.id} className="bg-zinc-900/80 backdrop-blur-xl border border-white/5 p-4 sm:p-8 rounded-[2rem] sm:rounded-[3rem] space-y-4 sm:space-y-6 relative overflow-hidden group">
@@ -1201,6 +1222,7 @@ export default function AdminPage() {
                         </div>
                       </div>
 
+                      {cashReceipt(o, isCash, isVerified)}
                       {/* CAIXA DE ALERTA DE PAGAMENTO */}
                       {o.status !== 'concluido' && o.status !== 'entrega' && o.status !== 'cancelado' && !isVerified && isPix && (
                         <div className="p-3.5 sm:p-4 rounded-2xl border bg-amber-500/10 border-amber-500/30 space-y-3">
@@ -1219,7 +1241,7 @@ export default function AdminPage() {
                              <button onClick={() => updateStatusAPI(o.id, 'pix_recusado')} className="flex-1 py-3 sm:py-3.5 rounded-xl font-black text-[9px] sm:text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-white/5 text-vovoh-red hover:bg-vovoh-red/20 border border-vovoh-red/20">
                                <X size={14} /> Não Recebi
                              </button>
-                             <button onClick={() => setVerifiedPayments(prev => ({...prev, [o.id]: true}))} className="flex-[2] py-3 sm:py-3.5 rounded-xl font-black text-[9px] sm:text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-amber-500 text-black hover:bg-amber-400">
+                             <button onClick={() => confirmPayment(o.id)} className="flex-[2] py-3 sm:py-3.5 rounded-xl font-black text-[9px] sm:text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-amber-500 text-black hover:bg-amber-400">
                                <CheckCircle2 size={14} /> Pix Recebido
                              </button>
                            </div>
@@ -1327,7 +1349,7 @@ export default function AdminPage() {
                                         return;
                                       }
 
-                                      if (flow.nextStatus === 'entrega' && !isVerified) {
+                                      if (flow.nextStatus === 'entrega' && !isVerified && !isCash) {
                                         showMsg("Vovó, confirme o pagamento/troco antes da entrega!", "error");
                                         return;
                                       }
@@ -1384,12 +1406,12 @@ export default function AdminPage() {
                                   </button>
                                   
                                   <button onClick={() => {
-                                    if (!isVerified) {
+                                    if (!isVerified && !isCash) {
                                       showMsg("Vovó, confirme o pagamento/troco antes da entrega!", "error");
                                       return;
                                     }
                                     updateStatusAPI(o.id, 'entrega');
-                                  }} className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${o.status === 'entrega' ? 'bg-vovoh-red text-white' : (!isVerified ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50' : 'bg-white/5 hover:bg-white/10 text-zinc-400')}`}>
+                                  }} className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${o.status === 'entrega' ? 'bg-vovoh-red text-white' : (!isVerified && !isCash ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50' : 'bg-white/5 hover:bg-white/10 text-zinc-400')}`}>
                                     Entrega
                                   </button>
                                   
@@ -1515,11 +1537,11 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     <label htmlFor="store-whatsapp" className="text-sm font-bold">WhatsApp da loja (com DDD)</label>
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <input 
-                        type="text" 
+                      <PhoneInput
+                        type="tel"
                         className="flex-grow p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        id="store-whatsapp" inputMode="tel" value={formatWhatsApp(configs.whatsapp_number || '')}
-                        onChange={e => setConfigs({...configs, whatsapp_number: e.target.value.replace(/\D/g,'')})}
+                        id="store-whatsapp" value={configs.whatsapp_number || ''}
+                        onValueChange={phone => setConfigs({...configs, whatsapp_number: phone})}
                       />
                       <button onClick={() => handleUpdateConfig('whatsapp_number', configs.whatsapp_number)} className="px-6 py-4 sm:py-0 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase shrink-0">Salvar</button>
                     </div>

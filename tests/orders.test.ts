@@ -192,3 +192,26 @@ test('JSON product options complete paid-distance delivery for Pix and cash',asy
     assert.equal(stored.total,Math.round((13.5+fee)*100)/100);assert.equal(stored.items[0].variation.price,2);assert.equal(stored.items[0].additionals[0].price,1.5);assert.equal(stored.payment.paid,false);
   }
 });
+
+test('cash can leave for delivery before receipt but completion requires persistent admin confirmation',async()=>{
+ const stored=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8'));
+ const cash=stored.find((item:any)=>item.payment?.method==='dinheiro'&&item.status==='pendente');assert.ok(cash);
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ const receipt='/orders/'+cash.id+'/payment/confirm';const status='/orders/'+cash.id+'/status';
+ assert.equal((await request(receipt,{})).status,403);
+ assert.equal((await request(receipt,{}, {Cookie:customerCookie})).status,403);
+ assert.equal((await request(receipt,{}, {Cookie:adminCookie})).status,403);
+ for(const value of ['preparando','forno','entrega'])assert.equal((await request(status,{status:value},headers,'PATCH')).status,200);
+ assert.equal((await request(status,{status:'concluido'},headers,'PATCH')).status,409);
+ const {orderToken}=await import('../server/admin-auth');
+ assert.equal((await request('/orders/'+cash.id+'/receive',{}, {'X-Order-Token':orderToken(cash.id)})).status,409);
+ const response=await request(receipt,{method:'stripe',paid:false},headers);assert.equal(response.status,200);
+ const payment=(await response.json()).payment;assert.equal(payment.method,'dinheiro');assert.equal(payment.paid,true);assert.ok(payment.verifiedAt);
+ assert.deepEqual((await (await request(receipt,{},headers)).json()).payment,payment);
+ const persisted=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((item:any)=>item.id===cash.id);
+ assert.equal(persisted.status,'entrega');assert.deepEqual(persisted.payment,payment);
+ assert.equal((await request(status,{status:'concluido'},headers,'PATCH')).status,200);
+ assert.equal((await request('/orders/missing/payment/confirm',{},headers)).status,404);
+ const pix=stored.find((item:any)=>item.payment?.method==='pix'&&item.status==='cancelado');assert.ok(pix);
+ assert.equal((await request('/orders/'+pix.id+'/payment/confirm',{},headers)).status,409);
+});
