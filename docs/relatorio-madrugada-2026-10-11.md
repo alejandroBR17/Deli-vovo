@@ -55,12 +55,20 @@ Verificação online passou: Turso health/catálogo vazio, configurações públ
 
 Para a última rodada das 05h15: revisar apenas pendências com progresso seguro e demonstrável; não repetir testes/implantações sem mudança que justifique. A prévia consolidada já está pronta para revisão pelo responsável. Encerrar a automação de retomadas ao concluir essa última rodada e preservar o relatório das 06h.
 
-## Prioridades independentes para as próximas rodadas
+## Rodada 05h15 — opções de produto pelo teclado
+
+Foi identificado um problema concreto: rádios de variação e caixas de adicionais usavam display none e não podiam receber foco pelo teclado. Agora permanecem visualmente discretos, acessíveis por Tab/setas/Espaço, com indicação de foco na opção. O nome do produto e a ampliação da foto também são botões acessíveis. Os modais de opções e foto ganharam nomes, identificação de diálogo, foco inicial, circulação de Tab/Shift+Tab dentro do diálogo, fechamento por Escape e retorno ao botão que os abriu. A alteração está restrita a esses dois modais; não representa uma auditoria completa de acessibilidade do checkout/painel.
+
+Validação: build local passou. Em Edge, 320, 390 e 1365 px passaram: abertura por Enter/Espaço, foco inicial no fechamento, Tab/Shift+Tab circulando dentro do modal, setas selecionando a variação Grande, Espaço selecionando Queijo e ambos chegando à sacola; Escape fecha opções/foto e devolve o foco ao botão original. Sem erros JavaScript ou rolagem horizontal inesperada. Dados fictícios usados apenas nas respostas simuladas do navegador; nenhum catálogo/pedido remoto alterado. O helper `verify-product-keyboard.cjs` fica fora do repositório. A primeira tentativa do helper usava um seletor de texto incorreto para o adicional e foi interrompida; a execução concluída acima usa o texto real da sacola. A suíte de API/SQLite não foi repetida por não haver alteração nesses caminhos; permanece o resultado de 21 testes da rodada 03h15.
+
+Preparar uma última prévia com esta melhoria funcional e registrar seu resultado real. Ao concluir, encerrar a automação de retomadas e deixar somente o relatório das 06h pendente.
+
+## Prioridades após revisão do responsável
 
 1. Revisar fluxo de configuração inicial do painel: facilitar identificar cardápio/localização/frete/horários/Pix pendentes, sem criar valores de negócio inventados. O endereço foi confirmado na conversa, mas não deve ser colocado em arquivos Git ou HTML público. A apresentação pública continua Curitiba - PR.
 2. Revisar cotação/checkout e tratamento de falhas de rede. A disponibilidade exibida já foi corrigida para America/Sao_Paulo; a validação de horários do lado servidor continua pendente, considerando agendamento e pedidos já pagos. Checar validações essenciais sem cobrar pagamentos reais. Priorizar bugs demonstráveis e testes de borda, sem reescrever tudo sem necessidade.
 3. Revisar consumo e entradas de telemetria, cache e polling. Evitar consultas sem limites e gravações desnecessárias. Rate limits em memória são por instância; não afirmar proteção global de cota.
-4. Melhorar acessibilidade e operação pelo teclado nos produtos/modais e clareza dos avisos. Conferir PWA: manifest usa ícones externos e index.html tem URLs de compartilhamento de outro domínio (delicias-da-vovo.vercel.app); usar o destino confirmado quando pertinente e verificar imagens/instalabilidade. Android bloqueado depende do aparelho do responsável e não pode ser anunciado como validado.
+4. Continuar acessibilidade no checkout/painel e testar avisos/instalação no Android físico. Opções/fotos de produtos e manifest/ícones/metadados PWA foram corrigidos nesta madrugada. Android bloqueado depende do aparelho do responsável e não pode ser anunciado como validado.
 5. Completar somente mudanças que passem nos testes adequados, atualizar draft PR #1 e preparar uma prévia no único projeto delivovo. Evitar múltiplas implantações sem mudança funcional.
 
 ## Contexto de execução

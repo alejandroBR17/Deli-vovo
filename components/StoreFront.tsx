@@ -1,5 +1,6 @@
 import { startVisiblePolling } from '../src/utils/visible-polling';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useModalFocus } from '../src/hooks/use-modal-focus';
 import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL } from '../constants/index';
 import { GrandmaLoader } from './UI';
@@ -13,6 +14,10 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
   const [observation, setObservation] = useState("");
   const [prepTime, setPrepTime] = useState<any>(null);
   const [selectedZoomImage, setSelectedZoomImage] = useState<string | null>(null);
+  const productDialog = useRef<HTMLDivElement>(null);
+  const imageDialog = useRef<HTMLDivElement>(null);
+  useModalFocus(productDialog, Boolean(selectedProduct), () => setSelectedProduct(null));
+  useModalFocus(imageDialog, Boolean(selectedZoomImage), () => setSelectedZoomImage(null));
 
   const FAQS = [
     { q: "Qual o tempo médio de entrega?", a: `Nosso tempo médio é de ${dynamicConfigs?.delivery_time || '40 a 60 minutos'}, pois fritamos tudo na hora para chegar bem quentinho!` },
@@ -184,12 +189,12 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {products.filter((p: any) => activeCat === 'todos' || p.category === activeCat).map((p: any) => (
               <div key={p.id} className="group bg-white rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-3.5 hover:border-vovoh-red/30 hover:shadow-xl transition-all duration-300 items-stretch">
-                <div 
+                <button type="button" aria-label={`Ampliar foto de ${p.name}`}
                   className="w-24 h-24 md:w-28 md:h-28 flex-shrink-0 rounded-xl md:rounded-2xl overflow-hidden bg-vovoh-cream relative cursor-zoom-in group/img self-center"
                   onClick={() => setSelectedZoomImage(p.image || PLACEHOLDER_IMG)}
                 >
                    <img src={p.image || PLACEHOLDER_IMG} className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700" alt={p.name} />
-                </div>
+                </button>
                 
                 <div 
                   className="flex flex-col flex-grow justify-between py-0.5 md:py-1 cursor-pointer min-w-0"
@@ -206,7 +211,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                 >
                    <div className="flex flex-col h-full">
                      <div className="flex justify-between items-start gap-2">
-                        <h4 className="text-sm md:text-base font-black text-vovoh-dark leading-tight line-clamp-2">{p.name}</h4>
+                        <h4 className="text-sm md:text-base font-black text-vovoh-dark leading-tight line-clamp-2"><button type="button" aria-label={`Ver opções de ${p.name}`} className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red">{p.name}</button></h4>
                         {p.oldPrice && (
                           <span className="bg-vovoh-gold text-white px-1.5 py-0.5 rounded-md text-[8px] md:text-[9px] font-black uppercase tracking-wider shadow-sm shrink-0">Promo</span>
                         )}
@@ -241,11 +246,12 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
       </main>
 
       {selectedZoomImage && (
-        <div 
+        <div ref={imageDialog} role="dialog" aria-modal="true" aria-label="Foto ampliada do produto" tabIndex={-1}
           className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4 animate-in fade-in zoom-in duration-300"
           onClick={() => setSelectedZoomImage(null)}
         >
           <button 
+            aria-label="Fechar foto ampliada"
             className="absolute top-6 right-6 w-12 h-12 bg-white/10 hover:bg-white0 text-white rounded-full flex items-center justify-center transition-all z-[301]"
             onClick={() => setSelectedZoomImage(null)}
           >
@@ -265,7 +271,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         <div className="fixed inset-0 z-[500] flex flex-col justify-end md:justify-center items-center p-0 md:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setSelectedProduct(null)} />
           
-          <div className="relative w-full md:max-w-xl bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full md:zoom-in-95 max-h-[90dvh] md:max-h-[85dvh] overflow-hidden z-10">
+          <div ref={productDialog} role="dialog" aria-modal="true" aria-labelledby="product-options-title" tabIndex={-1} className="relative w-full md:max-w-xl bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full md:zoom-in-95 max-h-[90dvh] md:max-h-[85dvh] overflow-hidden z-10">
             
             {/* Drag Handle for Mobile */}
             <div className="w-full flex md:hidden justify-center items-center h-6 bg-white shrink-0 cursor-pointer" onClick={() => setSelectedProduct(null)}>
@@ -276,10 +282,10 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                <div className="h-48 md:h-56 w-full bg-vovoh-cream relative">
                   <img src={selectedProduct.image || PLACEHOLDER_IMG} className="w-full h-full object-cover" alt={selectedProduct.name} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                  <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-black/30 backdrop-blur-md p-2 rounded-full hover:bg-black/50 text-white transition-all"><X size={20} /></button>
+                  <button aria-label="Fechar opções do produto" onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-black/30 backdrop-blur-md p-2 rounded-full hover:bg-black/50 text-white transition-all"><X size={20} /></button>
                </div>
                <div className="absolute bottom-0 left-0 w-full p-6 text-white">
-                  <h3 className="text-2xl md:text-3xl font-black leading-tight shadow-black drop-shadow-md">{selectedProduct.name}</h3>
+                  <h3 id="product-options-title" className="text-2xl md:text-3xl font-black leading-tight shadow-black drop-shadow-md">{selectedProduct.name}</h3>
                   <p className="text-xs md:text-sm font-medium opacity-90 line-clamp-2 mt-1 drop-shadow-sm">{selectedProduct.description}</p>
                </div>
             </div>
@@ -291,9 +297,9 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                     <span className="w-1 h-4 bg-vovoh-red rounded-full"></span>
                     Escolha uma opção
                   </label>
-                  <div className="space-y-2">
+                  <div role="radiogroup" aria-label="Escolha uma opção" className="space-y-2">
                     {selectedProduct.variations.map((v: any, idx: number) => (
-                      <label key={idx} className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all ${selectedVariation?.name === v.name ? 'border-vovoh-red bg-red-50 shadow-sm' : 'border-gray-100 hover:bg-gray-50'}`}>
+                      <label key={idx} className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all focus-within:ring-2 focus-within:ring-vovoh-red ${selectedVariation?.name === v.name ? 'border-vovoh-red bg-red-50 shadow-sm' : 'border-gray-100 hover:bg-gray-50'}`}>
                         <div className="flex items-center gap-3">
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedVariation?.name === v.name ? 'border-vovoh-red' : 'border-gray-300'}`}>
                             {selectedVariation?.name === v.name && <div className="w-2.5 h-2.5 bg-vovoh-red rounded-full" />}
@@ -304,7 +310,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                         <input 
                           type="radio" 
                           name="variation" 
-                          className="hidden" 
+                          className="sr-only"
                           checked={selectedVariation?.name === v.name}
                           onChange={() => setSelectedVariation(v)}
                         />
@@ -324,7 +330,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                     {selectedProduct.additionals.map((add: any, idx: number) => {
                       const isSelected = selectedAdditionals.some(a => a.name === add.name);
                       return (
-                        <label key={idx} className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'border-vovoh-gold bg-amber-50 shadow-sm' : 'border-gray-100 hover:bg-gray-50'}`}>
+                        <label key={idx} className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all focus-within:ring-2 focus-within:ring-vovoh-gold ${isSelected ? 'border-vovoh-gold bg-amber-50 shadow-sm' : 'border-gray-100 hover:bg-gray-50'}`}>
                           <div className="flex items-center gap-3">
                             <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-vovoh-gold bg-vovoh-gold' : 'border-gray-300'}`}>
                               {isSelected && <Check size={14} className="text-white" />}
@@ -334,7 +340,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                           {add.price !== 0 && <span className="text-xs font-black text-vovoh-gold">{add.price > 0 ? '+' : '-'} R$ {Math.abs(Number(add.price)).toFixed(2)}</span>}
                           <input 
                             type="checkbox" 
-                            className="hidden" 
+                            className="sr-only"
                             checked={isSelected}
                             onChange={(e) => {
                               if (e.target.checked) {
