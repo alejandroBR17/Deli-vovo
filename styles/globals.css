@@ -65,3 +65,16 @@
 .StripeElement {
   width: 100%;
 }
+/* Dynamic viewport follows browser chrome and the on-screen keyboard. */
+html, body, #root { min-width: 0; }
+button, input, select, textarea { max-width: 100%; }
+@media (max-width: 767px) {
+  .fixed input, .fixed select, .fixed textarea { font-size: 16px; }
+  .safe-area-nav {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    height: calc(5rem + env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet, .md\:animate-drawer { animation: none; }
+}

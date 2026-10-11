@@ -258,7 +258,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         <div className="fixed inset-0 z-[500] flex flex-col justify-end md:justify-center items-center p-0 md:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setSelectedProduct(null)} />
           
-          <div className="relative w-full md:max-w-xl bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full md:zoom-in-95 max-h-[90vh] md:max-h-[85vh] overflow-hidden z-10">
+          <div className="relative w-full md:max-w-xl bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full md:zoom-in-95 max-h-[90dvh] md:max-h-[85dvh] overflow-hidden z-10">
             
             {/* Drag Handle for Mobile */}
             <div className="w-full flex md:hidden justify-center items-center h-6 bg-white shrink-0 cursor-pointer" onClick={() => setSelectedProduct(null)}>

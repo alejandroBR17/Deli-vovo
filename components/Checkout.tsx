@@ -14,6 +14,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   const [couponError, setCouponError] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [deliveryDistance, setDeliveryDistance] = useState(0);
+  const [deliveryProof, setDeliveryProof] = useState('');
   const [calculatingFee, setCalculatingFee] = useState(false);
   const [feeCalculated, setFeeCalculated] = useState(false);
   const [addressError, setAddressError] = useState('');
@@ -52,6 +53,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
       const newAddress = `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}`;
       setCustomer((prev: any) => ({ ...prev, address: newAddress }));
     }
+    setFeeCalculated(false); setDeliveryProof('');
   }, [street, number, neighborhood, city, state, cep]);
 
   const searchCep = async () => {
@@ -156,45 +158,20 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 
   const calculateDeliveryFee = async () => {
     setAddressError('');
-    if (!customer.address) {
+    if (!street.trim() || !number.trim() || !city.trim()) {
       setAddressError("Por favor, preencha seu endereço completo primeiro.");
       return;
     }
     setCalculatingFee(true);
     try {
-      // Busca mais precisa usando os campos separados
-      const params = new URLSearchParams({
-        format: 'json',
-        street: `${number} ${street}`,
-        city: city,
-        state: state,
-        country: 'Brazil',
-        postalcode: cep.replace(/\D/g, '')
+      const quote = await fetch(`${GAS_API_URL}/delivery/quote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: customer.address }),
       });
-
-      let res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
-      let data = await res.json();
-      
-      // Fallback para busca genérica se a estruturada falhar
-      if (!data || data.length === 0) {
-        const searchQuery = `${street}, ${number}, ${city}, ${state}, Brasil`;
-        res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-        data = await res.json();
-      }
-      
-      if (data && data.length > 0) {
-        const quote = await fetch(`${GAS_API_URL}/delivery/quote`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ latitude: data[0].lat, longitude: data[0].lon }),
-        });
-        const result = await quote.json();
-        if (!quote.ok) throw new Error(result.error || 'Não foi possível calcular o frete.');
-        setDeliveryDistance(result.distance);
-        setDeliveryFee(result.fee);
-        setFeeCalculated(true);
-      } else {
-        setAddressError("Não conseguimos encontrar seu endereço. Por favor, seja mais específico (Rua, Número, Cidade).");
-      }
+      const result = await quote.json();
+      if (!quote.ok) throw new Error(result.error || 'Não foi possível calcular o frete.');
+      setDeliveryDistance(result.distance); setDeliveryFee(result.fee);
+      setDeliveryProof(result.token); setFeeCalculated(true);
     } catch (e) {
       setFeeCalculated(false); setDeliveryFee(0);
       setAddressError(e instanceof Error ? e.message : 'Erro ao calcular o frete. Tente novamente.');
@@ -222,7 +199,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     if (isScheduled && scheduledDate && scheduledTime) {
       scheduledTo = `${scheduledDate}T${scheduledTime}:00`;
     }
-    return await onOrder({ ...paymentDetails, finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, scheduledTo });
+    return await onOrder({ ...paymentDetails, finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, deliveryToken: deliveryProof, scheduledTo });
     } finally { submitLock.current = false; setSubmitting(false); }
   };
 
@@ -230,7 +207,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
+      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
@@ -241,22 +218,22 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
             <div className="w-10 h-10 md:w-12 md:h-12 bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-100"><ShoppingCart size={20}/></div>
             <h3 className="text-xl md:text-2xl font-black text-vovoh-dark">Sua Sacola</h3>
           </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-colors"><X size={20}/></button>
+          <button aria-label="Fechar sacola" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-colors"><X size={20}/></button>
         </header>
 
-        <div ref={scrollRef} className="flex-grow overflow-y-auto p-6  space-y-8 bg-[#F9F9F9] no-scrollbar pb-32 ">
+        <div ref={scrollRef} className="flex-grow overflow-y-auto min-h-0 p-4 sm:p-6 space-y-8 bg-[#F9F9F9] no-scrollbar pb-32 ">
           
           {(step === 'cart' || step === 'details' || step === 'payment') && (
-            <div className="bg-gradient-to-br from-vovoh-gold to-amber-600 p-6  rounded-[2rem] text-white shadow-lg relative overflow-hidden shrink-0">
+            <div className="bg-gradient-to-br from-vovoh-gold to-amber-600 p-4 sm:p-6  rounded-[2rem] text-white shadow-lg relative overflow-hidden shrink-0">
                <div className="absolute -top-4 -right-4 opacity-10 rotate-12"><Award size={100} /></div>
                <div className="relative z-10 space-y-4">
                   <div className="flex justify-between items-center">
                     <h4 className="font-black text-[10px]  uppercase tracking-widest">Cartão Fidelidade</h4>
                     <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-black">{fidelidade}/10</span>
                   </div>
-                  <div className="flex gap-1.5 ">
+                  <div className="grid grid-cols-10 gap-1.5">
                     {[...Array(10)].map((_, i) => (
-                      <div key={i} className={`w-6 h-6   rounded-full border-2 border-white/30 flex items-center justify-center transition-all ${i < fidelidade ? 'bg-white text-vovoh-gold scale-110 shadow-lg' : 'bg-transparent text-white/30'}`}>
+                      <div key={i} className={`w-full aspect-square rounded-full border-2 border-white/30 flex items-center justify-center transition-all ${i < fidelidade ? 'bg-white text-vovoh-gold scale-110 shadow-lg' : 'bg-transparent text-white/30'}`}>
                         {i < fidelidade ? <Heart size={12} fill="currentColor" /> : <Star size={10} />}
                       </div>
                     ))}
@@ -277,9 +254,9 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 <>
                   <div className="space-y-3">
                     {cart.map((item:any, index: number) => (
-                      <div key={`${item.id}-${index}`} className="bg-white p-4 rounded-[1.5rem] flex items-center gap-4 shadow-sm border border-gray-100">
-                        <img src={item.image || PLACEHOLDER_IMG} className="w-16 h-16 rounded-xl object-cover bg-vovoh-cream" />
-                        <div className="flex-grow">
+                      <div key={`${item.id}-${index}`} className="bg-white p-3 sm:p-4 rounded-[1.5rem] flex flex-wrap min-[400px]:flex-nowrap items-center gap-2 sm:gap-4 shadow-sm border border-gray-100">
+                        <img src={item.image || PLACEHOLDER_IMG} className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 rounded-xl object-cover bg-vovoh-cream" />
+                        <div className="flex-1 min-w-0 basis-24 break-words">
                           <h4 className="font-black text-sm text-vovoh-dark leading-tight mb-1">{item.name}</h4>
                           {item.variation && <p className="text-[10px] font-bold text-gray-500 mb-1">Opção: {item.variation.name}</p>}
                           {item.additionals && item.additionals.length > 0 && (
@@ -290,7 +267,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                           {item.observation && <p className="text-[10px] font-bold text-gray-400 italic mb-1">Obs: {item.observation}</p>}
                           <p className="text-vovoh-red font-black text-sm">R$ {(parseFloat(item.price) + (item.variation ? parseFloat(item.variation.price) : 0) + (item.additionals ? item.additionals.reduce((sum:number, a:any) => sum + parseFloat(a.price), 0) : 0)).toFixed(2)}</p>
                         </div>
-                        <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="flex shrink-0 ml-auto flex-col items-center justify-center gap-2">
                            <div className="flex items-center gap-3 bg-[#F9F9F9] px-3 py-1.5 rounded-xl border border-gray-100">
                              <button onClick={() => setCart((prev:any) => prev.map((i:any, idx:number) => idx === index ? {...i, quantity: Math.max(1, i.quantity - 1)} : i))} className="font-black text-vovoh-gold text-sm px-1">-</button>
                              <span className="font-black text-xs w-2 text-center">{item.quantity}</span>
@@ -311,7 +288,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                             value={couponCode}
                             onChange={e => setCouponCode(e.target.value)}
                             placeholder="Ex: PROMO10"
-                            className="flex-grow p-4 bg-white rounded-xl border border-gray-200 font-bold text-xs uppercase outline-none focus:border-vovoh-red transition-all"
+                            className="flex-1 min-w-0 p-4 bg-white rounded-xl border border-gray-200 font-bold text-xs uppercase outline-none focus:border-vovoh-red transition-all"
                           />
                           <button onClick={handleApplyCoupon} className="px-6 bg-vovoh-dark text-white font-black rounded-xl text-[10px] uppercase tracking-widest active:scale-95 transition-all">Aplicar</button>
                        </div>
@@ -535,7 +512,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                  {method === 'pix' ? (
                    <PixBox pixKey={pixKey} total={total} onComplete={handleOrder} />
                  ) : method === 'cartao_online' ? (
-                   <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} />
+                   <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer }} />
                  ) : (
                    <button onClick={handleOrder} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
                      Confirmar e Enviar Pedido
@@ -611,7 +588,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
     <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
+      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
@@ -643,11 +620,11 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
             <button onClick={onRefresh} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:rotate-180 duration-500">
               <RefreshCw size={20} />
             </button>
-            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark transition-colors active:scale-90"><X size={20}/></button>
+            <button aria-label="Fechar sacola" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark transition-colors active:scale-90"><X size={20}/></button>
           </div>
         </header>
 
-        <div className="flex-grow overflow-y-auto p-6  space-y-8 bg-[#F5F5F7] no-scrollbar pb-32 ">
+        <div className="flex-grow overflow-y-auto min-h-0 p-4 sm:p-6 space-y-8 bg-[#F5F5F7] no-scrollbar pb-32 ">
             
             {!selectedOrder ? (
               <div className="space-y-4">

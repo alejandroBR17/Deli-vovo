@@ -73,7 +73,7 @@ test('API stores orders durably, isolates images from catalog responses and prot
     assert.equal(media.status,200); assert.match(media.headers.get('cache-control')!,/immutable/);
     assert.equal(media.headers.get('content-type'),'image/png');
     const id=randomUUID(); const nonce=randomUUID();
-    const body={id,customer:{name:'Teste',phone:'41999999999',address:'Endereço fictício'},items:[{id:'test-product',quantity:1}],total:10};
+    const body={id,type:'retirada',customer:{name:'Teste',phone:'41999999999',address:'Endereço fictício'},items:[{id:'test-product',quantity:1}],total:10};
     const receipt=await request('/orders',body,{'X-Order-Request':nonce});
     assert.equal(receipt.status,200); assert.equal((await receipt.json()).success,true);
     assert.equal((await request('/orders',body,{'X-Order-Request':nonce})).status,200);

@@ -176,7 +176,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
     <div className="fixed inset-0 z-[600] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={user ? onClose : undefined} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden border-t md:border-t-0 md:border-l border-white/20 z-10">
+      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden border-t md:border-t-0 md:border-l border-white/20 z-10">
         
         {/* Drag Handle Mobile */}
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer rounded-t-[2.5rem]" onClick={user ? onClose : undefined}>
@@ -196,9 +196,9 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
           )}
         </header>
 
-        <div className="flex-grow overflow-y-auto p-6  space-y-8 bg-[#F9F9F9] no-scrollbar relative">
+        <div className="flex-grow min-h-0 overflow-y-auto overflow-x-hidden p-6 space-y-8 bg-[#F9F9F9] no-scrollbar relative">
           {/* Background Decor */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-vovoh-red/5 rounded-full blur-3xl -z-0 pointer-events-none translate-x-1/2 -translate-y-1/2"></div>
+          <div className="absolute inset-0 overflow-hidden pointer-events-none"><div className="absolute top-0 right-0 w-64 h-64 bg-vovoh-red/5 rounded-full blur-3xl -z-0 translate-x-1/2 -translate-y-1/2" /></div>
           
           {user ? (
             <div className="space-y-6 animate-in fade-in zoom-in-95">

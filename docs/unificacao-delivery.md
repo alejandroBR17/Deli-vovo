@@ -18,6 +18,6 @@ As correções incluem sessões verificadas pela API, pedidos confirmados após 
 
 ## Publicação ainda pendente
 
-As duas versões em produção permanecem preservadas. O banco Turso exclusivo foi preparado no projeto antigo `delivovo`; conectar/configurar o projeto Vercel `deli-vovo` antes de publicar esta branch. O responsável escolheu começar vazio, sem importar dados antigos.
+As duas versões em produção permanecem preservadas. O responsável confirmou que o destino da versão unificada será somente o projeto Vercel `delivovo`, com o banco Turso exclusivo já conectado. O nome do repositório `Deli-vovo` indica a origem do código, não um segundo destino de publicação. O responsável escolheu começar vazio, sem importar dados antigos.
 
-Ainda são necessários o cardápio real, configurações operacionais, senha/segredo administrativo, chaves VAPID e teste no Android com navegador fechado e tela bloqueada. Pagamentos e validação integral de preços, variações, cupons e frete no servidor permanecem pendentes. Ver [migracao-turso.md](migracao-turso.md).
+Ainda são necessários o cardápio real, configurações operacionais, senha/segredo administrativo e chaves VAPID no ambiente remoto, além do teste no Android com navegador fechado e tela bloqueada. A validação dos preços, variações, adicionais, cupons e frete no servidor foi implementada na etapa seguinte; testes de pagamentos externos continuam pendentes. Ver [migracao-turso.md](migracao-turso.md) e [responsividade-checkout.md](responsividade-checkout.md).

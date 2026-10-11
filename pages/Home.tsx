@@ -644,7 +644,7 @@ export default function Home() {
     const fullAddress = customer.address;
 
     const newOrder: Order = {
-      id: pendingSubmissionId.current ||= crypto.randomUUID(),
+      id: extraDetails?.orderId || (pendingSubmissionId.current ||= crypto.randomUUID()),
       items: cart, 
       total: extraDetails?.finalTotal ?? cart.reduce((a,b) => a + (Number(b.price) * b.quantity), 0),
       status: 'pendente', 
@@ -681,7 +681,7 @@ export default function Home() {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Order-Request': pendingSubmissionKey.current ||= crypto.randomUUID() },
       body: JSON.stringify({
         ...newOrder, userId: user ? user.id : '', paymentMethod: paymentDetails,
-        itemsSummary, paymentIntentId: extraDetails?.id,
+        itemsSummary, paymentIntentId: extraDetails?.id, coupon: extraDetails?.coupon, deliveryToken: extraDetails?.deliveryToken,
       }),
     });
     const result = await response.json();
@@ -742,7 +742,7 @@ export default function Home() {
   };
 
   const cartTotal = cart.reduce((acc, item) => {
-    const itemPrice = Number(item.price) + (item.variation ? Number(item.variation.price) : 0);
+    const itemPrice = Number(item.price) + (item.variation ? Number(item.variation.price) : 0) + (item.additionals || []).reduce((sum, additional) => sum + Number(additional.price), 0);
     return acc + (itemPrice * item.quantity);
   }, 0);
 
@@ -869,6 +869,7 @@ export default function Home() {
             {/* Desktop Cart Button */}
             <button 
               ref={cartButtonRef}
+              aria-label="Abrir sacola"
               onClick={() => setIsCartOpen(true)} 
               className="hidden md:flex items-center gap-2.5 px-4 py-2 bg-vovoh-red text-white rounded-full font-black text-xs uppercase tracking-wider shadow-md hover:bg-red-600 transition-all active:scale-95 relative"
             >
@@ -966,7 +967,7 @@ export default function Home() {
       </div>
 
       {/* Bottom Navigation Bar (Mobile Only) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-white border-t border-gray-100 flex justify-around items-end h-20 pb-2 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)]">
+      <div className="safe-area-nav md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-white border-t border-gray-100 flex justify-around items-end h-20 pb-2 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)]">
         
         <button onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} className="flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-vovoh-red active:scale-95 transition-all w-16">
           <Store size={22} />

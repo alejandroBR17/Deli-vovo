@@ -1,3 +1,4 @@
+import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout';
 import { internalStoreFields, quoteDelivery } from '../server/delivery';
 import { createHash } from 'node:crypto';
 import express from 'express';
@@ -1231,15 +1232,17 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 
   try {
-    const { amount, metadata } = req.body;
+    const priced = priceOrder(req.body, await ProductRepo.getAll(), await ConfigRepo.getAll());
+    if (!Number.isFinite(req.body.total) || Math.abs(req.body.total - priced.total) > 0.009) return res.status(409).json({ error: 'Os valores mudaram. Reabra a sacola e confira o pedido.' });
+    const orderId = uuidv4();
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100),
+      amount: Math.round(priced.total * 100),
       currency: 'brl',
-      metadata: metadata || {},
+      metadata: { orderId, checkout: checkoutFingerprint(priced, req.body.customer?.address || '') },
       automatic_payment_methods: { enabled: true },
     });
 
-    res.json({ clientSecret: paymentIntent.client_secret });
+    res.json({ clientSecret: paymentIntent.client_secret, orderId });
   } catch (error: any) {
     console.error("Erro no Stripe:", error);
     res.status(500).json({ error: error.message });
@@ -1390,13 +1393,21 @@ app.post('/orders', async (req, res) => {
       if (previousToken !== accessToken && existing.submissionKeyHash !== submissionKeyHash) return res.status(409).json({ error: 'Este pedido já foi recebido. Consulte o acompanhamento.' });
       return res.json({ success: true, id: order.id, accessToken });
     }
+    if (isVercel && !db && !process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('Banco indisponível.');
+    let priced;
+    try { priced = priceOrder(order, await ProductRepo.getAll(), await ConfigRepo.getAll()); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Confira a sacola.' }); }
+    if (Math.abs(order.total - priced.total) > 0.009) return res.status(409).json({ error: 'Os valores mudaram. Reabra a sacola e confira o pedido.' });
+    Object.assign(order, priced);
+    order.date = new Date().toISOString();
     order.submissionKeyHash = submissionKeyHash;
     if (order.payment?.method === 'cartao_online') {
       if (!stripe || typeof order.paymentIntentId !== 'string') return res.status(400).json({ error: 'Pagamento não confirmado.' });
       const payment = await stripe.paymentIntents.retrieve(order.paymentIntentId);
-      if (payment.status !== 'succeeded' || payment.currency !== 'brl' || payment.amount !== Math.round(order.total * 100)) return res.status(400).json({ error: 'Pagamento não corresponde ao pedido.' });
+      if (payment.status !== 'succeeded' || payment.currency !== 'brl' || payment.amount !== Math.round(order.total * 100) || payment.metadata.orderId !== order.id || payment.metadata.checkout !== checkoutFingerprint(priced, order.customer.address)) return res.status(400).json({ error: 'Pagamento não corresponde ao pedido.' });
       order.paymentMethod = `Cartão Online (Pago - ID: ${payment.id})`;
-    } else { order.paymentMethod = 'Pix (Conferir Recibo)'; }
+      order.payment = { method: 'cartao_online', paid: true };
+    } else { order.paymentMethod = 'Pix (Conferir Recibo)'; order.payment = { method: 'pix', paid: false }; }
     order.status = 'pendente'; order.archived = false; order.userId = customerId(req) || '';
     await OrderRepo.create(order);
     
@@ -1618,10 +1629,13 @@ app.patch('/users/:id', requireCustomer, async (req, res) => {
 });
 
 // --- Configurações ---
-app.post('/delivery/quote', async (req, res) => {
+app.post('/delivery/quote', rateLimit({ windowMs: 60000, limit: 10, legacyHeaders: false }), async (req, res) => {
   try {
     const configs = await ConfigRepo.getAll();
-    res.json(quoteDelivery(configs, req.body.latitude, req.body.longitude));
+    quoteDelivery(configs, configs.store_lat, configs.store_lng);
+    const location = await locateDeliveryAddress(req.body.address);
+    const quote = quoteDelivery(configs, location.latitude, location.longitude);
+    res.json({ ...quote, token: deliveryToken(req.body.address, location.latitude, location.longitude) });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Não foi possível calcular o frete.' });
   }

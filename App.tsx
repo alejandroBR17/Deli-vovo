@@ -33,7 +33,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-900 selection:bg-vovoh-red selection:text-white">
       {/* Barra de atalho de portfólio no Desktop */}
-      <div className="hidden desktop:flex fixed top-3 right-4 z-[9999] bg-zinc-900/90 backdrop-blur-md border border-white/10 text-white rounded-full px-4 py-2 shadow-2xl items-center gap-3 text-xs">
+      <div className="hidden desktop:flex fixed bottom-4 left-4 z-[200] bg-zinc-900/90 backdrop-blur-md border border-white/10 text-white rounded-full px-4 py-2 shadow-2xl items-center gap-3 text-xs">
         <span className="flex items-center gap-1.5 font-bold text-zinc-400">
           <ChefHat size={15} className="text-vovoh-red" />
           Portfólio:

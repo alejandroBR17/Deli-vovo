@@ -1100,7 +1100,7 @@ export default function AdminPage() {
 
         {/* Bottom Navigation Bar (Mobile Only) - Professional 5-tab layout */}
         {!isMobileMenuOpen && (
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-zinc-950 border-t border-white/5 flex justify-between items-center h-20 pb-4 px-3 shadow-[0_-8px_30px_rgb(0,0,0,0.8)]">
+          <div className="safe-area-nav md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-zinc-950 border-t border-white/5 flex justify-between items-center h-20 pb-4 px-3 shadow-[0_-8px_30px_rgb(0,0,0,0.8)]">
             <button 
               onClick={() => { setTab('orders'); setIsMobileMenuOpen(false); }} 
               className={`flex-1 flex flex-col items-center justify-center gap-1 p-2 active:scale-90 transition-all ${tab === 'orders' ? 'text-vovoh-red' : 'text-zinc-500 hover:text-white'}`}
@@ -1264,6 +1264,7 @@ export default function AdminPage() {
                         <div className="min-w-0">
                           <p className="text-[10px] font-black text-vovoh-red uppercase tracking-widest mb-0.5">#{String(o.id).slice(-6)}</p>
                           <h4 className="text-lg sm:text-xl font-black truncate">{o.customer?.name}</h4>
+                          <p className="text-xs font-bold text-amber-300">{o.type === 'retirada' ? 'Retirada na loja' : 'Entrega no endereço'}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <p className="text-xs text-zinc-500 font-bold">{o.customer?.phone}</p>
                             {o.customer?.phone && (

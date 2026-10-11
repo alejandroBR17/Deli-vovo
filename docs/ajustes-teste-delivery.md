@@ -9,7 +9,7 @@
 - Campos internos do endereço e coordenadas são omitidos de `/configs` para visitantes. `/delivery/quote` usa a configuração privada da loja, valida coordenadas e raio e devolve somente distância e taxa. O texto público de localização permanece separado.
 - `DELIVERY_PREVIEW_MODE=true` abre somente a prévia local a qualquer hora e apresenta um aviso de pedidos de teste. A Vercel ignora essa opção; horários de produção continuam configuráveis.
 
-O endereço e o ponto fornecidos pelo proprietário foram gravados somente no SQLite da demonstração, sem publicar esses dados no Git. As chaves VAPID fixas da demonstração ficam em arquivo ignorado. A configuração do banco e de VAPID no projeto Vercel correto continua pendente antes de publicar. Os pedidos de teste são locais; não houve cobrança nem notificação enviada a clientes.
+O endereço e o ponto fornecidos pelo proprietário foram gravados somente no SQLite da demonstração, sem publicar esses dados no Git. As chaves VAPID fixas da demonstração ficam em arquivo ignorado. O destino confirmado é o projeto Vercel `delivovo`, com o banco já conectado; acesso administrativo e VAPID ainda precisam ser configurados no ambiente remoto antes de publicar. Os pedidos de teste são locais; não houve cobrança nem notificação enviada a clientes.
 
 A validação usa testes da API para privacidade, cálculo de frete, raio e remoção do chat, além da suíte existente. A inspeção no navegador cobre loja/painel em celular e desktop, pedido completo, endereço editável e mensagens de som/avisos. O geocodificador do endereço fictício do cliente é simulado; a configuração da loja e o cálculo do frete usam a API e o banco locais reais.
 

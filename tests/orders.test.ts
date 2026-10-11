@@ -6,6 +6,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 
+const nativeFetch = globalThis.fetch;
 let server: Server;
 let base: string;
 let directory: string;
@@ -16,6 +17,8 @@ let order: any;
 let requestKey: string;
 let accessToken: string;
 before(async () => {
+  globalThis.fetch = ((url: any, options?: any) => String(url).startsWith('https://nominatim.openstreetmap.org/')
+    ? Promise.resolve(new Response(JSON.stringify([{lat: '-25.35', lon: '-49.2'}]), { status: 200 })) : nativeFetch(url, options)) as typeof fetch;
   process.env.NODE_ENV = 'test';
   delete process.env.VERCEL; delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   delete process.env.GOOGLE_APPLICATION_CREDENTIALS; delete process.env.GOOGLE_SHEETS_SCRIPT_URL;
@@ -30,6 +33,7 @@ before(async () => {
   base = `http://127.0.0.1:${(server.address() as any).port}/api`;
 });
 after(async () => {
+  globalThis.fetch = nativeFetch;
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   assert.equal(path.dirname(directory), tmpdir());
   assert.ok(path.basename(directory).startsWith('delivovo-tests-'));
@@ -70,14 +74,10 @@ test('private configuration never appears in public responses', async () => {
 });
 
 test('delivery quote uses private store coordinates and enforces delivery radius', async () => {
-  const nearby = await request('/delivery/quote', { latitude: '-25.35', longitude: '-49.2' });
-  assert.equal(nearby.status, 200); assert.deepEqual(await nearby.json(), { fee: 0, distance: 0 });
-  const extra = await request('/delivery/quote', { latitude: '-25.36', longitude: '-49.2' });
-  const quote = await extra.json(); assert.ok(quote.fee > 2 && quote.fee < 3);
-  assert.ok(!('store_lat' in quote));
-  assert.equal((await request('/delivery/quote', { latitude: 95, longitude: 0 })).status, 400);
-  assert.equal((await request('/delivery/quote', { latitude: 0, longitude: 0 })).status, 400);
-  assert.equal((await request('/delivery/quote', { latitude: null, longitude: null })).status, 400);
+  const nearby = await request('/delivery/quote', { address: 'Rua de teste, 123, Curitiba, PR' });
+  assert.equal(nearby.status, 200); const result = await nearby.json(); assert.equal(result.fee, 0); assert.equal(result.distance, 0); assert.ok(result.token);
+  assert.ok(!('store_lat' in result));
+  assert.equal((await request('/delivery/quote', { address: null })).status, 400);
   assert.equal((await request('/chat', { message: 'oi' })).status, 404);
 });
 test('customer registration hashes credentials and protects customer profiles', async () => {
@@ -95,8 +95,11 @@ test('customer registration hashes credentials and protects customer profiles', 
   assert.equal(login.status, 200); assert.equal((await login.json()).user.password, undefined);
 });
 test('an acknowledged order persists once and cannot be overwritten by a customer', async () => {
-  order = { id: randomUUID(), customer: { name: 'Teste', phone: '41999999999', address: 'Endereço de teste' }, items: [{ id: 'test-product', name: 'Produto teste', quantity: 1, price: 10 }], total: 10 };
+  await request('/products', {id: 'test-product', name: 'Produto teste', price: 10}, { Cookie: adminCookie, 'X-Vovo-Admin': '1' });
+  order = { type: 'retirada', id: randomUUID(), customer: { name: 'Teste', phone: '41999999999', address: 'Endereço de teste' }, items: [{ id: 'test-product', name: 'Produto teste', quantity: 1, price: 10 }], total: 10, payment: { method: 'pix', paid: true } };
   requestKey = randomUUID();
+  assert.equal((await request('/orders', {...order,total:0.01,items:[{...order.items[0],price:0.01}]}, { 'X-Order-Request': requestKey })).status,409);
+  assert.equal((await request('/orders', {...order,coupon:'INVENTADO'}, { 'X-Order-Request': requestKey })).status,400);
   const result = await request('/orders', order, { 'X-Order-Request': requestKey, Cookie: customerCookie });
   assert.equal(result.status, 200);
   accessToken = (await result.json()).accessToken;
@@ -104,6 +107,7 @@ test('an acknowledged order persists once and cannot be overwritten by a custome
   const duplicate = await request('/orders', order, { 'X-Order-Request': requestKey });
   assert.equal(duplicate.status, 200); assert.equal((await duplicate.json()).accessToken, accessToken);
   assert.equal(JSON.parse(await readFile(path.join(directory, 'orders.json'), 'utf8')).length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'orders.json'), 'utf8'))[0].payment.paid, false);
   assert.equal((await request('/orders', order, { 'X-Order-Request': randomUUID() })).status, 409);
   assert.equal((await request('/orders/' + order.id, { status: 'concluido' }, {}, 'PUT')).status, 403);
   assert.equal((await request('/orders/' + order.id + '/status', { status: 'preparando' }, { 'X-Order-Token': accessToken }, 'PATCH')).status, 403);

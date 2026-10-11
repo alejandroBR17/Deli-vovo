@@ -80,13 +80,18 @@ export const Toast = ({ message, type, onClose }: { message: string, type: any, 
   );
 };
 
-export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any }) => {
+export const StripePaymentBox = ({ onComplete, total, customer, checkout }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any, checkout: any }) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [orderId, setOrderId] = useState('');
+  const checkoutBody = JSON.stringify(checkout);
 
   const customerZip = customer?.address ? (customer.address.match(/\d{5}-?\d{3}/)?.[0] || '') : '';
 
   useEffect(() => {
+    const controller = new AbortController();
+    setClientSecret(null); setError(null);
     if (!stripePromise) {
       setError("Configuração de pagamento incompleta (Chave Stripe ausente).");
       return;
@@ -95,15 +100,18 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
     fetch('/api/create-payment-intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: total }),
+      body: checkoutBody,
+      signal: controller.signal,
     })
-      .then((res) => {
-        if (!res.ok) throw new Error('Falha ao iniciar pagamento seguro');
-        return res.json();
+      .then(async (res) => {
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Falha ao iniciar pagamento seguro');
+        return result;
       })
-      .then((data) => setClientSecret(data.clientSecret))
-      .catch((err) => setError(err.message));
-  }, [total]);
+      .then((data) => { setClientSecret(data.clientSecret); setOrderId(data.orderId); })
+      .catch((err) => { if (!controller.signal.aborted) setError(err.message); });
+    return () => controller.abort();
+  }, [checkoutBody]);
 
   if (error) {
     return (
@@ -127,7 +135,7 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
   if (!stripePromise) return null;
 
   return (
-    <Elements stripe={stripePromise} options={{ 
+    <Elements key={clientSecret} stripe={stripePromise} options={{
       clientSecret, 
       appearance: { 
         theme: 'stripe',
@@ -138,7 +146,7 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
         }
       } 
     }}>
-      <StripeForm onComplete={onComplete} total={total} customer={customer} />
+      <StripeForm onComplete={details => onComplete({ ...details, orderId })} total={total} customer={customer} />
     </Elements>
   );
 };
