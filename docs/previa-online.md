@@ -1,5 +1,7 @@
 # Prévia online do Delivovo
 
+Prévia mais recente, rodada noturna: https://delivovo-qmia43d59-alesobralcortes-9387s-projects.vercel.app , commit `0268b7e`, deployment `dpl_95j5y9rEW28rNZY3Txv1tu2uwzxY`, READY. Inclui estados de cardápio vazio, correção de opções pelo botão +, remoção de dados fictícios de marketing e menos gravações de visitas. Build, 15 testes e conferência online passaram. Detalhes e prioridades em [relatorio-madrugada-2026-10-11.md](relatorio-madrugada-2026-10-11.md).
+
 Prévia verificada em 10/10/2026, no projeto Vercel `delivovo`, com código do repositório `alejandroBR17/Deli-vovo` no commit `3a144ffc79412a79414ed6e00a28f101a84e5598`.
 
 URL: https://delivovo-78v26lto3-alesobralcortes-9387s-projects.vercel.app

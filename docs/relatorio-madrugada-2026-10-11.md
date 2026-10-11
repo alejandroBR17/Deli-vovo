@@ -11,7 +11,9 @@ O responsável autorizou trabalho independente durante esta noite, pede um resum
 - O registro de visita só é marcado como concluído no navegador se a API responder com sucesso.
 - A atualização de autenticação da visita usa uma única consulta com índice, limitada ao dia atual, e não grava quando os campos já estão corretos. Isso evita reescrever o histórico do navegador em cada login.
 
-Validação: 15 testes passaram, incluindo o novo teste de histórico de visitas (dias anteriores, outro navegador e dia seguinte permanecem intactos; repetição grava zero linhas). Build final passou. Em navegador, 320, 390 e 1365 px passaram: mensagem do cardápio vazio, ausência de avaliações/contagem inventadas, zero pedido automático de permissão e seleção de opção pelo botão + chegando corretamente à sacola. O teste usa respostas simuladas somente no navegador, sem inserir produtos/pedidos no banco remoto. A implantação desta rodada ainda deve ser registrada abaixo antes de anunciar sua conclusão.
+Validação: 15 testes passaram, incluindo o novo teste de histórico de visitas (dias anteriores, outro navegador e dia seguinte permanecem intactos; repetição grava zero linhas). Build final passou. Em navegador, 320, 390 e 1365 px passaram: mensagem do cardápio vazio, ausência de avaliações/contagem inventadas, zero pedido automático de permissão e seleção de opção pelo botão + chegando corretamente à sacola. O teste usa respostas simuladas somente no navegador, sem inserir produtos/pedidos no banco remoto.
+
+Commit funcional desta rodada: `0268b7ed23dec7fbad6db430db347ae305c04213`. Nova prévia READY: https://delivovo-qmia43d59-alesobralcortes-9387s-projects.vercel.app , deployment `dpl_95j5y9rEW28rNZY3Txv1tu2uwzxY`, no projeto delivovo. Verificação online passou: mensagem de cardápio vazio, ausência de depoimentos fictícios, leitura Turso, proteção administrativa/login, pedidos/histórico, financeiro, estatísticas, chave pública de push, Stripe desativado e painel em celular/desktop sem erros JavaScript ou rolagem horizontal inesperada. Nenhum produto ou pedido fictício foi inserido remotamente. `data/acesso-previa.txt` e `data/online-preview-access.json` foram atualizados localmente para esta prévia. Produção permanece preservada.
 
 ## Retomadas e relatório
 
@@ -20,9 +22,9 @@ Automação no mesmo chat `del-cias-da-vov-retomada-da-madrugada`: 02h15, 03h15,
 ## Prioridades independentes para as próximas rodadas
 
 1. Revisar fluxo de configuração inicial do painel: facilitar identificar cardápio/localização/frete/horários/Pix pendentes, sem criar valores de negócio inventados. O endereço foi confirmado na conversa, mas não deve ser colocado em arquivos Git ou HTML público. A apresentação pública continua Curitiba - PR.
-2. Revisar cotação/checkout, disponibilidade por horário e tratamento de falhas de rede. Checar se validações essenciais existem no servidor, sem cobrar pagamentos reais. Priorizar bugs demonstráveis e testes de borda, sem reescrever tudo sem necessidade.
+2. Revisar cotação/checkout, disponibilidade por horário e tratamento de falhas de rede. A loja atualmente calcula abertura usando horário local do navegador; conferir fuso America/Sao_Paulo, turnos atravessando meia-noite e validação do lado servidor. Checar se validações essenciais existem no servidor, sem cobrar pagamentos reais. Priorizar bugs demonstráveis e testes de borda, sem reescrever tudo sem necessidade.
 3. Revisar consumo e entradas de telemetria, cache e polling. Evitar consultas sem limites e gravações desnecessárias. Rate limits em memória são por instância; não afirmar proteção global de cota.
-4. Melhorar acessibilidade e operação pelo teclado nos produtos/modais e clareza dos avisos. Android bloqueado depende do aparelho do responsável e não pode ser anunciado como validado.
+4. Melhorar acessibilidade e operação pelo teclado nos produtos/modais e clareza dos avisos. Conferir PWA: manifest usa ícones externos e index.html tem URLs de compartilhamento de outro domínio (delicias-da-vovo.vercel.app); usar o destino confirmado quando pertinente e verificar imagens/instalabilidade. Android bloqueado depende do aparelho do responsável e não pode ser anunciado como validado.
 5. Completar somente mudanças que passem nos testes adequados, atualizar draft PR #1 e preparar uma prévia no único projeto delivovo. Evitar múltiplas implantações sem mudança funcional.
 
 ## Contexto de execução
