@@ -477,10 +477,6 @@ export default function Home() {
   }, []);
 
   const handleAddToCart = (p: Product, variation?: any, additionals?: any[], observation?: string, event?: React.MouseEvent) => {
-    if (isClosed) {
-      setToast({ message: "A loja está fechada no momento!", type: 'error' });
-      return;
-    }
 
     // Flying animation logic
     if (event) {
@@ -518,7 +514,7 @@ export default function Home() {
       if (exists) return prev.map(i => i === exists ? {...i, quantity: i.quantity + 1} : i);
       return [...prev, {...p, quantity: 1, variation, additionals, observation}];
     });
-    setToast({ message: `Adicionado no capricho: ${p.name}!`, type: 'success' });
+    setToast({ message: isClosed ? 'Item adicionado. A loja está fechada agora; escolha uma entrega agendada.' : `Adicionado no capricho: ${p.name}!`, type: 'success' });
   };
 
   const handleReorder = (items: any[]) => {

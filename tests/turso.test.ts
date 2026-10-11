@@ -62,7 +62,9 @@ test('visit authentication only updates the current day and skips unchanged rows
   } finally { client.close(); }
 });
 
-test('API stores orders durably, isolates images from catalog responses and protects new read routes', async () => {
+test('API stores orders durably, isolates images from catalog responses and protects new read routes', async (context) => {
+  context.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-12T15:00:00Z')});
+  delete process.env.DELIVERY_PREVIEW_MODE;
   const directory = await mkdtemp(path.join(tmpdir(),'delivovo-turso-test-'));
   process.env.NODE_ENV='test'; delete process.env.VERCEL;
   process.env.STORAGE_TURSO_DATABASE_URL='file:' + path.join(directory,'test.db').replace(/\\/g,'/');

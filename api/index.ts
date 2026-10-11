@@ -1,6 +1,7 @@
 import {RevisionCache} from '../server/revision-cache.js';
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import {validateSchedule} from '../src/utils/order-schedule.js';
+import {storeAvailability} from '../src/utils/store-hours.js';
 import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
 import { validateStoreConfig } from '../server/store-config.js';
 import { productOptions } from '../src/utils/product-options.js';
@@ -1133,6 +1134,11 @@ const vapidKeys = {
 };
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const closedOrderMessage = 'A loja está fechada para pedidos imediatos. Escolha uma entrega agendada dentro do expediente.';
+function acceptsImmediateOrders(configs: Record<string, string>) {
+  // Stored settings cannot enable the development-only opening bypass online.
+  return storeAvailability({...configs, preview_mode: process.env.DELIVERY_PREVIEW_MODE === 'true' && !isVercel ? 'true' : 'false'}).open;
+}
 
 async function initWebPush() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
@@ -1248,13 +1254,14 @@ app.post('/create-payment-intent', async (req, res) => {
     const configs = await ConfigRepo.getAll();
     try { req.body.scheduledTo = validateSchedule(req.body.scheduledTo,configs); }
     catch(error) { return res.status(400).json({error:error instanceof Error ? error.message : 'Confira o agendamento.'}); }
+    if (!req.body.scheduledTo && !acceptsImmediateOrders(configs)) return res.status(409).json({error:closedOrderMessage});
     const priced = priceOrder(req.body, await ProductRepo.getAll(), configs);
     if (!Number.isFinite(req.body.total) || Math.abs(req.body.total - priced.total) > 0.009) return res.status(409).json({ error: 'Os valores mudaram. Reabra a sacola e confira o pedido.' });
     const orderId = uuidv4();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(priced.total * 100),
       currency: 'brl',
-      metadata: { orderId, checkout: checkoutFingerprint(priced, req.body.customer?.address || '') },
+      metadata: { orderId, checkout: checkoutFingerprint(priced, req.body.customer?.address || '', req.body.scheduledTo) },
       automatic_payment_methods: { enabled: true },
     });
 
@@ -1415,6 +1422,9 @@ app.post('/orders', async (req, res) => {
     catch(error) { return res.status(400).json({error:error instanceof Error ? error.message : 'Confira o agendamento.'}); }
     const paymentMethod = order.payment?.method ?? 'pix';
     if (!['pix', 'cartao_online', 'dinheiro'].includes(paymentMethod)) return res.status(400).json({ error: 'Escolha uma forma de pagamento válida.' });
+    // A card may have succeeded just as the shop closed. Its Stripe receipt is
+    // still verified below; only initiation is blocked outside opening hours.
+    if (!order.scheduledTo && paymentMethod !== 'cartao_online' && !acceptsImmediateOrders(configs)) return res.status(409).json({error:closedOrderMessage});
     if (paymentMethod === 'dinheiro' && configs.cash_enabled !== 'true') return res.status(400).json({ error: 'A loja não está aceitando dinheiro. Escolha Pix ou cartão online.' });
     let priced;
     try { priced = priceOrder(order, await ProductRepo.getAll(), configs); }
@@ -1426,7 +1436,7 @@ app.post('/orders', async (req, res) => {
     if (order.payment?.method === 'cartao_online') {
       if (!stripe || typeof order.paymentIntentId !== 'string') return res.status(400).json({ error: 'Pagamento não confirmado.' });
       const payment = await stripe.paymentIntents.retrieve(order.paymentIntentId);
-      if (payment.status !== 'succeeded' || payment.currency !== 'brl' || payment.amount !== Math.round(order.total * 100) || payment.metadata.orderId !== order.id || payment.metadata.checkout !== checkoutFingerprint(priced, order.customer.address)) return res.status(400).json({ error: 'Pagamento não corresponde ao pedido.' });
+      if (payment.status !== 'succeeded' || payment.currency !== 'brl' || payment.amount !== Math.round(order.total * 100) || payment.metadata.orderId !== order.id || payment.metadata.checkout !== checkoutFingerprint(priced, order.customer.address, order.scheduledTo)) return res.status(400).json({ error: 'Pagamento não corresponde ao pedido.' });
       order.paymentMethod = `Cartão Online (Pago - ID: ${payment.id})`;
       order.payment = { method: 'cartao_online', paid: true };
     } else if (paymentMethod === 'dinheiro') {

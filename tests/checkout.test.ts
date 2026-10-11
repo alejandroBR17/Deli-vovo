@@ -1,11 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { priceOrder, deliveryToken } from '../server/checkout';
+import { priceOrder, deliveryToken, checkoutFingerprint } from '../server/checkout';
 import { quoteDelivery } from '../server/delivery';
 
 const products = [{id:'p', name:'Produto real', price:10, variations:[{name:'Grande',price:2}], additionals:[{name:'Queijo',price:1.5}]}];
 const input = {type:'retirada', items:[{id:'p',quantity:2,price:0.01,name:'Nome falso',variation:{name:'Grande',price:0},additionals:[{name:'Queijo',price:-100}]}]};
+
+test('card receipt binds the confirmed schedule and cannot be reused for an immediate or different delivery', () => {
+  const priced = priceOrder(input, products, {});
+  const address = 'Endereço local de teste';
+  const immediate = checkoutFingerprint(priced, address);
+  const scheduled = checkoutFingerprint(priced, address, '2099-01-01T11:00:00-03:00');
+  assert.equal(immediate, checkoutFingerprint(priced, address, undefined));
+  assert.equal(scheduled, checkoutFingerprint(priced, address, '2099-01-01T11:00:00-03:00'));
+  assert.notEqual(scheduled, immediate);
+  assert.notEqual(scheduled, checkoutFingerprint(priced, address, '2099-01-01T12:00:00-03:00'));
+  assert.notEqual(scheduled, checkoutFingerprint(priced, 'Outro endereço', '2099-01-01T11:00:00-03:00'));
+});
 test('JSON catalogs and mixed legacy options price delivery without losing selected options', () => {
   process.env.ADMIN_SESSION_SECRET=randomUUID()+randomUUID();
   const address='Endereço de teste Curitiba, PR';

@@ -74,7 +74,7 @@ export function priceOrder(input: any, products: any[], configs: Record<string, 
   const itemsSummary = items.map((item: any) => `${item.quantity}x ${item.name}${item.variation ? ` (${item.variation.name})` : ''}${item.additionals.length ? ` [${item.additionals.map((option: any) => option.name).join(', ')}]` : ''}${item.observation ? ` — ${item.observation}` : ''}`).join(', ');
   return { items, itemsSummary, total, subtotal: subtotal / 100, discount: Math.min(subtotal, discount) / 100, deliveryFee: fee / 100, deliveryDistance: distance, coupon: code };
 }
-export const checkoutFingerprint = (priced: ReturnType<typeof priceOrder>, address: string) => createHash('sha256').update(JSON.stringify({ ...priced, address })).digest('hex');
+export const checkoutFingerprint = (priced: ReturnType<typeof priceOrder>, address: string, scheduledTo?: string) => createHash('sha256').update(JSON.stringify({ ...priced, address, ...(scheduledTo ? {scheduledTo} : {}) })).digest('hex');
 
 const geocodeCache = new Map<string, { latitude: string; longitude: string; expires: number }>();
 export async function locateDeliveryAddress(address: unknown) {

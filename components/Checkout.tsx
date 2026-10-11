@@ -8,6 +8,7 @@ import { lookupCep, formatCep } from '../src/utils/cep';
 import { formatWhatsApp } from '../src/utils/phone-input';
 import { PhoneInput } from './PhoneInput';
 import {shopDate,validateSchedule} from '../src/utils/order-schedule';
+import {storeAvailability} from '../src/utils/store-hours';
 import { addressParts, emptyCustomer, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
@@ -57,6 +58,10 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const immediateAvailable = !!dynamicConfigs && storeAvailability(dynamicConfigs).open;
+  useEffect(() => {
+    if (isOpen && dynamicConfigs && !immediateAvailable && step !== 'payment') setIsScheduled(true);
+  }, [isOpen, dynamicConfigs, immediateAvailable, step]);
 
   const [cep, setCep] = useState(() => addressParts(customer).cep);
   const [searchingCep, setSearchingCep] = useState(false);
@@ -494,11 +499,13 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 {addressError && <p className="text-[10px] font-bold text-vovoh-red px-1">{addressError}</p>}
                 
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 space-y-4">
+                  {!immediateAvailable && <p className="text-sm text-gray-600">A loja está fechada agora. Escolha uma entrega agendada dentro do expediente.</p>}
                   <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
                     <button 
                       onClick={() => setIsScheduled(false)}
+                      disabled={!immediateAvailable}
                       aria-pressed={!isScheduled}
-                      className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed ${!isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                       Entrega Agora
                     </button>
@@ -564,6 +571,11 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                      }
                      if (!feeCalculated) {
                        setAddressError("Por favor, calcule o frete antes de prosseguir para o pagamento.");
+                       return;
+                     }
+                     if (!isScheduled && !storeAvailability(dynamicConfigs || {}).open) {
+                       setIsScheduled(true);
+                       setAddressError('A loja fechou. Escolha a data e o horário da entrega agendada.');
                        return;
                      }
                      if (isScheduled) {

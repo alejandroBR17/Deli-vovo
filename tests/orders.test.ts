@@ -1,4 +1,4 @@
-import { before, after, test } from 'node:test';
+import { before, after, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -17,6 +17,8 @@ let order: any;
 let requestKey: string;
 let accessToken: string;
 before(async () => {
+  mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-12T15:00:00Z')});
+  delete process.env.DELIVERY_PREVIEW_MODE;
   globalThis.fetch = ((url: any, options?: any) => String(url).startsWith('https://nominatim.openstreetmap.org/')
     ? Promise.resolve(new Response(JSON.stringify([{lat: '-25.35', lon: '-49.2'}]), { status: 200 })) : nativeFetch(url, options)) as typeof fetch;
   process.env.NODE_ENV = 'test';
@@ -33,6 +35,7 @@ before(async () => {
   base = `http://127.0.0.1:${(server.address() as any).port}/api`;
 });
 after(async () => {
+  mock.timers.reset();
   globalThis.fetch = nativeFetch;
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   assert.equal(path.dirname(directory), tmpdir());
@@ -227,4 +230,34 @@ test('API rejects invalid schedules without writes and stores valid schedules wi
  assert.equal(JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).length,before);
  const candidate=body('2099-01-01T15:00');const response=await request('/orders',candidate,{'X-Order-Request':randomUUID()});assert.equal(response.status,200);
  const saved=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((entry:any)=>entry.id===candidate.id);assert.equal(saved.scheduledTo,'2099-01-01T15:00:00-03:00');
+});
+
+test('immediate orders stop at closing, retries remain idempotent and future slots still work',async()=>{
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ await request('/configs/batch',{updates:{opening_start:'10:00',opening_end:'12:01',working_days:'[0,1,2,3,4,5,6]'}},headers);
+ await request('/configs',{key:'cash_enabled',value:'true'},headers);
+ // A stored development flag must not override the real admission rules.
+ await request('/configs',{key:'preview_mode',value:'true'},headers);
+ const body=(method='pix')=>({...order,id:randomUUID(),payment:{method},scheduledTo:undefined});
+ const accepted=body(),nonce=randomUUID();
+ assert.equal((await request('/orders',accepted,{'X-Order-Request':nonce})).status,200);
+ const count=()=>readFile(path.join(directory,'orders.json'),'utf8').then(value=>JSON.parse(value).length);
+ const before=await count();
+ mock.timers.setTime(Date.parse('2026-10-12T15:01:00Z'));
+ for(const method of ['pix','dinheiro']){
+  const response=await request('/orders',body(method),{'X-Order-Request':randomUUID()});
+  assert.equal(response.status,409);assert.match((await response.json()).error,/entrega agendada/);
+ }
+ const forgedCard=await request('/orders',body('cartao_online'),{'X-Order-Request':randomUUID()});
+ assert.equal(forgedCard.status,400);assert.match((await forgedCard.json()).error,/Pagamento não confirmado/);
+ assert.equal((await request('/orders',accepted,{'X-Order-Request':nonce})).status,200);
+ assert.equal(await count(),before);
+ assert.equal((await request('/orders',{...body(),scheduledTo:'2099-01-01T11:00'},{'X-Order-Request':randomUUID()})).status,200);
+ mock.timers.setTime(Date.parse('2026-10-12T15:00:00Z'));
+ await request('/configs',{key:'force_closed',value:'true'},headers);
+ assert.equal((await request('/orders',body(),{'X-Order-Request':randomUUID()})).status,409);
+ assert.equal((await request('/orders',{...body(),scheduledTo:'2099-01-01T11:00'},{'X-Order-Request':randomUUID()})).status,200);
+ await request('/configs',{key:'force_closed',value:'false'},headers);
+ await request('/configs',{key:'working_days',value:'[]'},headers);
+ assert.equal((await request('/orders',body(),{'X-Order-Request':randomUUID()})).status,409);
 });
