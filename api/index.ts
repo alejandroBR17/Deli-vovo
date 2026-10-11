@@ -1,5 +1,5 @@
-import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout';
-import { internalStoreFields, quoteDelivery } from '../server/delivery';
+import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
+import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
 import { createHash } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
@@ -9,11 +9,11 @@ import { v4 as uuidv4 } from 'uuid';
 import webpush from 'web-push';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import { separateImage } from '../server/media';
-import { configuredDatabase, Database, Query, DocumentReference } from '../server/database';
+import { separateImage } from '../server/media.js';
+import { configuredDatabase, Database, Query, DocumentReference } from '../server/database.js';
 import { waitUntil } from '@vercel/functions';
 import { rateLimit } from 'express-rate-limit';
-import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin } from '../server/admin-auth';
+import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin } from '../server/admin-auth.js';
 
 dotenv.config();
 

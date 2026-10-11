@@ -1,4 +1,4 @@
-import { normalizeCoordinate } from '../utils/geo';
+import { normalizeCoordinate } from '../utils/geo.js';
 
 export const internalStoreFields = new Set(['store_street', 'store_number', 'store_neighborhood', 'store_city', 'store_state', 'store_cep', 'store_lat', 'store_lng']);
 

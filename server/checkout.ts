@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { quoteDelivery } from './delivery';
+import { quoteDelivery } from './delivery.js';
 
 function secret() {
   const value = process.env.ADMIN_SESSION_SECRET;

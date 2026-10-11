@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Database } from './database';
+import type { Database } from './database.js';
 
 // Images stay out of product/config JSON responses. Immutable content URLs can be cached by the CDN.
 export async function separateImage(database: Database, image?: string) {
