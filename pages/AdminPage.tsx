@@ -487,8 +487,10 @@ export default function AdminPage() {
         setConfigs(prev => ({ ...prev, [key]: value }));
       }
       showMsg("Configuração salva!", "success");
+      return true;
     } catch (e) {
-      showMsg("Erro ao salvar config.", "error");
+      showMsg(e instanceof Error ? e.message : "Erro ao salvar config.", "error");
+      return false;
     } finally {
       setSyncing(false);
     }
@@ -1769,13 +1771,13 @@ export default function AdminPage() {
                           <button 
                             key={idx}
                             aria-pressed={isActive}
-                            onClick={() => {
+                            disabled={syncing || !savedConfigs}
+                            onClick={async () => {
                               let currentDays = Array.isArray(configs.working_days) ? configs.working_days : [];
                               let newDays = [...currentDays];
                               if (isActive) newDays = newDays.filter(d => d !== idx);
                               else newDays.push(idx);
-                              setConfigs({...configs, working_days: newDays});
-                              handleUpdateConfig('working_days', JSON.stringify(newDays), false);
+                              if (await handleUpdateConfig('working_days', JSON.stringify(newDays), false)) setConfigs(previous => ({...previous, working_days: newDays}));
                             }}
                             className={`px-4 py-2 rounded-xl font-black text-xs transition-all ${isActive ? 'bg-vovoh-red text-white' : 'bg-white/5 text-zinc-500'}`}
                           >
@@ -1793,10 +1795,10 @@ export default function AdminPage() {
                         <p className="text-[10px] font-bold text-zinc-400 mt-1">Ative para fechar a loja agora mesmo (feriados, imprevistos).</p>
                       </div>
                       <button 
+                        type="button" role="switch" aria-label="Fechar loja agora" aria-checked={configs.force_closed === 'true' || configs.force_closed === true} disabled={syncing || !savedConfigs}
                         onClick={() => {
                           const isClosed = configs.force_closed === 'true' || configs.force_closed === true;
                           const newVal = isClosed ? 'false' : 'true';
-                          setConfigs({...configs, force_closed: newVal});
                           handleUpdateConfig('force_closed', newVal);
                         }}
                         className={`w-14 h-8 rounded-full transition-colors relative ${configs.force_closed === 'true' || configs.force_closed === true ? 'bg-vovoh-red' : 'bg-zinc-700'}`}

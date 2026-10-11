@@ -24,7 +24,7 @@ test('signed delivery quote is tied to address, expires and rechecks configured 
   const address='Rua de teste, 123, Curitiba, PR';
   const token=deliveryToken(address,'-25.35','-49.2');
   const order={...input,type:'entrega',customer:{address},deliveryToken:token};
-  const configs={store_lat:'-25.35',store_lng:'-49.2',fee_per_km:'2',max_delivery_radius:'5'};
+  const configs={store_lat:'-25.35',store_lng:'-49.2',free_delivery_radius:'0',fee_per_km:'2',max_delivery_radius:'5'};
   assert.equal(priceOrder(order,products,configs).total,27);
   assert.throws(()=>priceOrder({...order,customer:{address:'Outro endereço'}},products,configs));
   assert.throws(()=>priceOrder({...order,deliveryToken:token+'x'},products,configs));
@@ -34,4 +34,15 @@ test('signed delivery quote is tied to address, expires and rechecks configured 
   finally { Date.now=originalNow; }
   assert.throws(()=>quoteDelivery(configs,0,0));
   assert.ok(quoteDelivery(configs,'-25.36','-49.2').fee>2);
+});
+
+test('delivery requires explicit rates, preserves zero and refuses inconsistent areas', () => {
+  const configs={store_lat:'-25.35',store_lng:'-49.2',free_delivery_radius:'0',fee_per_km:'0',max_delivery_radius:'0'};
+  assert.deepEqual(quoteDelivery(configs,'-25.35','-49.2'),{fee:0,distance:0});
+  assert.throws(()=>quoteDelivery(configs,'-25.36','-49.2'),/até 0 km/);
+  for(const key of ['free_delivery_radius','fee_per_km','max_delivery_radius']) {
+    for(const value of [undefined,'',' ', '-1','NaN','Infinity']) assert.throws(()=>quoteDelivery({...configs,[key]:value},'-25.35','-49.2'),/configurar/);
+  }
+  assert.throws(()=>quoteDelivery({...configs,free_delivery_radius:'1'},'-25.35','-49.2'),/gratuita/);
+  assert.ok(quoteDelivery({...configs,max_delivery_radius:'5',fee_per_km:'1,5'},'-25.36','-49.2').fee>1.5);
 });

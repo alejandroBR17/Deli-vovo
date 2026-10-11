@@ -1,5 +1,6 @@
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
+import { validateStoreConfig } from '../server/store-config.js';
 import { createHash } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
@@ -1672,8 +1673,11 @@ app.post('/configs', requireAdminWrite, async (req, res) => {
   try {
     const { key, value } = req.body;
     if (typeof key !== 'string' || /vapid|secret|password|token|private/i.test(key)) return res.status(400).json({ error: 'Configuração inválida.' });
-    if (key === 'cash_enabled' && value !== 'true' && value !== 'false') return res.status(400).json({ error: 'Escolha ativar ou desativar dinheiro.' });
-    await ConfigRepo.update(key, value);
+    const saved = await ConfigRepo.getAll();
+    let validated;
+    try { validated = validateStoreConfig(key, value, saved); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Confira a configuração.' }); }
+    await ConfigRepo.update(key, validated);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });

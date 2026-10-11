@@ -62,7 +62,7 @@ test('private configuration never appears in public responses', async () => {
     { key: 'vapid_private_key', value: 'private-test-value' }, { key: 'store_name', value: 'Loja de teste' },
     { key: 'store_street', value: 'Rua interna de teste' }, { key: 'store_number', value: '123' },
     { key: 'store_lat', value: '-25.35' }, { key: 'store_lng', value: '-49.2' },
-    { key: 'max_delivery_radius', value: '5' }, { key: 'fee_per_km', value: '2' },
+    { key: 'max_delivery_radius', value: '5' }, { key: 'fee_per_km', value: '2' }, { key: 'free_delivery_radius', value: '0' },
   ]));
   const response = await request('/configs');
   const text = await response.text();
@@ -142,4 +142,21 @@ test('cash requires explicit saved opt-in and cannot claim payment or invalid ch
   }
   assert.equal((await request('/configs', { key: 'cash_enabled', value: 'false' }, adminHeaders)).status, 200);
   assert.equal((await request('/orders', cashOrder({ method: 'dinheiro' }), headers())).status, 400);
+});
+
+test('invalid shop settings are refused without overwriting saved delivery and hours', async () => {
+  const headers={ Cookie: adminCookie, 'X-Vovo-Admin': '1' };
+  for(const [key,value] of [['fee_per_km',''],['fee_per_km','-1'],['max_delivery_radius','Infinity'],['free_delivery_radius','6'],['working_days','[7]'],['working_days','false'],['opening_start','25:00'],['force_closed','yes']]) {
+    const response=await request('/configs',{key,value},headers);
+    assert.equal(response.status,400);
+    assert.ok((await response.json()).error);
+  }
+  const saved=await (await request('/configs',undefined,{ Cookie: adminCookie })).json();
+  assert.equal(saved.fee_per_km,'2'); assert.equal(saved.free_delivery_radius,'0'); assert.equal(saved.max_delivery_radius,'5');
+  assert.equal((await request('/configs',{key:'fee_per_km',value:'1,50'},headers)).status,200);
+  assert.equal((await (await request('/configs',undefined,{ Cookie: adminCookie })).json()).fee_per_km,'1.5');
+  assert.equal((await request('/configs',{key:'opening_start',value:'18:00'},headers)).status,200);
+  assert.equal((await request('/configs',{key:'opening_end',value:'18:00'},headers)).status,400);
+  assert.equal((await request('/configs',{key:'opening_end',value:'02:00'},headers)).status,200);
+  assert.equal((await request('/configs',{key:'working_days',value:'[]'},headers)).status,200);
 });
