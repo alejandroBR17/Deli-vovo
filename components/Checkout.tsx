@@ -10,7 +10,27 @@ import { PhoneInput } from './PhoneInput';
 import {shopDate,validateSchedule} from '../src/utils/order-schedule';
 import { addressParts, emptyCustomer, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
-export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
+export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
+  const [configStatus, setConfigStatus] = useState<'loading'|'ready'|'error'>('loading');
+  const [configRetry, setConfigRetry] = useState(0);
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setConfigStatus('loading');
+    onRefreshConfigs().then((configs: any) => {
+      if (!cancelled) {
+        setConfigStatus(configs ? 'ready' : 'error');
+        if (configs) {
+          quoteSequence.current++;
+          quoteAbort.current?.abort();
+          setCalculatingFee(false);
+          setFeeCalculated(false); setDeliveryProof('');
+          setDeliveryFee(0); setDeliveryDistance(0);
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, onRefreshConfigs, configRetry]);
   const cashEnabled = dynamicConfigs?.cash_enabled === 'true';
   useEffect(() => {
     if (!cashEnabled && method === 'dinheiro') setMethod('pix');
@@ -276,6 +296,14 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
         </header>
 
         <div ref={scrollRef} className="flex-grow overflow-y-auto min-h-0 p-4 sm:p-6 space-y-8 bg-[#F9F9F9] no-scrollbar pb-32 ">
+          {configStatus !== 'ready' && (
+            <div role={configStatus === 'error' ? 'alert' : 'status'} className="p-4 rounded-2xl border border-gray-200 bg-white text-sm text-gray-700">
+              {configStatus === 'loading' ? <span className="flex items-center gap-2"><Loader2 size={18} className="animate-spin shrink-0" /> Conferindo as opções da loja...</span> : <>
+                <p>Não conseguimos atualizar as opções da loja. Seus dados continuam preenchidos.</p>
+                <button type="button" onClick={() => setConfigRetry(value => value + 1)} className="mt-3 font-bold text-vovoh-red underline">Tentar novamente</button>
+              </>}
+            </div>
+          )}
           
           {(step === 'cart' || step === 'details' || step === 'payment') && (
             <div className="bg-gradient-to-br from-vovoh-gold to-amber-600 p-4 sm:p-6  rounded-[2rem] text-white shadow-lg relative overflow-hidden shrink-0">
@@ -379,7 +407,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                     </div>
                   </div>
                   
-                  <button onClick={() => setStep('details')} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 flex items-center justify-center gap-3 text-base active:scale-95 transition-all mt-4">
+                  <button disabled={configStatus !== 'ready'} onClick={() => setStep('details')} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 flex items-center justify-center gap-3 text-base active:scale-95 transition-all mt-4 disabled:opacity-50">
                     Continuar Pedido <ArrowRight size={20}/>
                   </button>
                 </>
@@ -547,7 +575,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                      rememberCustomer(customer);
                      setStep('payment');
                    }} 
-                   className="flex-grow py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-200 text-sm active:scale-95 transition-all"
+                   disabled={configStatus !== 'ready'}
+                   className="flex-grow py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-200 text-sm active:scale-95 transition-all disabled:opacity-50"
                  >
                    Ir para Pagamento
                  </button>

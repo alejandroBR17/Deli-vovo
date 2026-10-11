@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Bell, BellOff, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
 import { STORE_NAME, GAS_API_URL, PIX_KEY, STORE_ADDRESS, OPENING_HOURS, PLACEHOLDER_IMG } from '../constants/index';
@@ -62,17 +62,28 @@ export default function Home() {
   };
   const sessionIdRef = useRef(getSessionId());
 
-  const fetchConfigs = async () => {
-    try {
-      const res = await fetch(`${GAS_API_URL}/configs`);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      setDynamicConfigs(data);
-      return data;
-    } catch (e) {
-      return null;
-    }
-  };
+  const configRequest = useRef<Promise<any> | null>(null);
+  const fetchConfigs = useCallback(() => {
+    // Opening checkout and the existing visibility refresh share an in-flight read.
+    if (configRequest.current) return configRequest.current;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    configRequest.current = (async () => {
+      try {
+        const res = await fetch(`${GAS_API_URL}/configs`, {cache:'no-store', signal:controller.signal});
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        setDynamicConfigs(data);
+        return data;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timeout);
+        configRequest.current = null;
+      }
+    })();
+    return configRequest.current;
+  }, []);
 
   const formatTime = (timeStr: string | number | undefined, defaultHour: number) => {
     return openingTime(timeStr, defaultHour) || '--:--';
@@ -963,6 +974,7 @@ export default function Home() {
         onOrder={createOrder} pixKey={dynamicConfigs?.pix_key || PIX_KEY}
         user={user} openAuth={() => { setIsCartOpen(false); setIsAuthOpen(true); }}
         dynamicConfigs={dynamicConfigs}
+        onRefreshConfigs={fetchConfigs}
         showMsg={(msg: string, type: any) => setToast({ message: msg, type })}
         coupons={(() => {
           try {
