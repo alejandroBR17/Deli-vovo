@@ -61,7 +61,18 @@ Foi identificado um problema concreto: rádios de variação e caixas de adicion
 
 Validação: build local passou. Em Edge, 320, 390 e 1365 px passaram: abertura por Enter/Espaço, foco inicial no fechamento, Tab/Shift+Tab circulando dentro do modal, setas selecionando a variação Grande, Espaço selecionando Queijo e ambos chegando à sacola; Escape fecha opções/foto e devolve o foco ao botão original. Sem erros JavaScript ou rolagem horizontal inesperada. Dados fictícios usados apenas nas respostas simuladas do navegador; nenhum catálogo/pedido remoto alterado. O helper `verify-product-keyboard.cjs` fica fora do repositório. A primeira tentativa do helper usava um seletor de texto incorreto para o adicional e foi interrompida; a execução concluída acima usa o texto real da sacola. A suíte de API/SQLite não foi repetida por não haver alteração nesses caminhos; permanece o resultado de 21 testes da rodada 03h15.
 
-Preparar uma última prévia com esta melhoria funcional e registrar seu resultado real. Ao concluir, encerrar a automação de retomadas e deixar somente o relatório das 06h pendente.
+Commit funcional: `10b9ed0fa899798b535a7e525a192d0c6101b102`, enviado para a branch da PR. Última prévia **READY**: https://delivovo-9bu0cnwzr-alesobralcortes-9387s-projects.vercel.app , deployment `dpl_7avrD3Tcb5YrFSzL6iGGTBpKczjt`, somente Preview no projeto delivovo. Migração explícita e build remoto concluídos. A conferência real online de Turso, catálogo/configurações públicas, proteção/login administrativo, pedidos/histórico/financeiro/estatísticas, chave push, Stripe desativado e painel mobile/desktop passou. O fluxo de teclado de produtos também passou no código dessa prévia, em 320/390/1365 px, com respostas simuladas somente no navegador. Nenhum produto/pedido de teste foi gravado remotamente. Os arquivos privados de acesso foram atualizados para o último link.
+
+A Vercel confirmou novamente a produção no deployment `dpl_EKmgjo17mWAGL8CSvve9bRnCSoXn`, commit `b1e6861d1d0556d2ff6326cfc3e4c2e8cc8b8538`. Ao concluir esta última rodada, a automação de retomadas foi **excluída pela ferramenta do aplicativo**, evitando novas execuções. A automação separada do relatório das 06h segue ativa e deve ser excluída depois de entregar o resumo. Servidores e navegadores iniciados nestas verificações foram encerrados.
+
+## Estado para o resumo da manhã
+
+- Código funcional mais recente: `10b9ed0`, na draft PR #1; commits de documentação posteriores não mudam o aplicativo implantado.
+- Revisão online: usar a prévia `9bu0cnwzr` acima. A produção não recebeu estas mudanças.
+- Concluído nesta noite: estados de catálogo/opções, retirada de marketing fictício, menos gravações de visitas e polls corrigidos, checklist de configuração salva, falhas administrativas explícitas, horários de São Paulo, ícones PWA/metadados e teclado nos modais de produto/foto.
+- Evidências: última suíte de 21 testes passou; builds locais/remotos concluídos; verificações de navegador e API descritas em cada rodada. A interrupção por memória foi recuperada por execução sequencial; o helper de teclado foi corrigido antes dos resultados finais.
+- Não validado/concluído: Android físico bloqueado/instalação, pagamento Stripe/retorno, validação de horários na API considerando pedidos já pagos/agendamento, auditoria completa de acessibilidade. Nenhuma garantia de cota global foi feita.
+- Próxima etapa depende de revisão e dados reais do responsável: cardápio, taxas/raio, horários/Pix; depois pedido de teste completo e Android. Não publicar automaticamente em produção.
 
 ## Prioridades após revisão do responsável
 
