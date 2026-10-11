@@ -20,6 +20,9 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   const [addressError, setAddressError] = useState('');
   const quoteSequence = useRef(0);
   const quoteAbort = useRef<AbortController | null>(null);
+  const addressSearchSequence = useRef(0);
+  const addressSearchAbort = useRef<AbortController | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
@@ -55,12 +58,18 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     quoteAbort.current?.abort();
     setCalculatingFee(false);
     setDeliveryFee(0); setDeliveryDistance(0);
+    addressSearchSequence.current++;
+    addressSearchAbort.current?.abort();
+    setSearchingCep(false); setIsGettingLocation(false);
     if (street && number && city) {
       const newAddress = `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}`;
       setCustomer((prev: any) => ({ ...prev, address: newAddress }));
     }
     setFeeCalculated(false); setDeliveryProof('');
-    return () => { quoteSequence.current++; quoteAbort.current?.abort(); };
+    return () => {
+      quoteSequence.current++; quoteAbort.current?.abort();
+      addressSearchSequence.current++; addressSearchAbort.current?.abort();
+    };
   }, [street, number, neighborhood, city, state, cep]);
 
   const searchCep = async () => {
@@ -71,9 +80,17 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     }
     setAddressError('');
     setSearchingCep(true);
+    setIsGettingLocation(false);
+    const sequence = ++addressSearchSequence.current;
+    addressSearchAbort.current?.abort();
+    const controller = new AbortController();
+    addressSearchAbort.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`, { signal: controller.signal });
+      if (!res.ok) throw new Error('CEP indisponível');
       const data = await res.json();
+      if (sequence !== addressSearchSequence.current || controller.signal.aborted) return;
       if (data.erro) {
         setAddressError("CEP não encontrado.");
         return;
@@ -85,15 +102,15 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
       setFeeCalculated(false);
       
       // Foca no número automaticamente para agilizar
-      setTimeout(() => numberRef.current?.focus(), 100);
+      numberRef.current?.focus();
     } catch (e) {
-      setAddressError("Erro ao buscar CEP.");
+      if (sequence !== addressSearchSequence.current) return;
+      setAddressError(controller.signal.aborted ? 'A busca de CEP demorou demais. Tente novamente ou preencha o endereço.' : 'Erro ao buscar CEP. Você pode preencher o endereço manualmente.');
     } finally {
-      setSearchingCep(false);
+      clearTimeout(timeout);
+      if (sequence === addressSearchSequence.current) setSearchingCep(false);
     }
   };
-
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -102,11 +119,20 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     }
 
     setIsGettingLocation(true);
+    setSearchingCep(false); setAddressError('');
+    const sequence = ++addressSearchSequence.current;
+    addressSearchAbort.current?.abort();
+    const controller = new AbortController();
+    addressSearchAbort.current = controller;
     navigator.geolocation.getCurrentPosition(async (position) => {
+      if (sequence !== addressSearchSequence.current) return;
+      const timeout = setTimeout(() => controller.abort(), 15000);
       try {
         const { latitude, longitude } = position.coords;
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`, { signal: controller.signal });
+        if (!res.ok) throw new Error('Localização indisponível');
         const data = await res.json();
+        if (sequence !== addressSearchSequence.current || controller.signal.aborted) return;
         
         if (data.address) {
           const addr = data.address;
@@ -118,16 +144,19 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
           setCep(addr.postcode || '');
           setFeeCalculated(false);
           showMsg?.("Localização encontrada!", "success");
-        }
+        } else setAddressError('Não encontramos o endereço desta localização. Preencha manualmente.');
       } catch (e) {
-        setAddressError("Erro ao obter endereço pela localização.");
+        if (sequence !== addressSearchSequence.current) return;
+        setAddressError(controller.signal.aborted ? 'A busca da localização demorou demais. Preencha o endereço ou tente novamente.' : 'Erro ao obter endereço pela localização. Você pode preencher manualmente.');
       } finally {
-        setIsGettingLocation(false);
+        clearTimeout(timeout);
+        if (sequence === addressSearchSequence.current) setIsGettingLocation(false);
       }
-    }, () => {
-      setAddressError("Permissão de localização negada.");
+    }, (error) => {
+      if (sequence !== addressSearchSequence.current) return;
+      setAddressError(error.code === 1 ? 'Permissão de localização negada. Você pode preencher o endereço manualmente.' : 'Não foi possível obter sua localização. Você pode preencher o endereço manualmente.');
       setIsGettingLocation(false);
-    });
+    }, { timeout: 15000, maximumAge: 60000 });
   };
 
   useEffect(() => {
