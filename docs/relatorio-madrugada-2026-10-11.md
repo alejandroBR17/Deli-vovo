@@ -41,7 +41,7 @@ Validação concluída na retomada: **21 testes passaram**, com arquivos executa
 
 **Limitação explícita:** esta correção é da disponibilidade exibida no navegador. A API ainda não bloqueia pedidos por horário; isso exige tratar o agendamento e pagamentos iniciados antes do fechamento, para não rejeitar um pedido já pago inadvertidamente. Não anunciar essa validação como concluída. O teste Android bloqueado continua pendente.
 
-Os ajustes do painel e desta rodada ainda estão apenas na branch da PR; a prévia verificada continua `0268b7e`. Foi adiada uma nova implantação para consolidar as próximas correções, pois a integração Turso cria branches por deployment. Produção permanece preservada. Para a próxima retomada, revisar os ícones/metadados PWA ou outra falha demonstrável e concluir uma única prévia consolidada antes do relatório final.
+Commit funcional desta retomada: `b539bb74bf814092ac30b0f50a22175417d0b385`, enviado para `fix/unifica-delivery-turso`. A descrição da draft PR #1 foi atualizada com os 21 testes e as limitações. Os ajustes do painel (`0c85456`) e desta rodada ainda estão apenas na branch da PR; a prévia verificada continua `0268b7e`. Foi adiada uma nova implantação para consolidar as próximas correções, pois a integração Turso cria branches por deployment. Produção permanece preservada. Para a próxima retomada, revisar os ícones/metadados PWA ou outra falha demonstrável e concluir uma única prévia consolidada antes do relatório final.
 
 ## Prioridades independentes para as próximas rodadas
 
