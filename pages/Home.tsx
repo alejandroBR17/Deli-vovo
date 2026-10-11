@@ -599,6 +599,7 @@ export default function Home() {
       customer: { ...customer, address: fullAddress }, 
       payment: { 
         method: (extraDetails?.method || method) as any, 
+        ...(extraDetails?.method === 'dinheiro' && extraDetails.changeFor !== undefined ? { changeFor: extraDetails.changeFor } : {}),
         paid: extraDetails?.method === 'cartao_online' 
       },
       timing: { createdAt: new Date().toISOString() }, 
@@ -608,6 +609,8 @@ export default function Home() {
     let paymentDetails = '';
     if (extraDetails?.method === 'cartao_online') {
       paymentDetails = `Cartão Online (Pago - ID: ${extraDetails.id})`;
+    } else if (method === 'dinheiro') {
+      paymentDetails = 'Dinheiro na entrega';
     } else {
       paymentDetails = 'Pix (Conferir Recibo)';
     }

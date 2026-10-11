@@ -1,10 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
+import { Banknote } from 'lucide-react';
 import { PixBox, StripePaymentBox } from './UI';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
+  const cashEnabled = dynamicConfigs?.cash_enabled === 'true';
+  useEffect(() => {
+    if (!cashEnabled && method === 'dinheiro') setMethod('pix');
+  }, [cashEnabled, method, setMethod]);
   const [fidelidade, setFidelidade] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const submitLock = useRef(false);
@@ -246,7 +251,11 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     if (isScheduled && scheduledDate && scheduledTime) {
       scheduledTo = `${scheduledDate}T${scheduledTime}:00`;
     }
-    return await onOrder({ ...paymentDetails, finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, deliveryToken: deliveryProof, scheduledTo });
+    if (method === 'dinheiro' && (!cashEnabled || (changeFor !== '' && (!Number.isFinite(Number(changeFor)) || Number(changeFor) < total)))) {
+      showMsg('Confira a forma de pagamento e o valor para troco.', 'error');
+      return false;
+    }
+    return await onOrder({ ...paymentDetails, ...(method === 'dinheiro' ? { method, changeFor: changeFor === '' ? undefined : Number(changeFor) } : {}), finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, deliveryToken: deliveryProof, scheduledTo });
     } finally { submitLock.current = false; setSubmitting(false); }
   };
 
@@ -546,6 +555,19 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 </button>
               </div>
 
+              {cashEnabled && (
+                <button type="button" aria-pressed={method === 'dinheiro'} onClick={() => setMethod('dinheiro')} className={`w-full p-5 rounded-2xl border-2 flex items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${method === 'dinheiro' ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                  <span className="flex items-center gap-4"><Banknote size={24} aria-hidden="true" /><span><span className="block font-black text-sm">Dinheiro na entrega</span><span className="block text-xs text-gray-600">Pague quando receber</span></span></span>
+                  {method === 'dinheiro' && <CheckCircle2 size={20} aria-hidden="true" />}
+                </button>
+              )}
+              {cashEnabled && method === 'dinheiro' && (
+                <div className="space-y-2">
+                  <label htmlFor="cash-change-for" className="block text-sm font-bold">Precisa de troco para quanto?</label>
+                  <input id="cash-change-for" type="number" inputMode="decimal" min={total} step="0.01" value={changeFor} onChange={event => setChangeFor(event.target.value)} aria-describedby="cash-change-hint" className="w-full p-4 border border-gray-300 rounded-2xl" />
+                  <p id="cash-change-hint" className="text-xs text-gray-600">Deixe em branco se pagar o valor exato. O valor informado deve cobrir o total do pedido.</p>
+                </div>
+              )}
               <section aria-label="Resumo do pedido" className="bg-white p-5 rounded-2xl border border-gray-200 space-y-2 text-sm">
                 <h4 className="font-bold text-base">Confira antes de pagar</h4>
                 <p>{customer.address}</p>
@@ -561,7 +583,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                  ) : method === 'cartao_online' ? (
                    <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer }} />
                  ) : (
-                   <button onClick={handleOrder} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
+                   <button onClick={() => handleOrder()} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
                      Confirmar e Enviar Pedido
                    </button>
                  )}
@@ -688,7 +710,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
                       <div className="flex justify-between items-end">
                         <div>
                           <p className="text-base font-black text-vovoh-dark mb-1">R$ {parseFloat(o.total || 0).toFixed(2)}</p>
-                          <p className="text-xs font-bold text-gray-400">{o.items?.length || 0} itens • {o.payment?.method === 'pix' ? 'Pix' : 'Cartão'}</p>
+                          <p className="text-xs font-bold text-gray-400">{o.items?.length || 0} itens • {o.payment?.method === 'pix' ? 'Pix' : o.payment?.method === 'dinheiro' ? 'Dinheiro na entrega' : 'Cartão'}</p>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-vovoh-gold group-hover:text-white transition-colors">
                           <ArrowRight size={16} />

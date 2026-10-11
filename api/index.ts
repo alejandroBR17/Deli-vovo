@@ -1390,8 +1390,12 @@ app.post('/orders', async (req, res) => {
       return res.json({ success: true, id: order.id, accessToken });
     }
     if (isVercel && !db && !process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('Banco indisponível.');
+    const configs = await ConfigRepo.getAll();
+    const paymentMethod = order.payment?.method ?? 'pix';
+    if (!['pix', 'cartao_online', 'dinheiro'].includes(paymentMethod)) return res.status(400).json({ error: 'Escolha uma forma de pagamento válida.' });
+    if (paymentMethod === 'dinheiro' && configs.cash_enabled !== 'true') return res.status(400).json({ error: 'A loja não está aceitando dinheiro. Escolha Pix ou cartão online.' });
     let priced;
-    try { priced = priceOrder(order, await ProductRepo.getAll(), await ConfigRepo.getAll()); }
+    try { priced = priceOrder(order, await ProductRepo.getAll(), configs); }
     catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Confira a sacola.' }); }
     if (Math.abs(order.total - priced.total) > 0.009) return res.status(409).json({ error: 'Os valores mudaram. Reabra a sacola e confira o pedido.' });
     Object.assign(order, priced);
@@ -1403,6 +1407,11 @@ app.post('/orders', async (req, res) => {
       if (payment.status !== 'succeeded' || payment.currency !== 'brl' || payment.amount !== Math.round(order.total * 100) || payment.metadata.orderId !== order.id || payment.metadata.checkout !== checkoutFingerprint(priced, order.customer.address)) return res.status(400).json({ error: 'Pagamento não corresponde ao pedido.' });
       order.paymentMethod = `Cartão Online (Pago - ID: ${payment.id})`;
       order.payment = { method: 'cartao_online', paid: true };
+    } else if (paymentMethod === 'dinheiro') {
+      const changeFor = order.payment.changeFor;
+      if (changeFor !== undefined && (typeof changeFor !== 'number' || !Number.isFinite(changeFor) || !Number.isSafeInteger(Math.round(changeFor * 100)) || changeFor < order.total)) return res.status(400).json({ error: 'O valor para troco deve cobrir o total do pedido.' });
+      order.paymentMethod = changeFor === undefined ? 'Dinheiro na entrega (Valor exato)' : `Dinheiro na entrega (Troco para R$ ${changeFor.toFixed(2)})`;
+      order.payment = { method: 'dinheiro', paid: false, ...(changeFor === undefined ? {} : { changeFor }) };
     } else { order.paymentMethod = 'Pix (Conferir Recibo)'; order.payment = { method: 'pix', paid: false }; }
     order.status = 'pendente'; order.archived = false; order.userId = customerId(req) || '';
     await OrderRepo.create(order);
@@ -1663,6 +1672,7 @@ app.post('/configs', requireAdminWrite, async (req, res) => {
   try {
     const { key, value } = req.body;
     if (typeof key !== 'string' || /vapid|secret|password|token|private/i.test(key)) return res.status(400).json({ error: 'Configuração inválida.' });
+    if (key === 'cash_enabled' && value !== 'true' && value !== 'false') return res.status(400).json({ error: 'Escolha ativar ou desativar dinheiro.' });
     await ConfigRepo.update(key, value);
     res.json({ success: true });
   } catch (e) {

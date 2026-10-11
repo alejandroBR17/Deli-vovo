@@ -307,10 +307,10 @@ export default function AdminPage() {
         try {
           data.working_days = JSON.parse(data.working_days);
         } catch (e) {
-          data.working_days = [0, 1, 2, 3, 4, 5, 6];
+          data.working_days = [];
         }
       } else {
-        data.working_days = [0, 1, 2, 3, 4, 5, 6];
+        data.working_days = [];
       }
       
       if (!data.faqs) {
@@ -1702,6 +1702,14 @@ export default function AdminPage() {
                       <button onClick={() => handleUpdateConfig('pix_key', configs.pix_key)} className="px-6 py-4 sm:py-0 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase shrink-0">Salvar</button>
                     </div>
                   </div>
+                  <div className="space-y-3 border-t border-white/10 pt-6">
+                    <h3 className="font-bold">Dinheiro na entrega</h3>
+                    <p className="text-sm text-zinc-400">Desativado por padrão. Ao ativar, os clientes poderão escolher dinheiro e informar o troco. Pix e cartão online continuam disponíveis.</p>
+                    <button type="button" role="switch" aria-checked={savedConfigs?.cash_enabled === 'true'} disabled={syncing || !savedConfigs} onClick={() => handleUpdateConfig('cash_enabled', savedConfigs?.cash_enabled === 'true' ? 'false' : 'true')} className="px-6 py-4 rounded-2xl bg-white/10 font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50">
+                      {savedConfigs?.cash_enabled === 'true' ? 'Desativar dinheiro' : 'Ativar dinheiro'}
+                    </button>
+                    <p role="status" className="text-sm text-zinc-400">{savedConfigs?.cash_enabled === 'true' ? 'Dinheiro ativado' : 'Dinheiro desativado'}</p>
+                  </div>
                 </div>
               )}
 
@@ -1712,39 +1720,40 @@ export default function AdminPage() {
                       <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Configurações de Frete</label>
                     </div>
                     
+                    <p className="text-sm text-zinc-400">Dias, horários e frete podem ser alterados aqui. Os campos numéricos e horários são salvos ao sair do campo; aguarde a confirmação. A distância é em linha reta, a partir da loja.</p>
                     <div className="grid grid-cols-1  gap-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-zinc-400">Raio Grátis (KM)</label>
-                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" value={configs.free_delivery_radius || ''} onChange={e => setConfigs({...configs, free_delivery_radius: e.target.value})} onBlur={() => handleUpdateConfig('free_delivery_radius', configs.free_delivery_radius)} />
+                        <label htmlFor="free_delivery_radius" className="text-[10px] font-bold text-zinc-400">Raio Grátis (KM)</label>
+                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" id="free_delivery_radius" min="0" step="0.01" value={configs.free_delivery_radius ?? ''} onChange={e => setConfigs({...configs, free_delivery_radius: e.target.value})} onBlur={() => handleUpdateConfig('free_delivery_radius', configs.free_delivery_radius)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-zinc-400">Taxa por KM Extra (R$)</label>
-                        <input type="number" step="0.5" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" value={configs.fee_per_km || ''} onChange={e => setConfigs({...configs, fee_per_km: e.target.value})} onBlur={() => handleUpdateConfig('fee_per_km', configs.fee_per_km)} />
+                        <label htmlFor="fee_per_km" className="text-[10px] font-bold text-zinc-400">Taxa por KM Extra (R$)</label>
+                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" id="fee_per_km" min="0" step="0.01" value={configs.fee_per_km ?? ''} onChange={e => setConfigs({...configs, fee_per_km: e.target.value})} onBlur={() => handleUpdateConfig('fee_per_km', configs.fee_per_km)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-zinc-400">Raio Máximo (KM)</label>
-                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" value={configs.max_delivery_radius || ''} onChange={e => setConfigs({...configs, max_delivery_radius: e.target.value})} onBlur={() => handleUpdateConfig('max_delivery_radius', configs.max_delivery_radius)} />
+                        <label htmlFor="max_delivery_radius" className="text-[10px] font-bold text-zinc-400">Raio Máximo (KM)</label>
+                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" id="max_delivery_radius" min="0" step="0.01" value={configs.max_delivery_radius ?? ''} onChange={e => setConfigs({...configs, max_delivery_radius: e.target.value})} onBlur={() => handleUpdateConfig('max_delivery_radius', configs.max_delivery_radius)} />
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Abre às</label>
+                      <label htmlFor="opening-start" className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Abre às</label>
                       <input 
                         type="time" 
                         className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.opening_start || ''}
+                        id="opening-start" value={configs.opening_start || ''}
                         onChange={e => setConfigs({...configs, opening_start: e.target.value})}
                         onBlur={() => handleUpdateConfig('opening_start', configs.opening_start)}
                       />
                     </div>
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Fecha às</label>
+                      <label htmlFor="opening-end" className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Fecha às</label>
                       <input 
                         type="time" 
                         className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.opening_end || ''}
+                        id="opening-end" value={configs.opening_end || ''}
                         onChange={e => setConfigs({...configs, opening_end: e.target.value})}
                         onBlur={() => handleUpdateConfig('opening_end', configs.opening_end)}
                       />
@@ -1759,8 +1768,9 @@ export default function AdminPage() {
                         return (
                           <button 
                             key={idx}
+                            aria-pressed={isActive}
                             onClick={() => {
-                              let currentDays = Array.isArray(configs.working_days) ? configs.working_days : [0, 1, 2, 3, 4, 5, 6];
+                              let currentDays = Array.isArray(configs.working_days) ? configs.working_days : [];
                               let newDays = [...currentDays];
                               if (isActive) newDays = newDays.filter(d => d !== idx);
                               else newDays.push(idx);

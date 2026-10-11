@@ -42,7 +42,7 @@ export interface Order {
     address: string;
   };
   payment: {
-    method: 'pix' | 'cartao_online';
+    method: 'pix' | 'cartao_online' | 'dinheiro';
     changeFor?: number;
     paid: boolean;
   };

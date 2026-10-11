@@ -118,3 +118,28 @@ test('push configuration and subscriptions cannot claim success without working 
   assert.equal((await request('/push/subscribe', { role: 'admin', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/test', keys: { p256dh: 'x', auth: 'y' } } })).status, 401);
   assert.equal((await request('/admin/test-push', { endpoint: 'missing' }, { Cookie: adminCookie, 'X-Vovo-Admin': '1' })).status, 404);
 });
+
+test('cash requires explicit saved opt-in and cannot claim payment or invalid change', async () => {
+  const cashOrder = (payment: any) => ({ ...order, id: randomUUID(), payment });
+  const headers = () => ({ 'X-Order-Request': randomUUID() });
+  const adminHeaders = { Cookie: adminCookie, 'X-Vovo-Admin': '1' };
+  assert.equal((await request('/orders', cashOrder({ method: 'dinheiro', paid: true }), headers())).status, 400);
+  assert.equal((await request('/orders', cashOrder({ method: 'unknown', paid: true }), headers())).status, 400);
+  assert.equal((await request('/configs', { key: 'cash_enabled', value: 'yes' }, adminHeaders)).status, 400);
+  assert.equal((await request('/configs', { key: 'cash_enabled', value: 'true' }, adminHeaders)).status, 200);
+  for (const changeFor of [5, -1, '20', null]) {
+    assert.equal((await request('/orders', cashOrder({ method: 'dinheiro', changeFor }), headers())).status, 400);
+  }
+  for (const changeFor of [undefined, 20]) {
+    const candidate = cashOrder({ method: 'dinheiro', changeFor, paid: true });
+    assert.equal((await request('/orders', candidate, headers())).status, 200);
+    const stored = JSON.parse(await readFile(path.join(directory, 'orders.json'), 'utf8')).find((entry: any) => entry.id === candidate.id);
+    assert.equal(stored.payment.paid, false);
+    assert.equal(stored.payment.method, 'dinheiro');
+    assert.equal(stored.payment.changeFor, changeFor);
+    assert.equal(stored.status, 'pendente');
+    assert.match(stored.paymentMethod, changeFor === undefined ? /Valor exato/ : /Troco para R\$ 20\.00/);
+  }
+  assert.equal((await request('/configs', { key: 'cash_enabled', value: 'false' }, adminHeaders)).status, 200);
+  assert.equal((await request('/orders', cashOrder({ method: 'dinheiro' }), headers())).status, 400);
+});
