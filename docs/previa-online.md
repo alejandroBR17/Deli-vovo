@@ -1,8 +1,8 @@
 # Prévia online do Delivovo
 
-Prévia mais recente, rodada noturna: https://delivovo-qmia43d59-alesobralcortes-9387s-projects.vercel.app , commit `0268b7e`, deployment `dpl_95j5y9rEW28rNZY3Txv1tu2uwzxY`, READY. Inclui estados de cardápio vazio, correção de opções pelo botão +, remoção de dados fictícios de marketing e menos gravações de visitas. Build, 15 testes e conferência online passaram. Detalhes e prioridades em [relatorio-madrugada-2026-10-11.md](relatorio-madrugada-2026-10-11.md).
+Prévia mais recente, consolidada às 04h15 de 11/10: https://delivovo-b7zh5wk1k-alesobralcortes-9387s-projects.vercel.app , commit `27fd7f8`, deployment `dpl_D9SD7J8Fbevkt33HsGc3HDAQTJUr`, READY. Inclui cardápio vazio, opções pelo botão +, remoção de marketing fictício, menos gravações/consultas, checklist com configurações salvas, erros administrativos, horários de São Paulo e ícones PWA locais. Última suíte: 21 testes passaram no commit b539bb7; build local/remoto e conferência online/PWA passaram na versão consolidada. Produção confirmada inalterada. Detalhes, limitações e prioridades em [relatorio-madrugada-2026-10-11.md](relatorio-madrugada-2026-10-11.md).
 
-Prévia verificada em 10/10/2026, no projeto Vercel `delivovo`, com código do repositório `alejandroBR17/Deli-vovo` no commit `3a144ffc79412a79414ed6e00a28f101a84e5598`.
+Histórico: prévia verificada em 10/10/2026, no projeto Vercel `delivovo`, com código do repositório `alejandroBR17/Deli-vovo` no commit `3a144ffc79412a79414ed6e00a28f101a84e5598`.
 
 URL: https://delivovo-78v26lto3-alesobralcortes-9387s-projects.vercel.app
 
