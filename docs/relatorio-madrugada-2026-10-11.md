@@ -17,7 +17,17 @@ Commit funcional desta rodada: `0268b7ed23dec7fbad6db430db347ae305c04213`. Nova 
 
 ## Retomadas e relatório
 
-Automação no mesmo chat `del-cias-da-vov-retomada-da-madrugada`: 02h15, 03h15, 04h15 e 05h15, limitada a quatro execuções. Automação `del-cias-da-vov-relat-rio-da-manh`: relatório às 06h, uma execução. Ambas usam o horário local America/Sao_Paulo e devem ser desativadas ao concluir. Requerem computador ligado, aplicativo aberto e recursos de uso disponíveis. Não afirmar que houve trabalho nas rodadas que não executarem.
+Automação no mesmo chat `del-cias-da-vov-retomada-da-madrugada`: 02h15, 03h15, 04h15 e 05h15 de São Paulo, limitada a quatro execuções. Automação `del-cias-da-vov-relat-rio-da-manh`: relatório às 06h locais, uma execução. O primeiro disparo ocorreu antecipadamente às 23h16 de 10/10 (02h16 UTC): o agendador interpretou o horário da regra em UTC. Nesta rodada, as regras foram corrigidas para 05h15–08h15 UTC e relatório às 09h UTC, preservando os horários locais pedidos. Devem ser desativadas ao concluir. Requerem computador ligado, aplicativo aberto e recursos de uso disponíveis. Não afirmar que houve trabalho nas rodadas que não executarem.
+
+## Rodada antecipada — configuração inicial do painel
+
+O painel passa a oferecer uma lista recolhível de pendências para cardápio, endereço/localização, taxas/raio, dias/horários e Pix. Os botões levam à seção correspondente. A lista usa somente configurações recebidas do servidor e gravações confirmadas, sem considerar o texto que ainda está sendo editado como salvo. Taxa zero explicitamente salva é aceita; dados ausentes, negativos ou inválidos continuam pendentes. A lista não afirma que a loja está pronta para produção, nem substitui um pedido de teste.
+
+Também foi corrigido `adminFetch`: falhas HTTP em operações de escrita agora geram erro em vez de permitir que chamadas que não conferiam `response.ok` mostrassem sucesso. Isso cobre, entre outras, criação/edição/exclusão de produtos. O campo Pix ganhou rótulo associado ao input para acessibilidade.
+
+Validação: 17 testes passaram; novos testes cobrem configurações ausentes/inválidas, taxa zero, configuração de turno noturno e gravações administrativas recusadas. Build final passou. Em navegador, 320, 390 e 1365 px passaram: atalhos para cardápio/frete/Pix, edição sem salvar mantendo a pendência, falha 503 de gravação mantendo a pendência e sucesso confirmado diminuindo o contador de cinco para quatro. Sem erros JavaScript ou rolagem horizontal inesperada. Os dados de Pix neste teste são fictícios, somente em respostas simuladas de navegador; nenhum dado remoto foi alterado.
+
+Esta rodada foi validada localmente e ainda não implantada. A próxima rodada pode consolidar estes ajustes com novas correções antes de criar uma prévia, evitando bancos/implantações redundantes. A prévia online mais recente continua sendo a do commit 0268b7e acima. As credenciais e a produção continuam preservadas. O helper `verify-store-setup.cjs` está na pasta pai do repositório.
 
 ## Prioridades independentes para as próximas rodadas
 

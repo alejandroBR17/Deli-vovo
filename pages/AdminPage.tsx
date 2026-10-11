@@ -6,6 +6,7 @@ import { Toast, ConfirmModal } from '../components/UI';
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import { adminFetch } from '../src/utils/admin-api';
 import { subscribeToPush, getPushSubscription } from '../src/utils/push';
+import { StoreSetupChecklist } from '../components/StoreSetupChecklist';
 
 
 export default function AdminPage() {
@@ -22,6 +23,8 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [configs, setConfigs] = useState<Record<string, any>>({});
+  const [savedConfigs, setSavedConfigs] = useState<Record<string, any> | null>(null);
+  const [savedProductCount, setSavedProductCount] = useState<number | null>(null);
   const [coupons, setCoupons] = useState<any[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<any[]>([]);
   const [editingNeighborhood, setEditingNeighborhood] = useState<any>(null);
@@ -272,6 +275,7 @@ export default function AdminPage() {
         return p;
       });
       setProducts(parsed);
+      setSavedProductCount(parsed.length);
     } catch (e) {
       showMsg("Erro ao buscar cardápio", "error");
     }
@@ -295,7 +299,7 @@ export default function AdminPage() {
       const res = await adminFetch(`/configs`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      
+      setSavedConfigs({ ...data });
       if (data.opening_start) data.opening_start = formatTimeForInput(data.opening_start);
       if (data.opening_end) data.opening_end = formatTimeForInput(data.opening_end);
       
@@ -408,6 +412,7 @@ export default function AdminPage() {
           body: JSON.stringify({ key, value: String(values[key] ?? '') }),
         });
         if (!response.ok) throw new Error('Não foi possível salvar tudo. Confira o endereço e tente novamente.');
+        setSavedConfigs(previous => ({ ...previous, [key]: String(values[key] ?? '') }));
       }
       setConfigs(previous => ({ ...previous, store_lat: String(lat), store_lng: String(lng) }));
       showMsg('Endereço e localização salvos para calcular as entregas.', 'success');
@@ -477,7 +482,7 @@ export default function AdminPage() {
         body: JSON.stringify({ key, value: String(value) })
       });
       if (!res.ok) throw new Error();
-      
+      setSavedConfigs(previous => ({ ...previous, [key]: String(value) }));
       if (updateState) {
         setConfigs(prev => ({ ...prev, [key]: value }));
       }
@@ -581,6 +586,7 @@ export default function AdminPage() {
         });
       }
       showMsg("Cardápio atualizado com sucesso!", "success");
+      setSavedProductCount(isAdding ? oldProducts.length + 1 : oldProducts.length);
     } catch (e) {
       setProducts(oldProducts); // Revert
       showMsg("Erro ao salvar produto.", "error");
@@ -607,6 +613,7 @@ export default function AdminPage() {
             method: 'DELETE'
           });
           showMsg("Removido!", "success");
+          setSavedProductCount(oldProducts.filter(product => product.id !== id).length);
         } catch (e) {
           setProducts(oldProducts); // Revert
           showMsg("Erro ao deletar.", "error");
@@ -1219,6 +1226,11 @@ export default function AdminPage() {
 
         {tab === 'orders' ? (
           <div className="space-y-6">
+            {savedConfigs && savedProductCount !== null && <StoreSetupChecklist configs={savedConfigs} productCount={savedProductCount} onConfigure={target => {
+              if (target === 'menu') setTab('menu');
+              else { setConfigTab(target); setTab('configs'); }
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }} />}
             <section className="bg-zinc-900 p-5 rounded-2xl space-y-4 border border-white/10" aria-label="Recebimento de pedidos">
               <div><h2 className="text-xl font-bold">{pendingOrders ? pendingOrders + ' pedido(s) aguardando você' : 'Nenhum pedido novo'}</h2>
                 <p className="text-sm text-zinc-400 mt-1">{lastUpdated ? 'Última atualização: ' + lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Buscando pedidos...'}</p></div>
@@ -1678,11 +1690,12 @@ export default function AdminPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Chave PIX</label>
+                    <label htmlFor="store-pix-key" className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Chave PIX</label>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <input 
                         type="text" 
                         className="flex-grow p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
+                        id="store-pix-key"
                         value={configs.pix_key || ''}
                         onChange={e => setConfigs({...configs, pix_key: e.target.value})}
                       />

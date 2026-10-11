@@ -8,5 +8,9 @@ export async function adminFetch(path: string, options: RequestInit = {}) {
     window.dispatchEvent(new Event('vovo-admin-session-expired'));
     throw new Error('Sua sessão terminou. Entre novamente.');
   }
+  if (!response.ok && !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase()) && path !== '/admin/login') {
+    const result = await response.json().catch(() => null);
+    throw new Error(typeof result?.error === 'string' ? result.error.slice(0, 512) : 'Não foi possível salvar. Confira a conexão e tente novamente.');
+  }
   return response;
 }
