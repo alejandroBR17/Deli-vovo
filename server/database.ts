@@ -30,6 +30,17 @@ export class Database {
   constructor(readonly client: Client) {}
   collection(name: string) { return new Query(this, table(name)); }
   async rows(sql: string, args: InValue[] = []) { return (await this.client.execute({ sql, args })).rows; }
+  async updateVisitAuth(sessionId: string, userId: string, authType: string, now = new Date()) {
+    const start = now.toISOString().slice(0, 10) + 'T00:00:00.000Z';
+    const end = new Date(Date.parse(start) + 86400000).toISOString();
+    // One indexed update of today's visit; old visits and unchanged rows stay untouched.
+    return this.client.execute({
+      sql: `UPDATE visits SET payload=json_set(payload,'$.userId',?,'$.authType',?)
+        WHERE ${field('sessionId')}=? AND ${field('timestamp')}>=? AND ${field('timestamp')}<?
+        AND (COALESCE(${field('userId')},'')!=? OR COALESCE(json_extract(payload,'$.authType'),'')!=?)`,
+      args: [userId, authType, sessionId, start, end, userId, authType],
+    });
+  }
   async statuses(ids: string[]) {
     if (!ids.length) return {};
     const rows = await this.rows(`SELECT id, ${field('status')} AS status FROM orders WHERE id IN (${ids.map(() => '?').join(',')})`, ids);

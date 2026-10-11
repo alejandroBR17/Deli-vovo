@@ -43,6 +43,25 @@ test('indexed status lookup, bounded history and complete financial totals use r
   } finally { client.close(); }
 });
 
+test('visit authentication only updates the current day and skips unchanged rows', async () => {
+  const client = createClient({ url: ':memory:' });
+  const database = new Database(client);
+  try {
+    await migrate(client);
+    for (const [id, sessionId, timestamp] of [
+      ['old', 'same-browser', '2026-10-09T12:00:00.000Z'],
+      ['today', 'same-browser', '2026-10-10T12:00:00.000Z'],
+      ['other', 'other-browser', '2026-10-10T12:00:00.000Z'],
+      ['tomorrow', 'same-browser', '2026-10-11T00:00:00.000Z'],
+    ]) await database.collection('visits').doc(id).create({ sessionId, timestamp, userId: 'anonymous', authType: 'none' });
+    const now = new Date('2026-10-10T23:00:00.000Z');
+    assert.equal((await database.updateVisitAuth('same-browser','customer','registered',now)).rowsAffected,1);
+    assert.equal((await database.updateVisitAuth('same-browser','customer','registered',now)).rowsAffected,0);
+    for (const id of ['old','other','tomorrow']) assert.equal((await database.collection('visits').doc(id).get()).data().userId,'anonymous');
+    assert.equal((await database.collection('visits').doc('today').get()).data().userId,'customer');
+  } finally { client.close(); }
+});
+
 test('API stores orders durably, isolates images from catalog responses and protects new read routes', async () => {
   const directory = await mkdtemp(path.join(tmpdir(),'delivovo-turso-test-'));
   process.env.NODE_ENV='test'; delete process.env.VERCEL;

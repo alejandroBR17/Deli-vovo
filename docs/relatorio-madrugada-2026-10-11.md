@@ -1,0 +1,36 @@
+# Trabalho da noite e madrugada — 11/10/2026
+
+O responsável autorizou trabalho independente durante esta noite, pede um resumo ao acordar e só consegue responder a partir das 07h. Toda publicação continua restrita a Preview no projeto Vercel `delivovo`, sem promover produção. Repositório ativo: `alejandroBR17/Deli-vovo`, branch `fix/unifica-delivery-turso`, pasta local `C:/Users/LGOLMES/Downloads/Github ou Vercel/audit-deli-vovo`. Outros projetos e o banco do Observatório não fazem parte do trabalho.
+
+## Rodada antes da retomada agendada
+
+- O cardápio vazio agora explica que está sendo preparado.
+- O botão + de produtos com variações/adicionais abre a seleção antes de adicionar à sacola.
+- Foram removidos depoimentos fictícios de fallback da loja, API e painel, a alegação de 500+ famílias por semana e os avatares externos usados como clientes.
+- Abrir a loja não pede automaticamente permissão de notificações nem mostra uma faixa vermelha pressionando o cliente a ativá-las. A ação continua disponível no botão. A mensagem distingue avisos com o site aberto do cadastro para avisos após o pedido.
+- O registro de visita só é marcado como concluído no navegador se a API responder com sucesso.
+- A atualização de autenticação da visita usa uma única consulta com índice, limitada ao dia atual, e não grava quando os campos já estão corretos. Isso evita reescrever o histórico do navegador em cada login.
+
+Validação: 15 testes passaram, incluindo o novo teste de histórico de visitas (dias anteriores, outro navegador e dia seguinte permanecem intactos; repetição grava zero linhas). Build final passou. Em navegador, 320, 390 e 1365 px passaram: mensagem do cardápio vazio, ausência de avaliações/contagem inventadas, zero pedido automático de permissão e seleção de opção pelo botão + chegando corretamente à sacola. O teste usa respostas simuladas somente no navegador, sem inserir produtos/pedidos no banco remoto. A implantação desta rodada ainda deve ser registrada abaixo antes de anunciar sua conclusão.
+
+## Retomadas e relatório
+
+Automação no mesmo chat `del-cias-da-vov-retomada-da-madrugada`: 02h15, 03h15, 04h15 e 05h15, limitada a quatro execuções. Automação `del-cias-da-vov-relat-rio-da-manh`: relatório às 06h, uma execução. Ambas usam o horário local America/Sao_Paulo e devem ser desativadas ao concluir. Requerem computador ligado, aplicativo aberto e recursos de uso disponíveis. Não afirmar que houve trabalho nas rodadas que não executarem.
+
+## Prioridades independentes para as próximas rodadas
+
+1. Revisar fluxo de configuração inicial do painel: facilitar identificar cardápio/localização/frete/horários/Pix pendentes, sem criar valores de negócio inventados. O endereço foi confirmado na conversa, mas não deve ser colocado em arquivos Git ou HTML público. A apresentação pública continua Curitiba - PR.
+2. Revisar cotação/checkout, disponibilidade por horário e tratamento de falhas de rede. Checar se validações essenciais existem no servidor, sem cobrar pagamentos reais. Priorizar bugs demonstráveis e testes de borda, sem reescrever tudo sem necessidade.
+3. Revisar consumo e entradas de telemetria, cache e polling. Evitar consultas sem limites e gravações desnecessárias. Rate limits em memória são por instância; não afirmar proteção global de cota.
+4. Melhorar acessibilidade e operação pelo teclado nos produtos/modais e clareza dos avisos. Android bloqueado depende do aparelho do responsável e não pode ser anunciado como validado.
+5. Completar somente mudanças que passem nos testes adequados, atualizar draft PR #1 e preparar uma prévia no único projeto delivovo. Evitar múltiplas implantações sem mudança funcional.
+
+## Contexto de execução
+
+A prévia anterior verificada está em https://delivovo-78v26lto3-alesobralcortes-9387s-projects.vercel.app, commit 3a144ff, deployment dpl_AeN9e8SXCpHsb3dXxsSLMieEmftV. Projeto prj_xA4Od337bOI5NIpJsC7Gqg5CeoHR, equipe team_Ml0gRSvgy3o8VQUj3VlqAlXw. Produção permanece no deployment dpl_EKmgjo17mWAGL8CSvve9bRnCSoXn, commit b1e6861. Configuração Turso integrada injeta STORAGE_TURSO_* e cria branches por implantação; o comando de build da prévia deve executar a migração explícita idempotente antes de npm run build. Credenciais de Preview estão em arquivos locais ignorados em data/, nunca imprimir ou commitar. Stripe está desativado só em Preview.
+
+Os scripts auxiliares verify-online-preview.cjs e verify-overnight-store.cjs estão fora do repositório, na pasta pai. Usam Playwright com Edge headless. A automação de navegador CUA estava indisponível nesta sessão; não acessar perfis/cookies do usuário por meios alternativos. O teste local http://localhost:3004 usa SQLite com dados fictícios. Finalizar o build antes de testes de navegador evita artefatos inconsistentes. O helper online lê data/online-preview-access.json e data/online-preview-env.json; o acesso temporário deve ser renovado se expirar. Testes com dados fictícios não devem contaminar o banco remoto.
+
+## Pendências que exigem o responsável
+
+Cardápio real com preços/fotos/opções; taxas e raio de entrega; horários finais; dados de Pix; teste de notificações no Android com tela bloqueada; credenciais Stripe de teste e validação de pagamento/retorno. Nenhuma dessas informações será inventada durante a madrugada.

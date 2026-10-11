@@ -4,12 +4,6 @@ import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare,
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL } from '../constants/index';
 import { GrandmaLoader } from './UI';
 
-const TESTIMONIALS = [
-  { name: "Mariana Silva", text: "A melhor coxinha de Colombo! Massa fininha e recheio super temperado. Lembra muito a comida da minha avó.", rating: 5 },
-  { name: "Ricardo Santos", text: "As empanadas argentinas são sensacionais! O vovô realmente sabe o que faz. Recomendo a de carne suave.", rating: 5 },
-  { name: "Ana Paula", text: "Sempre peço os combos para as festinhas aqui em casa. Chega tudo quentinho e no horário combinado.", rating: 5 }
-];
-
 export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs }: any) => {
   const [activeCat, setActiveCat] = useState('todos');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -31,12 +25,12 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
     ? (() => {
         try {
           const parsed = JSON.parse(dynamicConfigs.testimonials);
-          return Array.isArray(parsed) && parsed.length > 0 ? parsed : TESTIMONIALS;
+          return Array.isArray(parsed) ? parsed.filter(t => typeof t?.name === 'string' && typeof t?.text === 'string') : [];
         } catch (e) {
-          return TESTIMONIALS;
+          return [];
         }
       })()
-    : TESTIMONIALS;
+    : [];
 
   const faqs = dynamicConfigs?.faqs
     ? (() => {
@@ -180,7 +174,13 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
           ))}
         </div>
 
-        {isLoading ? <GrandmaLoader /> : (
+        {isLoading ? <GrandmaLoader /> : products.length === 0 ? (
+          <div role="status" className="bg-white rounded-3xl border border-gray-100 p-8 md:p-12 text-center">
+            <ChefHat size={36} className="mx-auto mb-4 text-vovoh-gold" />
+            <h2 className="text-xl font-black text-vovoh-dark">O cardápio está sendo preparado</h2>
+            <p className="mt-2 text-sm text-gray-500">Assim que os produtos estiverem disponíveis, você poderá escolher e fazer seu pedido por aqui.</p>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {products.filter((p: any) => activeCat === 'todos' || p.category === activeCat).map((p: any) => (
               <div key={p.id} className="group bg-white rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-3.5 hover:border-vovoh-red/30 hover:shadow-xl transition-all duration-300 items-stretch">
@@ -220,7 +220,14 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                         </div>
                         <button aria-label={`Adicionar ${p.name} à sacola`} onClick={(e) => {
                           e.stopPropagation();
-                          onAddToCart(p, null, [], "", e);
+                          if (p.variations?.length || p.additionals?.length) {
+                            setSelectedProduct(p);
+                            setSelectedVariation(p.variations?.[0] || null);
+                            setSelectedAdditionals([]);
+                            setObservation("");
+                          } else {
+                            onAddToCart(p, null, [], "", e);
+                          }
                         }} className="w-8 h-8 md:w-9 md:h-9 bg-gray-50 text-vovoh-red rounded-full flex items-center justify-center hover:bg-vovoh-red hover:text-white transition-all active:scale-90 shadow-sm border border-gray-100">
                           <Plus size={16} strokeWidth={3} />
                         </button>
@@ -401,15 +408,9 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
 Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanadas, criando uma mistura única de sabores que conquistou toda a vizinhança de Colombo. Hoje, mantemos a mesma essência: massa fresca, recheio generoso e muito capricho.`}
               </div>
               <div className="pt-4 flex items-center gap-4">
-                <div className="flex -space-x-3">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-200 overflow-hidden shadow-sm">
-                      <img src={`https://i.pravatar.cc/100?u=${i}`} alt="Avatar" />
-                    </div>
-                  ))}
-                </div>
+                <Heart size={28} className="text-vovoh-red shrink-0" aria-hidden="true" />
                 <p className="text-xs md:text-sm font-bold text-vovoh-dark">
-                  <span className="text-vovoh-red font-extrabold">500+</span> famílias felizes toda semana
+                  Receitas de família, preparadas com carinho
                 </p>
               </div>
             </div>
@@ -417,7 +418,7 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
         </div>
       </section>
 
-      <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 md:px-6">
+      {testimonials.length > 0 && <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 md:px-6">
         <div className="text-center mb-12">
           <h3 className="text-3xl md:text-4xl font-black text-vovoh-dark tracking-tighter mb-3">O que dizem os netinhos...</h3>
           <p className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest">Avaliações reais de clientes da região</p>
@@ -427,7 +428,7 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
             <div key={i} className="bg-white p-7 md:p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-xl transition-all flex flex-col justify-between">
               <div>
                 <div className="flex gap-1 mb-4">
-                  {[...Array(Number(t.rating || 5))].map((_, i) => <Star key={i} size={15} className="text-vovoh-gold fill-current" />)}
+                  {Array.from({ length: Math.max(0, Math.min(5, Math.round(Number(t.rating ?? t.stars) || 0))) }).map((_, i) => <Star key={i} size={15} className="text-vovoh-gold fill-current" />)}
                 </div>
                 <p className="text-gray-600 font-medium italic mb-6 text-sm md:text-base leading-relaxed">"{t.text}"</p>
               </div>
@@ -440,7 +441,7 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
       <section className="py-16 md:py-24 bg-vovoh-dark relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">

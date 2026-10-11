@@ -334,11 +334,7 @@ const VisitRepo = {
   updateAuth: async (sessionId: string, userId: string, authType: string) => {
     if (db) {
       try {
-        const q = query(collection(db, 'visits'), where('sessionId', '==', sessionId));
-        const querySnapshot = await getDocs(q);
-        for (const docSnap of querySnapshot.docs) {
-          await updateDoc(doc(db, 'visits', docSnap.id), { userId, authType });
-        }
+        await db.updateVisitAuth(sessionId, userId, authType);
         return;
       } catch (e) {
         console.error("Turso: Erro ao atualizar auth da visita:", e);
@@ -1655,11 +1651,7 @@ app.get('/configs', async (req, res) => {
       ]);
     }
     if (!configs['testimonials']) {
-      configs['testimonials'] = JSON.stringify([
-        { name: "Maria S.", text: "Melhor coxinha que já comi na vida! A massa é super leve.", stars: 5 },
-        { name: "João P.", text: "Chegou super rápido e muito quente. Recomendo demais!", stars: 5 },
-        { name: "Ana C.", text: "O tempero lembra muito comida de vó mesmo. Virei cliente fiel.", stars: 5 }
-      ]);
+      configs['testimonials'] = '[]';
     }
     res.json(configs);
   } catch (e) {

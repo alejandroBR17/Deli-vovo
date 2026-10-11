@@ -319,11 +319,7 @@ export default function AdminPage() {
       }
 
       if (!data.testimonials) {
-        data.testimonials = JSON.stringify([
-          { name: "Maria S.", text: "Melhor coxinha que já comi na vida! A massa é super leve.", stars: 5 },
-          { name: "João P.", text: "Chegou super rápido e muito quente. Recomendo demais!", stars: 5 },
-          { name: "Ana C.", text: "O tempero lembra muito comida de vó mesmo. Virei cliente fiel.", stars: 5 }
-        ]);
+        data.testimonials = '[]';
       }
       
       setConfigs(data);

@@ -104,7 +104,7 @@ export default function Home() {
     }
 
     try {
-      await fetch(`${GAS_API_URL}/visits`, {
+      const response = await fetch(`${GAS_API_URL}/visits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -115,7 +115,7 @@ export default function Home() {
           authType: initialAuthType
         })
       });
-      localStorage.setItem('vovoh_last_visit_date', today);
+      if (response.ok) localStorage.setItem('vovoh_last_visit_date', today);
     } catch (e) {}
   };
 
@@ -137,15 +137,9 @@ export default function Home() {
   useEffect(() => {
     trackVisit();
 
-    // Tenta pedir permissão de notificação assim que o app carrega
+    // Permission requests belong to the explicit "Ativar avisos" action.
     if (typeof Notification !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            setNotificationsEnabled(true);
-          }
-        });
-      } else if (Notification.permission === 'granted') {
+      if (Notification.permission === 'granted') {
         setNotificationsEnabled(true);
       }
     }
@@ -730,7 +724,7 @@ export default function Home() {
       if (permission === 'granted') {
         setNotificationsEnabled(true);
         localStorage.setItem('vovoh_notifications', 'true');
-        setToast({ message: "Notificações ativadas! A vovó vai te avisar de tudo.", type: 'success' });
+        setToast({ message: "Avisos com o site aberto ativados. Para acompanhar com ele fechado, ative os avisos após enviar seu pedido.", type: 'success' });
       } else {
         setToast({ message: "Poxa, você negou as notificações. Ative nas configurações do navegador!", type: 'error' });
       }
@@ -750,23 +744,6 @@ export default function Home() {
     <div className="min-h-screen bg-[#F9F9F9] font-sans flex flex-col relative">
       {dynamicConfigs?.preview_mode === 'true' && <p className="bg-amber-100 text-amber-900 p-3 text-center text-sm font-bold">Prévia local: pedidos de teste. Loja aberta para testar a qualquer hora.</p>}
       
-      {/* Botão de permissão de notificação */}
-      {typeof Notification !== 'undefined' && 'Notification' in window && !notificationsEnabled && Notification.permission !== 'granted' && (
-        <div className="p-4 bg-red-100 text-red-800 text-center text-sm font-bold">
-          <p>As notificações estão desativadas!</p>
-          <button 
-            onClick={() => {
-              Notification.requestPermission().then(permission => {
-                if (permission === 'granted') setNotificationsEnabled(true);
-              });
-            }}
-            className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg"
-          >
-            Ativar Notificações
-          </button>
-        </div>
-      )}
-
       {isSyncing && (
         <div className="fixed inset-0 z-[9999] bg-[#F9F9F9]/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
           <div className="relative mb-6">
