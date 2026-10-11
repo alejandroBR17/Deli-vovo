@@ -171,3 +171,24 @@ test('grouped delivery and hours save together and invalid groups leave every fi
   assert.equal((await request('/configs/batch',{updates:{opening_start:'02:00',opening_end:'18:00',working_days:'[1,2]'}},headers)).status,200);
   const saved=await (await request('/configs',undefined,{Cookie:adminCookie})).json();assert.equal(saved.opening_start,'02:00');assert.equal(saved.opening_end,'18:00');assert.equal(saved.working_days,'[1,2]');
 });
+
+test('JSON product options complete paid-distance delivery for Pix and cash',async()=>{
+  const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+  const product={id:'json-options-test',name:'Produto teste com opções',price:10,variations:JSON.stringify([{name:'Grande',price:2},{name:'Queijo',price:1.5,isAdditional:true}])};
+  assert.equal((await request('/products',product,headers)).status,200);
+  const catalog=await (await request('/products')).json();const entry=catalog.find((item:any)=>item.id===product.id);
+  assert.equal(entry.variations.length,1);assert.equal(entry.additionals.length,1);
+  assert.equal((await request('/configs/batch',{updates:{free_delivery_radius:'0',fee_per_km:'2',max_delivery_radius:'20'}},headers)).status,200);
+  assert.equal((await request('/configs',{key:'cash_enabled',value:'true'},headers)).status,200);
+  const {deliveryToken}=await import('../server/checkout');
+  const {quoteDelivery}=await import('../server/delivery');
+  const address='Endereço fictício exclusivamente no teste local';
+  const config=await (await request('/configs',undefined,{Cookie:adminCookie})).json();
+  const fee=quoteDelivery(config,'-25.4','-49.2').fee;assert.ok(fee>0);
+  for(const method of ['pix','dinheiro']){
+    const candidate={id:randomUUID(),type:'entrega',customer:{name:'Teste local',phone:'41999999999',address},items:[{id:product.id,quantity:1,variation:{name:'Grande',price:0},additionals:[{name:'Queijo',price:0}]}],total:13.5+fee,deliveryToken:deliveryToken(address,'-25.4','-49.2'),payment:{method,paid:true}};
+    const response=await request('/orders',candidate,{'X-Order-Request':randomUUID()});assert.equal(response.status,200,JSON.stringify(await response.json()));
+    const stored=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((item:any)=>item.id===candidate.id);
+    assert.equal(stored.total,Math.round((13.5+fee)*100)/100);assert.equal(stored.items[0].variation.price,2);assert.equal(stored.items[0].additionals[0].price,1.5);assert.equal(stored.payment.paid,false);
+  }
+});

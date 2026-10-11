@@ -6,6 +6,26 @@ import { quoteDelivery } from '../server/delivery';
 
 const products = [{id:'p', name:'Produto real', price:10, variations:[{name:'Grande',price:2}], additionals:[{name:'Queijo',price:1.5}]}];
 const input = {type:'retirada', items:[{id:'p',quantity:2,price:0.01,name:'Nome falso',variation:{name:'Grande',price:0},additionals:[{name:'Queijo',price:-100}]}]};
+test('JSON catalogs and mixed legacy options price delivery without losing selected options', () => {
+  process.env.ADMIN_SESSION_SECRET=randomUUID()+randomUUID();
+  const address='Endereço de teste Curitiba, PR';
+  const configs={store_lat:'-25.35',store_lng:'-49.2',free_delivery_radius:'0.1',fee_per_km:'2',max_delivery_radius:'20'};
+  for (const variations of [JSON.stringify([{name:'Grande',price:2},{name:'Queijo',price:1.5,isAdditional:true}]), [{name:'Grande',price:2},{name:'Queijo',price:1.5,isAdditional:true}]]) {
+    const catalog=[{id:'p',name:'Produto real',price:10,variations}];
+    for (const method of ['pix','dinheiro']) {
+      const result=priceOrder({...input,type:'entrega',customer:{address},payment:{method},deliveryToken:deliveryToken(address,'-25.4','-49.2')},catalog,configs);
+      assert.equal(result.subtotal,27); assert.ok(result.deliveryFee>0);assert.equal(result.total,27+result.deliveryFee);
+      assert.equal(result.items[0].variation?.name,'Grande'); assert.equal(result.items[0].additionals[0].name,'Queijo');
+    }
+    assert.throws(()=>priceOrder({...input,items:[{...input.items[0],variation:{name:'Falsa'}}]},catalog,{}),/opção/);
+    assert.throws(()=>priceOrder({...input,items:[{...input.items[0],additionals:[{name:'Falso'}]}]},catalog,{}),/Adicional/);
+  }
+  const onlyExtras=[{id:'p',name:'Produto real',price:10,variations:JSON.stringify([{name:'Queijo',price:1.5,isAdditional:true}])}];
+  assert.equal(priceOrder({...input,items:[{...input.items[0],variation:undefined}]},onlyExtras,{}).total,23);
+  const separate=[{id:'p',name:'Produto real',price:10,variations:JSON.stringify([{name:'Grande',price:2}]),additionals:JSON.stringify([{name:'Queijo',price:1.5}])}];
+  assert.equal(priceOrder(input,separate,{}).total,27);
+  assert.throws(()=>priceOrder(input,[{...separate[0],variations:'broken JSON'}],{}));
+});
 test('catalog prices replace submitted prices and coupons apply to subtotal in cents', () => {
   const result = priceOrder({...input,coupon:'DEZ'}, products, {coupons:JSON.stringify([{code:'DEZ',type:'percent',discount:10}])});
   assert.equal(result.subtotal,27); assert.equal(result.total,24.3); assert.equal(result.items[0].price,10);

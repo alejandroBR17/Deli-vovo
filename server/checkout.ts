@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { quoteDelivery } from './delivery.js';
+import { productOptions } from '../src/utils/product-options.js';
 
 function secret() {
   const value = process.env.ADMIN_SESSION_SECRET;
@@ -33,14 +34,13 @@ export function priceOrder(input: any, products: any[], configs: Record<string, 
     const product = products.find(product => product.id === line.id);
     if (!product || product.available === false || product.active === false) throw new Error('Um item não está mais disponível. Reabra o cardápio.');
     if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 99) throw new Error('A quantidade deve ser de 1 a 99 por item.');
-    const options = (value: any) => Array.isArray(value) ? value : [];
-    const variations = options(product.variations);
+    const { variations, additionals: availableAdditionals } = productOptions(product);
     const variation = line.variation ? variations.find((option: any) => option.name === line.variation.name) : undefined;
     if ((line.variation && !variation) || (variations.length && !variation)) throw new Error('Confira a opção do produto.');
     if (line.additionals != null && !Array.isArray(line.additionals)) throw new Error('Confira os adicionais.');
     const names = new Set<string>();
     const additionals = (line.additionals || []).map((selected: any) => {
-      const option = options(product.additionals).find((option: any) => option.name === selected.name);
+      const option = availableAdditionals.find((option: any) => option.name === selected.name);
       if (!option || names.has(option.name)) throw new Error('Adicional inválido ou repetido.');
       names.add(option.name); return { name: option.name, price: money(option.price) / 100 };
     });

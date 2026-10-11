@@ -1,6 +1,7 @@
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
 import { validateStoreConfig } from '../server/store-config.js';
+import { productOptions } from '../src/utils/product-options.js';
 import { createHash } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
@@ -497,6 +498,7 @@ const ProductRepo = {
       products = await fs.readJson(FILES.products).catch(() => []);
     }
 
+    products = products.map(product => ({ ...product, ...productOptions(product) }));
     cache.products = { data: products, lastFetch: now };
     return products;
   },

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Plus, Trash2, Upload, Loader2 } from 'lucide-react';
 import { AdminDialog, MoneyInput } from './AdminDialog';
 import { CATEGORIES, PLACEHOLDER_IMG } from '../constants/index';
 
@@ -8,6 +8,7 @@ const cancel = 'flex-1 py-3 rounded-xl bg-white/5 font-bold';
 const save = 'flex-1 py-3 rounded-xl bg-vovoh-red font-bold disabled:opacity-50';
 
 export function ProductEditor({ product, adding, onChange, onClose, onSave, saving, uploading, onUpload }: any) {
+  const photoInput = useRef<HTMLInputElement>(null);
   const options = (key: 'variations' | 'additionals', title: string, description: string) => (
     <section className="space-y-3 border-t border-white/10 pt-4">
       <div><h3 className="text-lg font-bold">{title}</h3><p className="text-sm text-zinc-400 mt-1">{description}</p></div>
@@ -24,7 +25,18 @@ export function ProductEditor({ product, adding, onChange, onClose, onSave, savi
   return <AdminDialog title={adding ? 'Novo produto' : 'Editar produto'} onClose={() => {if (!saving) onClose();}} footer={<><button type="button" className={cancel} disabled={saving} onClick={onClose}>Cancelar</button><button type="button" className={save} disabled={saving || uploading} onClick={() => onSave(product)}>{saving ? 'Salvando...' : 'Salvar produto'}</button></>}>
     <fieldset disabled={saving} className="min-w-0 space-y-5">
     <p className="text-sm text-zinc-400">Cadastre primeiro nome, preço e categoria. Foto, descrição e opções são complementares.</p>
-    <div className="flex items-center gap-4 min-w-0"><img src={product.image || PLACEHOLDER_IMG} alt="Foto do produto" className="w-20 h-20 shrink-0 rounded-xl object-cover" /><label className="block min-w-0 text-sm font-bold">{uploading ? 'Preparando foto...' : 'Foto do produto'}<input aria-label="Foto do produto" type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} className="block w-full min-w-0 mt-2 text-sm" onChange={onUpload} /></label></div>
+    <div className="flex items-center gap-4 min-w-0">
+      <img src={product.image || PLACEHOLDER_IMG} alt="Foto do produto" className="w-20 h-20 shrink-0 rounded-xl object-cover" />
+      <div className="min-w-0 space-y-2">
+        <p className="text-sm font-bold">Foto do produto</p>
+        <input ref={photoInput} aria-label="Foto do produto" type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading || saving} className="hidden" onChange={onUpload} />
+        <button type="button" disabled={uploading || saving} onClick={() => photoInput.current?.click()} className="flex items-center justify-center gap-2 w-full px-3 py-3 rounded-xl bg-vovoh-red font-bold text-sm disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+          {uploading ? <Loader2 size={18} className="animate-spin shrink-0" aria-hidden="true" /> : <Upload size={18} className="shrink-0" aria-hidden="true" />}
+          {uploading ? 'Preparando foto...' : product.image ? 'Trocar foto' : 'Escolher foto'}
+        </button>
+        <p className="text-xs text-zinc-400">JPG, PNG ou WebP</p>
+      </div>
+    </div>
     <label className="block text-sm font-bold">Nome do produto<input className={field + ' mt-2'} autoComplete="off" maxLength={120} value={product.name || ''} onChange={event => onChange({...product,name:event.target.value})} /></label>
     <MoneyInput id="product-base-price" label="Preço base" value={product.price} onChange={value => onChange({...product,price:value})} hint="Digite, por exemplo, 5,50. O valor será formatado ao sair do campo." />
     <label className="block text-sm font-bold">Categoria<select className={field + ' mt-2'} value={product.category || ''} onChange={event => onChange({...product,category:event.target.value})}><option value="" disabled>Selecione uma categoria</option>{CATEGORIES.filter(category => category.id !== 'todos').map(category => <option key={category.id} value={category.id} className="bg-zinc-900">{category.label}</option>)}</select></label>

@@ -5,6 +5,7 @@ import { PixBox, StripePaymentBox } from './UI';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
 import { lookupCep, formatCep } from '../src/utils/cep';
+import { formatWhatsApp } from '../src/utils/phone-input';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
   const cashEnabled = dynamicConfigs?.cash_enabled === 'true';
@@ -404,13 +405,16 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                   onChange={e => setCustomer({...customer, name: e.target.value})} 
                 />
                 
-                <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><Zap size={16} className="text-vovoh-red"/> WhatsApp</label>
+                <label htmlFor="checkout-whatsapp" className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><Zap size={16} className="text-vovoh-red"/> WhatsApp</label>
                 <input 
                   type="tel" 
-                  placeholder="Ex: 41999999999 (Apenas números)"
+                  id="checkout-whatsapp"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="(41) 99999-9999"
                   className="w-full p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" 
-                  value={customer.phone} 
-                  onChange={e => setCustomer({...customer, phone: e.target.value.replace(/\D/g, '')})} 
+                  value={formatWhatsApp(customer.phone || '')}
+                  onChange={e => setCustomer({...customer, phone: e.target.value.replace(/\D/g, '').slice(0,13)})}
                 />
                 
                 <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><MapPin size={16} className="text-vovoh-red"/> Endereço de Entrega Completo</label>
@@ -504,8 +508,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                        setAddressError("Por favor, digite seu nome completo, meu anjo.");
                        return;
                      }
-                     if (!customer.phone || customer.phone.length < 10) {
-                       setAddressError("Por favor, digite um WhatsApp válido com DDD (apenas números).");
+                     if (!/^(?:\d{10,11}|55\d{10,11})$/.test(customer.phone || '')) {
+                       setAddressError("Digite um WhatsApp válido com DDD, como (41) 99999-9999.");
                        return;
                      }
                      if (!feeCalculated) {
