@@ -1,5 +1,9 @@
 # Prévia online do Delivovo
 
+Prévia atual após correções da manhã: https://delivovo-2schayp5n-alesobralcortes-9387s-projects.vercel.app , commit `ec7f4d8`, deployment `dpl_2LHZbnKjwAeEjTbf7kgceWzzgB3j`, READY. Consolida os ajustes abaixo com cancelamento de frete/CEP/GPS obsoletos e recuperação após buscas demoradas. Build local/remoto, API/painel real online e fluxo de cotação simulado no código remoto em 390/1365 passaram. Produção confirmada inalterada. Detalhes e limites no relatório; não houve pedido/pagamento fictício remoto.
+
+## Histórico das prévias anteriores
+
 Prévia mais recente, concluída na rodada das 05h15 de 11/10: https://delivovo-9bu0cnwzr-alesobralcortes-9387s-projects.vercel.app , commit `10b9ed0`, deployment `dpl_7avrD3Tcb5YrFSzL6iGGTBpKczjt`, READY. Inclui cardápio vazio, opções pelo botão +, remoção de marketing fictício, menos gravações/consultas, checklist com configurações salvas, erros administrativos, horários de São Paulo, ícones PWA locais e teclado nos modais de opções/foto. Última suíte: 21 testes passaram no commit b539bb7; build local/remoto, conferência real de API/painel online e fluxo de teclado com respostas simuladas passaram. PWA verificado na prévia anterior 27fd7f8, cujos arquivos PWA não mudaram nesta rodada. Produção confirmada inalterada. Detalhes, limitações e prioridades em [relatorio-madrugada-2026-10-11.md](relatorio-madrugada-2026-10-11.md).
 
 Histórico: prévia verificada em 10/10/2026, no projeto Vercel `delivovo`, com código do repositório `alejandroBR17/Deli-vovo` no commit `3a144ffc79412a79414ed6e00a28f101a84e5598`.
