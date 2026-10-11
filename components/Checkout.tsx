@@ -4,6 +4,7 @@ import { Banknote } from 'lucide-react';
 import { PixBox, StripePaymentBox } from './UI';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
+import { lookupCep, formatCep } from '../src/utils/cep';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
   const cashEnabled = dynamicConfigs?.cash_enabled === 'true';
@@ -90,29 +91,21 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     addressSearchAbort.current?.abort();
     const controller = new AbortController();
     addressSearchAbort.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`, { signal: controller.signal });
-      if (!res.ok) throw new Error('CEP indisponível');
-      const data = await res.json();
+      const data = await lookupCep(cleanCep, controller.signal);
       if (sequence !== addressSearchSequence.current || controller.signal.aborted) return;
-      if (data.erro) {
-        setAddressError("CEP não encontrado.");
-        return;
-      }
-      setStreet(data.logradouro || '');
-      setNeighborhood(data.bairro || '');
-      setCity(data.localidade || '');
-      setState(data.uf || '');
+      setStreet(data.street);
+      setNeighborhood(data.neighborhood);
+      setCity(data.city);
+      setState(data.state);
       setFeeCalculated(false);
       
       // Foca no número automaticamente para agilizar
       numberRef.current?.focus();
     } catch (e) {
       if (sequence !== addressSearchSequence.current) return;
-      setAddressError(controller.signal.aborted ? 'A busca de CEP demorou demais. Tente novamente ou preencha o endereço.' : 'Erro ao buscar CEP. Você pode preencher o endereço manualmente.');
+      setAddressError(e instanceof Error ? e.message : 'Preencha o endereço manualmente ou tente novamente.');
     } finally {
-      clearTimeout(timeout);
       if (sequence === addressSearchSequence.current) setSearchingCep(false);
     }
   };
@@ -424,7 +417,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
-                    <input type="text" placeholder="CEP (Apenas números)" maxLength={8} className="w-full /3 p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" value={cep} onChange={e => setCep(e.target.value)} />
+                    <input type="text" inputMode="numeric" aria-label="CEP de entrega" placeholder="CEP (Apenas números)" maxLength={9} className="w-full min-w-0 p-4 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" value={cep} onChange={e => setCep(formatCep(e.target.value))} />
                     <button onClick={searchCep} disabled={searchingCep} className="px-4 bg-gray-100 text-vovoh-dark rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all whitespace-nowrap shrink-0 disabled:opacity-50">
                       {searchingCep ? 'Buscando...' : 'Buscar CEP'}
                     </button>

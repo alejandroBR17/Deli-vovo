@@ -160,3 +160,14 @@ test('invalid shop settings are refused without overwriting saved delivery and h
   assert.equal((await request('/configs',{key:'opening_end',value:'02:00'},headers)).status,200);
   assert.equal((await request('/configs',{key:'working_days',value:'[]'},headers)).status,200);
 });
+
+test('grouped delivery and hours save together and invalid groups leave every field unchanged',async()=>{
+  const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+  assert.equal((await request('/configs/batch',{updates:{fee_per_km:'2'}})).status,403);
+  assert.equal((await request('/configs/batch',{updates:{ADMIN_PASSWORD:'x'}},headers)).status,400);
+  const before=await (await request('/configs',undefined,{Cookie:adminCookie})).json();
+  assert.equal((await request('/configs/batch',{updates:{fee_per_km:'10',max_delivery_radius:'1',free_delivery_radius:'3'}},headers)).status,400);
+  const after=await (await request('/configs',undefined,{Cookie:adminCookie})).json();assert.equal(after.fee_per_km,before.fee_per_km);assert.equal(after.max_delivery_radius,before.max_delivery_radius);
+  assert.equal((await request('/configs/batch',{updates:{opening_start:'02:00',opening_end:'18:00',working_days:'[1,2]'}},headers)).status,200);
+  const saved=await (await request('/configs',undefined,{Cookie:adminCookie})).json();assert.equal(saved.opening_start,'02:00');assert.equal(saved.opening_end,'18:00');assert.equal(saved.working_days,'[1,2]');
+});

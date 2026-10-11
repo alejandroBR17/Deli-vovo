@@ -16,6 +16,13 @@ export function deliverySettings(configs: Record<string, unknown>) {
 }
 
 export function validateStoreConfig(key: string, value: unknown, saved: Record<string, unknown>) {
+  if (key === 'whatsapp_number' && typeof value === 'string') {
+    if (!value.trim()) return '';
+    let digits=value.replace(/\D/g,'');
+    if (digits.length===10 || digits.length===11) digits='55'+digits;
+    if (!/^55\d{10,11}$/.test(digits)) throw new Error('Informe um WhatsApp válido com DDD.');
+    return digits;
+  }
   if (deliveryFields.includes(key)) {
     const parsed = numericValue(value);
     if (parsed === null) throw new Error('Informe um valor válido, maior ou igual a zero, para o frete.');

@@ -1106,7 +1106,22 @@ const ConfigRepo = {
     requireLocalStorage();
     await fs.writeJson(FILES.configs, configs);
     cache.configs.data = null;
-  }
+  },
+  updateMany: async (updates: Record<string,string>) => {
+    if (db) {
+      await db.client.batch(Object.entries(updates).map(([key,value])=>({sql:'INSERT INTO configs(id,payload) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',args:[key,JSON.stringify({value})]})),'write');
+    } else {
+      requireLocalStorage();
+      if (process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('O salvamento em conjunto exige o banco atual da loja.');
+      const configs: Config[] = await fs.readJson(FILES.configs).catch(()=>[]);
+      for (const [key,value] of Object.entries(updates)) {
+        const index = configs.findIndex(config=>config.key===key);
+        if (index < 0) configs.push({key,value}); else configs[index].value=value;
+      }
+      await fs.writeJson(FILES.configs,configs);
+    }
+    cache.configs.data=null;
+  },
 };
 
 
@@ -1652,14 +1667,7 @@ app.get('/configs', async (req, res) => {
     const allConfigs = await ConfigRepo.getAll();
     const configs = Object.fromEntries(Object.entries(allConfigs).filter(([key]) => !/vapid|secret|password|token|private/i.test(key) && (hasAdminSession(req) || !internalStoreFields.has(key))));
     configs.preview_mode = process.env.DELIVERY_PREVIEW_MODE === 'true' && !process.env.VERCEL ? 'true' : 'false';
-    if (!configs['faqs']) {
-      configs['faqs'] = JSON.stringify([
-        { q: "Vocês entregam em quais bairros?", a: "Entregamos em Colombo e região! Confira a taxa de entrega ao finalizar o pedido." },
-        { q: "Aceitam quais formas de pagamento?", a: "Aceitamos Pix (com desconto!), Cartão de Crédito e Débito na entrega." },
-        { q: "Os salgados são fritos na hora?", a: "Sim! Fritamos tudo na hora para chegar quentinho e crocante na sua casa." },
-        { q: "Posso agendar um pedido?", a: "Com certeza! Você pode agendar para o horário que preferir durante nosso funcionamento." }
-      ]);
-    }
+    if (!configs['faqs']) configs['faqs'] = '[]';
     if (!configs['testimonials']) {
       configs['testimonials'] = '[]';
     }
@@ -1682,6 +1690,20 @@ app.post('/configs', requireAdminWrite, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
+});
+
+app.post('/configs/batch', requireAdminWrite, async (req,res) => {
+  const updates=req.body?.updates;
+  const allowed=['free_delivery_radius','fee_per_km','max_delivery_radius','opening_start','opening_end','working_days'];
+  if (!updates || typeof updates!=='object' || Array.isArray(updates) || !Object.keys(updates).length || !Object.keys(updates).every(key=>allowed.includes(key))) return res.status(400).json({error:'Confira as configurações enviadas.'});
+  try {
+    const saved=await ConfigRepo.getAll(); const merged={...saved,...updates};
+    const validated:Record<string,string>={};
+    try { for(const [key,value] of Object.entries(updates)) validated[key]=validateStoreConfig(key,value,merged); }
+    catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Confira os valores.'});}
+    await ConfigRepo.updateMany(validated);
+    res.json({success:true,values:validated});
+  }catch{res.status(503).json({error:'Não foi possível salvar. Confira a conexão e tente novamente.'});}
 });
 
 // --- Presença, Estatísticas e Visitas ---

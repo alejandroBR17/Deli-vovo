@@ -91,6 +91,12 @@ test('API stores orders durably, isolates images from catalog responses and prot
     const media=await request(catalog[0].image.replace('/api',''));
     assert.equal(media.status,200); assert.match(media.headers.get('cache-control')!,/immutable/);
     assert.equal(media.headers.get('content-type'),'image/png');
+    const delivery={free_delivery_radius:'2',fee_per_km:'2',max_delivery_radius:'20'};
+    assert.equal((await request('/configs/batch',{updates:delivery},headers)).status,200);
+    await client.execute("CREATE TRIGGER fail_config_save BEFORE UPDATE ON configs WHEN NEW.id='fee_per_km' AND json_extract(NEW.payload,'$.value')='9' BEGIN SELECT RAISE(ABORT,'simulated write failure'); END");
+    assert.equal((await request('/configs/batch',{updates:{free_delivery_radius:'3',fee_per_km:'9',max_delivery_radius:'30'}},headers)).status,503);
+    for(const [key,value] of Object.entries(delivery)) assert.equal((await database.collection('configs').doc(key).get()).data().value,value);
+    await client.execute('DROP TRIGGER fail_config_save');
     const id=randomUUID(); const nonce=randomUUID();
     const body={id,type:'retirada',customer:{name:'Teste',phone:'41999999999',address:'Endereço fictício'},items:[{id:'test-product',quantity:1}],total:10};
     const receipt=await request('/orders',body,{'X-Order-Request':nonce});

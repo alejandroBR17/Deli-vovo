@@ -7,6 +7,11 @@ import { startVisiblePolling } from '../src/utils/visible-polling';
 import { adminFetch } from '../src/utils/admin-api';
 import { subscribeToPush, getPushSubscription } from '../src/utils/push';
 import { StoreSetupChecklist } from '../components/StoreSetupChecklist';
+import { AdminDialog } from '../components/AdminDialog';
+import { ProductEditor, CouponEditor } from '../components/AdminEditors';
+import { DeliverySettings, HoursSettings, AddressSettings, PaymentSettings } from '../components/AdminSettings';
+import { parseMoneyInput, formatMoneyInput } from '../src/utils/money-input';
+import { formatWhatsApp } from '../src/utils/phone-input';
 
 
 export default function AdminPage() {
@@ -51,7 +56,7 @@ export default function AdminPage() {
   const historyOrders = useRef<any[]>([]);
   const [financePeriod, setFinancePeriod] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [isKDS, setIsKDS] = useState(false);
-  const [configTab, setConfigTab] = useState<'geral' | 'entrega' | 'conteudo'>('geral');
+  const [configTab, setConfigTab] = useState<'geral' | 'entrega' | 'conteudo' | 'atendimento' | 'endereco' | 'pagamentos' | 'avisos'>('geral');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [manualOverrideOrderId, setManualOverrideOrderId] = useState<string | null>(null);
   
@@ -313,19 +318,13 @@ export default function AdminPage() {
         data.working_days = [];
       }
       
-      if (!data.faqs) {
-        data.faqs = JSON.stringify([
-          { q: "Vocês entregam em quais bairros?", a: "Entregamos em Colombo e região! Confira a taxa de entrega ao finalizar o pedido." },
-          { q: "Aceitam quais formas de pagamento?", a: "Aceitamos Pix (com desconto!), Cartão de Crédito e Débito na entrega." },
-          { q: "Os salgados são fritos na hora?", a: "Sim! Fritamos tudo na hora para chegar quentinho e crocante na sua casa." },
-          { q: "Posso agendar um pedido?", a: "Com certeza! Você pode agendar para o horário que preferir durante nosso funcionamento." }
-        ]);
-      }
+      if (!data.faqs) data.faqs = '[]';
 
       if (!data.testimonials) {
         data.testimonials = '[]';
       }
       
+      if (data.fee_per_km != null && String(data.fee_per_km).trim() !== '') data.fee_per_km = Number(data.fee_per_km);
       setConfigs(data);
       if (data.coupons) {
         try {
@@ -496,6 +495,20 @@ export default function AdminPage() {
     }
   };
 
+  const handleUpdateConfigs = async (updates: Record<string,string>) => {
+    setSyncing(true);
+    try {
+      const response = await adminFetch('/configs/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})});
+      const result = await response.json();
+      if (result.success !== true || !result.values) throw new Error('Não foi possível confirmar o salvamento.');
+      setSavedConfigs(previous=>({...previous,...result.values}));
+      setConfigs(previous=>({...previous,...result.values,...(result.values.fee_per_km !== undefined ? {fee_per_km:Number(result.values.fee_per_km)} : {}),...(result.values.working_days !== undefined ? {working_days:JSON.parse(result.values.working_days)} : {})}));
+      showMsg('Configurações salvas!', 'success');return true;
+    } catch(error) {showMsg(error instanceof Error ? error.message : 'Não foi possível salvar.', 'error');return false;}
+    finally {setSyncing(false);}
+  };
+  const settingsProps = {configs,saved:savedConfigs,onChange:setConfigs,onSave:handleUpdateConfig,onSaveMany:handleUpdateConfigs,saving:syncing};
+
   const updateStatusAPI = async (orderId: string, newStatus: string) => {
     // Atualização Otimista: Muda na hora pra Vovó não esperar
     const oldOrders = [...orders];
@@ -526,75 +539,29 @@ export default function AdminPage() {
   };
 
   const handleSaveProduct = async (product: any) => {
-    if (!product.name || !product.price) {
-      showMsg("Nome e Preço são obrigatórios!", "error");
-      return;
-    }
-
-    const productToSave = { ...product };
-    if (isAdding && !productToSave.id) productToSave.id = Math.random().toString(36).substr(2, 9).toUpperCase();
-
-    const cleanPrice = String(productToSave.price).replace(',', '.');
-    productToSave.price = parseFloat(cleanPrice);
-
-    let combinedVars: any[] = [];
-    if (productToSave.variations && Array.isArray(productToSave.variations)) {
-      combinedVars = [...productToSave.variations.map((v:any) => ({...v, price: parseFloat(String(v.price).replace(',', '.')) || 0}))];
-    }
-    if (productToSave.additionals && Array.isArray(productToSave.additionals)) {
-      combinedVars = [...combinedVars, ...productToSave.additionals.map((v:any) => ({...v, price: parseFloat(String(v.price).replace(',', '.')) || 0, isAdditional: true}))];
-    }
-    productToSave.variations = JSON.stringify(combinedVars);
-    delete productToSave.additionals;
-
-    // Optimistic Update
-    const oldProducts = [...products];
-    if (isAdding) {
-      // Parse back for display
-      const displayProduct = { ...productToSave };
-      try {
-        const allVars = JSON.parse(displayProduct.variations);
-        displayProduct.variations = allVars.filter((v:any) => !v.isAdditional);
-        displayProduct.additionals = allVars.filter((v:any) => v.isAdditional);
-      } catch(e) {}
-      setProducts([...products, displayProduct]);
-    } else {
-      // Parse back for display
-      const displayProduct = { ...productToSave };
-      try {
-        const allVars = JSON.parse(displayProduct.variations);
-        displayProduct.variations = allVars.filter((v:any) => !v.isAdditional);
-        displayProduct.additionals = allVars.filter((v:any) => v.isAdditional);
-      } catch(e) {}
-      setProducts(products.map(p => p.id === displayProduct.id ? displayProduct : p));
-    }
-
-    setEditingProduct(null);
-    setIsAdding(false);
-    setSyncing(true);
-
-    try {
-      if (isAdding) {
-        await adminFetch(`/products`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(productToSave)
-        });
-      } else {
-        await adminFetch(`/products/${productToSave.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(productToSave)
-        });
+    const price = parseMoneyInput(product.price);
+    if (!String(product.name || '').trim() || price === null || !product.category) { showMsg('Preencha nome, preço válido e categoria.', 'error'); return; }
+    const choices: any[] = [];
+    for (const key of ['variations','additionals']) {
+      const names = new Set<string>();
+      for (const option of product[key] || []) {
+        const optionPrice = parseMoneyInput(option.price); const name = String(option.name || '').trim();
+        if (!name || optionPrice === null || names.has(name)) { showMsg('Cada opção precisa de nome único e valor válido. Use zero quando não houver acréscimo.', 'error'); return; }
+        names.add(name); choices.push({name,price:optionPrice,...(key === 'additionals' ? {isAdditional:true} : {})});
       }
-      showMsg("Cardápio atualizado com sucesso!", "success");
-      setSavedProductCount(isAdding ? oldProducts.length + 1 : oldProducts.length);
-    } catch (e) {
-      setProducts(oldProducts); // Revert
-      showMsg("Erro ao salvar produto.", "error");
-    } finally {
-      setSyncing(false);
     }
+    const productToSave = {...product,id:product.id || crypto.randomUUID(),name:String(product.name).trim(),price,variations:JSON.stringify(choices)};
+    delete productToSave.additionals;
+    setEditingProduct((previous: any) => previous ? {...previous,id:productToSave.id} : previous);
+    setSyncing(true);
+    try {
+      await adminFetch(isAdding ? '/products' : `/products/${productToSave.id}`,{method:isAdding ? 'POST' : 'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(productToSave)});
+      const display={...productToSave,variations:choices.filter(option=>!option.isAdditional),additionals:choices.filter(option=>option.isAdditional)};
+      setProducts(previous=>isAdding ? [...previous,display] : previous.map(item=>item.id===display.id ? display : item));
+      setSavedProductCount(isAdding ? products.length+1 : products.length);
+      setEditingProduct(null); setIsAdding(false); showMsg('Produto salvo com sucesso!', 'success');
+    } catch(error) { showMsg(error instanceof Error ? error.message : 'Não foi possível salvar. Seus dados continuam no formulário.', 'error'); }
+    finally { setSyncing(false); }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -627,43 +594,19 @@ export default function AdminPage() {
   };
 
   const handleSaveCoupon = async (coupon: any) => {
-    if (!coupon.code || !coupon.discount) {
-      showMsg("Código e Desconto são obrigatórios!", "error");
-      return;
-    }
-
-    const cleanDiscount = String(coupon.discount).replace(',', '.');
-    coupon.discount = parseFloat(cleanDiscount);
-    
-    // Optimistic Update
-    const oldCoupons = [...coupons];
-    let newCoupons = [...coupons];
-    if (isAddingCoupon) {
-      newCoupons.push(coupon);
-    } else {
-      newCoupons = newCoupons.map(c => c.code === coupon.code ? coupon : c);
-    }
-    
-    setCoupons(newCoupons);
-    setConfigs(prev => ({ ...prev, coupons: JSON.stringify(newCoupons) }));
-    setEditingCoupon(null);
-    setIsAddingCoupon(false);
+    const code = String(coupon.code || '').trim().toUpperCase();
+    const value = parseMoneyInput(coupon.discount);
+    if (!/^[A-Z0-9_-]{1,32}$/.test(code) || value === null || value <= 0 || !['percent','fixed'].includes(coupon.type) || (coupon.type==='percent' && value > 100)) { showMsg('Confira o código e o desconto. Porcentagens devem estar entre 0 e 100.', 'error'); return; }
+    if (isAddingCoupon && coupons.some(item=>String(item.code).toUpperCase()===code)) { showMsg('Esse código já existe. Escolha outro.', 'error'); return; }
+    const saved = {...coupon,code,discount:coupon.type==='percent' ? value/100 : value};
+    const updated = isAddingCoupon ? [...coupons,saved] : coupons.map(item=>String(item.code).toUpperCase()===code ? saved : item);
     setSyncing(true);
-
     try {
-      await adminFetch(`/configs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'coupons', value: JSON.stringify(newCoupons) })
-      });
-      showMsg("Cupom salvo com sucesso!", "success");
-    } catch (e) {
-      setCoupons(oldCoupons); // Revert
-      setConfigs(prev => ({ ...prev, coupons: JSON.stringify(oldCoupons) }));
-      showMsg("Erro ao salvar cupom.", "error");
-    } finally {
-      setSyncing(false);
-    }
+      await adminFetch('/configs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'coupons',value:JSON.stringify(updated)})});
+      setCoupons(updated);setConfigs(previous=>({...previous,coupons:JSON.stringify(updated)}));setSavedConfigs(previous=>({...previous,coupons:JSON.stringify(updated)}));
+      setEditingCoupon(null);setIsAddingCoupon(false);showMsg('Cupom salvo com sucesso!', 'success');
+    } catch(error) { showMsg(error instanceof Error ? error.message : 'Não foi possível salvar. Seus dados continuam no formulário.', 'error'); }
+    finally {setSyncing(false);}
   };
 
   const handleDeleteCoupon = async (code: string) => {
@@ -806,7 +749,7 @@ export default function AdminPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-vovoh-dark flex items-center justify-center p-6">
+      <div className="admin-page min-h-screen bg-vovoh-dark flex items-center justify-center p-6">
         {toast && <Toast {...toast} onClose={() => setToast(null)} />}
         <form onSubmit={handleLogin} className="bg-zinc-900 border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
           <div className="w-20 h-20 bg-vovoh-red text-white rounded-[2rem] flex items-center justify-center shadow-2xl shadow-red-900/50 mx-auto rotate-3">
@@ -1150,80 +1093,18 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* More Actions Sliding Bottom Drawer (Mobile Only) */}
         {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-[260] animate-fade-in">
-            {/* Backdrop */}
-            <div 
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
-              onClick={() => setIsMobileMenuOpen(false)}
-            />
-            {/* Drawer Container */}
-            <div className="absolute bottom-0 left-0 right-0 bg-zinc-900 border-t border-white/10 rounded-t-[2.5rem] p-6 pb-12 shadow-2xl flex flex-col gap-6 animate-slide-up max-h-[80vh] overflow-y-auto no-scrollbar">
-              <div className="flex justify-between items-center">
-                <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400">Atalhos Administrativos</h3>
-                <button 
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2 bg-white/5 rounded-full text-zinc-500 hover:text-white active:scale-95 transition-all"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <button 
-                  onClick={() => { setTab('coupons'); setIsMobileMenuOpen(false); }}
-                  className={`p-5 rounded-3xl border text-left flex flex-col gap-3 transition-all ${tab === 'coupons' ? 'bg-vovoh-red/10 border-vovoh-red text-white' : 'bg-white/5 border-white/5 text-zinc-300'}`}
-                >
-                  <Tag className={tab === 'coupons' ? 'text-vovoh-red' : 'text-zinc-400'} size={24} />
-                  <div>
-                    <p className="font-black text-sm">Cupons</p>
-                    <p className="text-[10px] text-zinc-500 mt-0.5">Criar códigos de desconto</p>
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => { setTab('stats'); setIsMobileMenuOpen(false); }}
-                  className={`p-5 rounded-3xl border text-left flex flex-col gap-3 transition-all ${tab === 'stats' ? 'bg-vovoh-red/10 border-vovoh-red text-white' : 'bg-white/5 border-white/5 text-zinc-300'}`}
-                >
-                  <PieChart className={tab === 'stats' ? 'text-vovoh-red' : 'text-zinc-400'} size={24} />
-                  <div>
-                    <p className="font-black text-sm">Estatísticas</p>
-                    <p className="text-[10px] text-zinc-500 mt-0.5">Gráficos de vendas e visitas</p>
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => { setTab('configs'); setIsMobileMenuOpen(false); }}
-                  className={`p-5 rounded-3xl border text-left flex flex-col gap-3 transition-all ${tab === 'configs' ? 'bg-vovoh-red/10 border-vovoh-red text-white' : 'bg-white/5 border-white/5 text-zinc-300'}`}
-                >
-                  <Settings className={tab === 'configs' ? 'text-vovoh-red' : 'text-zinc-400'} size={24} />
-                  <div>
-                    <p className="font-black text-sm">Configurações</p>
-                    <p className="text-[10px] text-zinc-500 mt-0.5">Frete, horários e WhatsApp</p>
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => { window.location.hash = ''; setIsMobileMenuOpen(false); }}
-                  className="p-5 rounded-3xl border bg-white/5 border-white/5 text-zinc-300 text-left flex flex-col gap-3 active:scale-95 transition-all"
-                >
-                  <ArrowLeft className="text-zinc-400" size={24} />
-                  <div>
-                    <p className="font-black text-sm">Ver Loja</p>
-                    <p className="text-[10px] text-zinc-500 mt-0.5">Retornar à página inicial</p>
-                  </div>
-                </button>
-              </div>
-
-              <button 
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl font-black text-xs uppercase text-zinc-400 mt-2"
-              >
-                Voltar ao Painel
-              </button>
+          <AdminDialog title="Mais opções" fullScreen onClose={() => setIsMobileMenuOpen(false)} footer={<button className="w-full py-3 rounded-xl bg-white/10 font-bold" onClick={() => setIsMobileMenuOpen(false)}>Voltar ao painel</button>}>
+            <p className="text-sm text-zinc-400">Acesse as ferramentas da loja.</p>
+            <div className="grid grid-cols-1 gap-3">
+              {[
+                {name:'Cupons',detail:'Criar e editar descontos',icon:Tag,tab:'coupons'},
+                {name:'Configurações',detail:'Loja, pagamento, frete e atendimento',icon:Settings,tab:'configs'},
+                {name:'Estatísticas',detail:'Acompanhar vendas e visitas',icon:PieChart,tab:'stats'},
+              ].map(item => <button key={item.tab} className="flex items-center gap-4 p-4 min-w-0 rounded-xl bg-white/5 text-left" onClick={() => {setTab(item.tab);setIsMobileMenuOpen(false);}}><item.icon size={24} className="shrink-0 text-vovoh-gold" /><span className="min-w-0"><span className="block font-bold">{item.name}</span><span className="block text-sm text-zinc-400">{item.detail}</span></span></button>)}
+              <button className="flex items-center gap-4 p-4 rounded-xl bg-white/5 text-left" onClick={() => {window.location.hash='';setIsMobileMenuOpen(false);}}><ArrowLeft size={24} className="shrink-0" /><span className="font-bold">Ver loja</span></button>
             </div>
-          </div>
+          </AdminDialog>
         )}
 
         {tab === 'orders' ? (
@@ -1538,7 +1419,7 @@ export default function AdminPage() {
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
               <h3 className="text-xl sm:text-2xl font-black">Nosso Cardápio</h3>
               <button onClick={() => { setIsAdding(true); setEditingProduct({ name:'', description:'', price:'', category:'fritos', image:'' }); }} className="flex items-center justify-center gap-2 px-5 py-3.5 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-all">
-                <Plus size={18}/> Adicionar Item
+                <Plus size={18}/> Adicionar produto
               </button>
             </div>
 
@@ -1548,11 +1429,11 @@ export default function AdminPage() {
                   <img src={p.image || PLACEHOLDER_IMG} className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl object-cover bg-white/5 shrink-0" />
                   <div className="flex-grow min-w-0">
                     <h4 className="font-black text-sm sm:text-base truncate">{p.name}</h4>
-                    <p className="text-vovoh-red font-black text-xs sm:text-sm mt-0.5">R$ {Number(p.price).toFixed(2)}</p>
+                    <p className="text-vovoh-red font-black text-xs sm:text-sm mt-0.5">R$ {formatMoneyInput(p.price)}</p>
                   </div>
                   <div className="flex sm:flex-col gap-2  :opacity-100 opacity-100 transition-opacity shrink-0">
-                    <button onClick={() => { setIsAdding(false); setEditingProduct(p); }} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-gold text-zinc-400  hover:text-white rounded-xl transition-all" title="Editar"><Edit2 size={14}/></button>
-                    <button onClick={() => handleDeleteProduct(p.id)} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-red text-zinc-400  hover:text-white rounded-xl transition-all" title="Excluir"><Trash2 size={14}/></button>
+                    <button aria-label={`Editar produto ${p.name}`} onClick={() => { setIsAdding(false); setEditingProduct(p); }} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-gold text-zinc-400  hover:text-white rounded-xl transition-all" title="Editar"><Edit2 size={14}/></button>
+                    <button aria-label={`Excluir produto ${p.name}`} onClick={() => handleDeleteProduct(p.id)} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-red text-zinc-400  hover:text-white rounded-xl transition-all" title="Excluir"><Trash2 size={14}/></button>
                   </div>
                 </div>
               ))}
@@ -1573,12 +1454,12 @@ export default function AdminPage() {
                   <div className="flex-grow min-w-0">
                     <h4 className="font-black text-base sm:text-lg uppercase tracking-widest text-vovoh-gold truncate">{c.code}</h4>
                     <p className="text-zinc-400 font-bold text-xs mt-0.5">
-                      Desconto: {c.type === 'percent' ? `${c.discount > 1 ? c.discount : c.discount * 100}%` : `R$ ${Number(c.discount).toFixed(2)}`}
+                      Desconto: {c.type === 'percent' ? `${c.discount > 1 ? c.discount : c.discount * 100}%` : `R$ ${formatMoneyInput(c.discount)}`}
                     </p>
                   </div>
                   <div className="flex sm:flex-col gap-2  :opacity-100 opacity-100 transition-opacity shrink-0">
-                    <button onClick={() => { setIsAddingCoupon(false); setEditingCoupon(c); }} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-gold text-zinc-400  hover:text-white rounded-xl transition-all" title="Editar"><Edit2 size={14}/></button>
-                    <button onClick={() => handleDeleteCoupon(c.code)} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-red text-zinc-400  hover:text-white rounded-xl transition-all" title="Excluir"><Trash2 size={14}/></button>
+                    <button aria-label={`Editar cupom ${c.code}`} onClick={() => { setIsAddingCoupon(false); setEditingCoupon({...c,discount:c.type === 'percent' ? (Number(c.discount)>1 ? Number(c.discount) : Number(c.discount)*100) : c.discount}); }} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-gold text-zinc-400  hover:text-white rounded-xl transition-all" title="Editar"><Edit2 size={14}/></button>
+                    <button aria-label={`Excluir cupom ${c.code}`} onClick={() => handleDeleteCoupon(c.code)} className="p-2.5 sm:p-3 bg-white/5 hover:bg-vovoh-red text-zinc-400  hover:text-white rounded-xl transition-all" title="Excluir"><Trash2 size={14}/></button>
                   </div>
                 </div>
               ))}
@@ -1597,61 +1478,14 @@ export default function AdminPage() {
                 <h3 className="text-2xl font-black">Configurações da Loja</h3>
               </div>
               
-              <div className="bg-zinc-900 border border-white/10 p-1.5 rounded-2xl flex w-full  overflow-x-auto no-scrollbar snap-x snap-mandatory">
-                <button onClick={() => setConfigTab('geral')} className={`flex-1 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap snap-center ${configTab === 'geral' ? 'bg-white/10 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Geral</button>
-                <button onClick={() => setConfigTab('entrega')} className={`flex-1 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap snap-center ${configTab === 'entrega' ? 'bg-white/10 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Entrega</button>
-                <button onClick={() => setConfigTab('conteudo')} className={`flex-1 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap snap-center ${configTab === 'conteudo' ? 'bg-white/10 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Conteúdo</button>
-              </div>
+              <nav aria-label="Seções das configurações" className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full min-w-0">
+                {([['geral','Loja'],['pagamentos','Pagamentos'],['entrega','Frete'],['atendimento','Atendimento'],['endereco','Endereço'],['conteudo','Conteúdo'],['avisos','Avisos']] as const).map(([id,label]) => <button key={id} type="button" aria-pressed={configTab === id} onClick={() => setConfigTab(id)} className={`min-w-0 py-3 px-2 rounded-xl text-sm font-bold border ${configTab === id ? 'bg-white/10 border-white/30' : 'border-white/10 text-zinc-400'}`}>{label}</button>)}
+              </nav>
             </div>
 
             <div className="grid gap-6">
               {configTab === 'geral' && (
                 <div className="bg-zinc-900/50 p-4 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 space-y-6 animate-in slide-in-from-bottom-4">
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Alarme Geral (Todos os Dispositivos)</label>
-                    <button 
-                      onClick={async () => {
-                        if (confirm("Tem certeza que deseja enviar um alerta para TODOS os dispositivos?")) {
-                          try {
-                            const res = await adminFetch(`/admin/broadcast-push`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ title: ' ALERTA GERAL DA VOVÓ!', body: 'Por favor, verifique o pedido agora!' })
-                            });
-                            if (res.ok) showMsg("Alerta enviado para todos!", "success");
-                            else showMsg("Erro ao enviar alerta.", "error");
-                          } catch (e) {
-                            showMsg("Erro ao enviar alerta.", "error");
-                          }
-                        }
-                      }}
-                      className="w-full py-4 bg-red-600/20 text-red-500 rounded-2xl font-black text-xs uppercase border border-red-500/20 hover:bg-red-600 hover:text-white transition-all"
-                    >
-                      Enviar Alarme Geral
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Notificações</label>
-                    <button 
-                      onClick={testNotification}
-                      disabled={testingPush}
-                      className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
-                    >
-                      Enviar Notificação de Teste
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Campainha</label>
-                    <button 
-                      onClick={testOrderSound}
-                      className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
-                    >
-                      Tocar Som de Pedido
-                    </button>
-                  </div>
-
                   <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Nome da Loja</label>
                     <div className="flex flex-col sm:flex-row gap-3">
@@ -1679,218 +1513,71 @@ export default function AdminPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Número do WhatsApp (Ex: 5541999999999)</label>
+                    <label htmlFor="store-whatsapp" className="text-sm font-bold">WhatsApp da loja (com DDD)</label>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <input 
                         type="text" 
                         className="flex-grow p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.whatsapp_number || ''}
-                        onChange={e => setConfigs({...configs, whatsapp_number: e.target.value})}
+                        id="store-whatsapp" inputMode="tel" value={formatWhatsApp(configs.whatsapp_number || '')}
+                        onChange={e => setConfigs({...configs, whatsapp_number: e.target.value.replace(/\D/g,'')})}
                       />
                       <button onClick={() => handleUpdateConfig('whatsapp_number', configs.whatsapp_number)} className="px-6 py-4 sm:py-0 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase shrink-0">Salvar</button>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <label htmlFor="store-pix-key" className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Chave PIX</label>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <input 
-                        type="text" 
-                        className="flex-grow p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        id="store-pix-key"
-                        value={configs.pix_key || ''}
-                        onChange={e => setConfigs({...configs, pix_key: e.target.value})}
-                      />
-                      <button onClick={() => handleUpdateConfig('pix_key', configs.pix_key)} className="px-6 py-4 sm:py-0 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase shrink-0">Salvar</button>
-                    </div>
-                  </div>
-                  <div className="space-y-3 border-t border-white/10 pt-6">
-                    <h3 className="font-bold">Dinheiro na entrega</h3>
-                    <p className="text-sm text-zinc-400">Desativado por padrão. Ao ativar, os clientes poderão escolher dinheiro e informar o troco. Pix e cartão online continuam disponíveis.</p>
-                    <button type="button" role="switch" aria-checked={savedConfigs?.cash_enabled === 'true'} disabled={syncing || !savedConfigs} onClick={() => handleUpdateConfig('cash_enabled', savedConfigs?.cash_enabled === 'true' ? 'false' : 'true')} className="px-6 py-4 rounded-2xl bg-white/10 font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50">
-                      {savedConfigs?.cash_enabled === 'true' ? 'Desativar dinheiro' : 'Ativar dinheiro'}
-                    </button>
-                    <p role="status" className="text-sm text-zinc-400">{savedConfigs?.cash_enabled === 'true' ? 'Dinheiro ativado' : 'Dinheiro desativado'}</p>
-                  </div>
                 </div>
               )}
-
-              {configTab === 'entrega' && (
-                <div className="bg-zinc-900/50 p-4 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 space-y-8 animate-in slide-in-from-bottom-4">
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Configurações de Frete</label>
-                    </div>
-                    
-                    <p className="text-sm text-zinc-400">Dias, horários e frete podem ser alterados aqui. Os campos numéricos e horários são salvos ao sair do campo; aguarde a confirmação. A distância é em linha reta, a partir da loja.</p>
-                    <div className="grid grid-cols-1  gap-4">
-                      <div className="space-y-2">
-                        <label htmlFor="free_delivery_radius" className="text-[10px] font-bold text-zinc-400">Raio Grátis (KM)</label>
-                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" id="free_delivery_radius" min="0" step="0.01" value={configs.free_delivery_radius ?? ''} onChange={e => setConfigs({...configs, free_delivery_radius: e.target.value})} onBlur={() => handleUpdateConfig('free_delivery_radius', configs.free_delivery_radius)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label htmlFor="fee_per_km" className="text-[10px] font-bold text-zinc-400">Taxa por KM Extra (R$)</label>
-                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" id="fee_per_km" min="0" step="0.01" value={configs.fee_per_km ?? ''} onChange={e => setConfigs({...configs, fee_per_km: e.target.value})} onBlur={() => handleUpdateConfig('fee_per_km', configs.fee_per_km)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label htmlFor="max_delivery_radius" className="text-[10px] font-bold text-zinc-400">Raio Máximo (KM)</label>
-                        <input type="number" className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" id="max_delivery_radius" min="0" step="0.01" value={configs.max_delivery_radius ?? ''} onChange={e => setConfigs({...configs, max_delivery_radius: e.target.value})} onBlur={() => handleUpdateConfig('max_delivery_radius', configs.max_delivery_radius)} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <label htmlFor="opening-start" className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Abre às</label>
-                      <input 
-                        type="time" 
-                        className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        id="opening-start" value={configs.opening_start || ''}
-                        onChange={e => setConfigs({...configs, opening_start: e.target.value})}
-                        onBlur={() => handleUpdateConfig('opening_start', configs.opening_start)}
-                      />
-                    </div>
-                    <div className="space-y-4">
-                      <label htmlFor="opening-end" className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Fecha às</label>
-                      <input 
-                        type="time" 
-                        className="w-full p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        id="opening-end" value={configs.opening_end || ''}
-                        onChange={e => setConfigs({...configs, opening_end: e.target.value})}
-                        onBlur={() => handleUpdateConfig('opening_end', configs.opening_end)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Dias de Funcionamento</label>
-                    <div className="flex flex-wrap gap-2">
-                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, idx) => {
-                        const isActive = configs.working_days?.includes(idx);
-                        return (
-                          <button 
-                            key={idx}
-                            aria-pressed={isActive}
-                            disabled={syncing || !savedConfigs}
-                            onClick={async () => {
-                              let currentDays = Array.isArray(configs.working_days) ? configs.working_days : [];
-                              let newDays = [...currentDays];
-                              if (isActive) newDays = newDays.filter(d => d !== idx);
-                              else newDays.push(idx);
-                              if (await handleUpdateConfig('working_days', JSON.stringify(newDays), false)) setConfigs(previous => ({...previous, working_days: newDays}));
-                            }}
-                            className={`px-4 py-2 rounded-xl font-black text-xs transition-all ${isActive ? 'bg-vovoh-red text-white' : 'bg-white/5 text-zinc-500'}`}
-                          >
-                            {day}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-6 bg-white/5 rounded-[2rem] border border-white/10">
-                      <div>
-                        <h4 className="font-black text-sm text-white">Forçar Loja Fechada</h4>
-                        <p className="text-[10px] font-bold text-zinc-400 mt-1">Ative para fechar a loja agora mesmo (feriados, imprevistos).</p>
-                      </div>
-                      <button 
-                        type="button" role="switch" aria-label="Fechar loja agora" aria-checked={configs.force_closed === 'true' || configs.force_closed === true} disabled={syncing || !savedConfigs}
-                        onClick={() => {
-                          const isClosed = configs.force_closed === 'true' || configs.force_closed === true;
-                          const newVal = isClosed ? 'false' : 'true';
-                          handleUpdateConfig('force_closed', newVal);
-                        }}
-                        className={`w-14 h-8 rounded-full transition-colors relative ${configs.force_closed === 'true' || configs.force_closed === true ? 'bg-vovoh-red' : 'bg-zinc-700'}`}
-                      >
-                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${configs.force_closed === 'true' || configs.force_closed === true ? 'right-1' : 'left-1'}`}></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Endereço da loja para calcular o frete</label>
-                    <p className="text-sm text-zinc-400">Este endereço é interno. A localização pública da loja continua separada. Ao mudar de endereço, confirme também o ponto no mapa.</p>
-                    <div className="grid grid-cols-1  gap-3">
-                      <input 
-                        type="text" 
-                        placeholder="CEP"
-                        className="p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.store_cep || ''}
-                        onChange={async e => {
-                          const val = e.target.value;
-                          setConfigs({...configs, store_cep: val});
-                          if (val.replace(/\D/g, '').length === 8) {
-                            try {
-                              const res = await fetch(`https://viacep.com.br/ws/${val.replace(/\D/g, '')}/json/`);
-                              const data = await res.json();
-                              if (!data.erro) {
-                                setConfigs(prev => ({
-                                  ...prev,
-                                  store_cep: val,
-                                  store_street: data.logradouro,
-                                  store_neighborhood: data.bairro,
-                                  store_city: data.localidade,
-                                  store_state: data.uf
-                                }));
-                              }
-                            } catch(e) {}
+              {configTab === 'avisos' && <section className="min-w-0 bg-zinc-900/50 p-4 sm:p-6 rounded-2xl border border-white/10 space-y-5"><h3 className="text-xl font-bold">Avisos e som de pedidos</h3>                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Alarme Geral (Todos os Dispositivos)</label>
+                    <button
+                      onClick={async () => {
+                        if (confirm("Tem certeza que deseja enviar um alerta para TODOS os dispositivos?")) {
+                          try {
+                            const res = await adminFetch(`/admin/broadcast-push`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ title: ' ALERTA GERAL DA VOVÓ!', body: 'Por favor, verifique o pedido agora!' })
+                            });
+                            if (res.ok) showMsg("Alerta enviado para todos!", "success");
+                            else showMsg("Erro ao enviar alerta.", "error");
+                          } catch (e) {
+                            showMsg("Erro ao enviar alerta.", "error");
                           }
-                        }}
-                      />
-                      <input 
-                        type="text" 
-                        placeholder="Rua"
-                        className="p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.store_street || ''}
-                        onChange={e => setConfigs({...configs, store_street: e.target.value})}
-                      />
-                      <input 
-                        type="text" 
-                        placeholder="Número"
-                        className="p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.store_number || ''}
-                        onChange={e => setConfigs({...configs, store_number: e.target.value})}
-                      />
-                      <input 
-                        type="text" 
-                        placeholder="Bairro"
-                        className="p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.store_neighborhood || ''}
-                        onChange={e => setConfigs({...configs, store_neighborhood: e.target.value})}
-                      />
-                      <input 
-                        type="text" 
-                        placeholder="Cidade"
-                        className="p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.store_city || ''}
-                        onChange={e => setConfigs({...configs, store_city: e.target.value})}
-                      />
-                      <input 
-                        type="text" 
-                        placeholder="Estado (UF)"
-                        className="p-4 bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm"
-                        value={configs.store_state || ''}
-                        onChange={e => setConfigs({...configs, store_state: e.target.value})}
-                      />
-                    </div>
-                    <label className="block text-sm font-bold">Link do ponto no Google Maps
-                      <input type="url" placeholder="Cole o link completo do ponto da loja" className="w-full mt-2 p-4 bg-white/5 rounded-2xl border border-white/10 text-sm" onChange={event => {
-                        const match = event.target.value.match(/!3d(-?[\d.]+)!4d(-?[\d.]+)/);
-                        if (match) setConfigs(previous => ({...previous, store_lat: match[1], store_lng: match[2]}));
-                      }} />
-                    </label>
-                    <p className="text-xs text-zinc-400">Use o link completo do local. Links curtos devem ser abertos primeiro; você também pode preencher as coordenadas abaixo.</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="text-sm">Latitude<input aria-label="Latitude da loja" type="text" inputMode="decimal" className="w-full mt-2 p-4 bg-white/5 rounded-2xl border border-white/10" value={configs.store_lat || ''} onChange={event => setConfigs({...configs, store_lat: event.target.value})} /></label>
-                      <label className="text-sm">Longitude<input aria-label="Longitude da loja" type="text" inputMode="decimal" className="w-full mt-2 p-4 bg-white/5 rounded-2xl border border-white/10" value={configs.store_lng || ''} onChange={event => setConfigs({...configs, store_lng: event.target.value})} /></label>
-                    </div>
-                    <div className="flex justify-end mt-2">
-                      <button onClick={saveStoreAddress} disabled={savingAddress} className="w-full sm:w-auto px-6 py-4 bg-vovoh-red text-white rounded-2xl font-black text-xs uppercase disabled:opacity-50">{savingAddress ? 'Salvando...' : 'Salvar Endereço'}</button>
-                    </div>
+                        }
+                      }}
+                      className="w-full py-4 bg-red-600/20 text-red-500 rounded-2xl font-black text-xs uppercase border border-red-500/20 hover:bg-red-600 hover:text-white transition-all"
+                    >
+                      Enviar Alarme Geral
+                    </button>
                   </div>
-                </div>
-              )}
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Notificações</label>
+                    <button
+                      onClick={testNotification}
+                      disabled={testingPush}
+                      className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
+                    >
+                      Enviar Notificação de Teste
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Campainha</label>
+                    <button
+                      onClick={testOrderSound}
+                      className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
+                    >
+                      Tocar Som de Pedido
+                    </button>
+                  </div>
+
+</section>}
+
+{configTab === 'pagamentos' && <PaymentSettings {...settingsProps} />}
+              {configTab === 'entrega' && <DeliverySettings {...settingsProps} />}
+              {configTab === 'atendimento' && <HoursSettings {...settingsProps} />}
+              {configTab === 'endereco' && <AddressSettings configs={configs} onChange={setConfigs} onSaveAddress={saveStoreAddress} saving={savingAddress} />}
 
               {configTab === 'conteudo' && (
                 <div className="bg-zinc-900/50 p-4 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 space-y-8 animate-in slide-in-from-bottom-4">
@@ -1927,7 +1614,7 @@ export default function AdminPage() {
                           <img src={configs.story_image} className="w-full h-full object-cover" alt="História" />
                         </div>
                       )}
-                      <div className="flex gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3">
                         <input 
                           type="text" 
                           placeholder="URL da Imagem"
@@ -1949,7 +1636,7 @@ export default function AdminPage() {
                   </div>
 
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Depoimentos dos Netinhos</label>
                       <button 
                         onClick={() => {
@@ -2028,7 +1715,7 @@ export default function AdminPage() {
                   </div>
 
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Dúvidas Frequentes</label>
                       <button 
                         onClick={() => {
@@ -2092,7 +1779,7 @@ export default function AdminPage() {
                 </div>
               )}
 
-              <div className="bg-vovoh-red/10 border border-vovoh-red/20 p-8 rounded-[2.5rem] flex items-center gap-6">
+              <div className="bg-vovoh-red/10 border border-vovoh-red/20 p-4 sm:p-8 rounded-[2.5rem] flex items-start gap-3 sm:gap-6">
                 <AlertTriangle className="text-vovoh-red shrink-0" size={32} />
                 <div>
                   <h4 className="font-black text-sm">Aviso de Segurança</h4>
@@ -2225,7 +1912,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="bg-zinc-900/50 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <h4 className="font-black text-lg">Online Agora</h4>
                     <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-black uppercase tracking-widest">
                       <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
@@ -2444,183 +2131,9 @@ export default function AdminPage() {
         })()}
       </div>
 
-      {editingProduct && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 overflow-hidden">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setEditingProduct(null)} />
-          
-          <div className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto no-scrollbar bg-zinc-900 border border-white/10 p-6  rounded-[2.5rem] [3rem] shadow-3xl flex flex-col animate-in zoom-in-95">
-            
-            <div className="flex justify-between items-center mb-6 shrink-0">
-               <h3 className="text-xl  font-black">{isAdding ? 'Novo Salgado' : 'Editar Salgado'}</h3>
-               <button onClick={() => setEditingProduct(null)} className="bg-white/5 p-2 rounded-full hover:bg-vovoh-red"><X size={20} className="text-zinc-400 hover:text-white" /></button>
-            </div>
-            
-            <div className="space-y-4 flex-grow">
-              <div className="flex justify-center mb-6">
-                 <div className="relative group w-32 h-32   rounded-[2rem] [2.5rem] overflow-hidden border-4 border-white/5 bg-white/5 shadow-inner">
-                    <img src={editingProduct.image || PLACEHOLDER_IMG} className="w-full h-full object-cover" />
-                    <label className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                       {uploading ? <Loader2 className="animate-spin text-white" /> : <Upload className="text-white" />}
-                       <span className="text-[10px] font-black uppercase mt-2">Mudar Foto</span>
-                       <input type="file" className="hidden" accept="image/*" onChange={e => handleImageUpload(e, (base64) => setEditingProduct({...editingProduct, image: base64}))} />
-                    </label>
-                 </div>
-              </div>
+      {editingProduct && <ProductEditor product={editingProduct} adding={isAdding} onChange={setEditingProduct} onClose={() => setEditingProduct(null)} onSave={handleSaveProduct} saving={syncing} uploading={uploading} onUpload={(event: React.ChangeEvent<HTMLInputElement>) => handleImageUpload(event, image => setEditingProduct((previous: any) => previous ? {...previous,image} : previous))} />}
+      {editingCoupon && <CouponEditor coupon={editingCoupon} adding={isAddingCoupon} onChange={setEditingCoupon} onClose={() => setEditingCoupon(null)} onSave={handleSaveCoupon} saving={syncing} />}
 
-              <input type="text" placeholder="Nome do Produto" className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} />
-              
-              <textarea placeholder="Descrição (Ex: Massa macia e recheio cremoso)" className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold outline-none h-24 focus:border-vovoh-red text-sm resize-none" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} />
-              
-              <div className="grid grid-cols-1  gap-4">
-                <input type="text" placeholder="Preço (Ex: 5.50)" className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} />
-                
-                <div className="relative">
-                  <select
-                    className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold text-sm text-zinc-300 outline-none focus:border-vovoh-red appearance-none"
-                    value={editingProduct.category || ''}
-                    onChange={e => setEditingProduct({...editingProduct, category: e.target.value})}
-                  >
-                    <option value="" disabled className="bg-zinc-800">Selecione uma categoria...</option>
-                    {CATEGORIES.filter(c => c.id !== 'todos').map(c => (
-                      <option key={c.id} value={c.id} className="bg-zinc-800 text-white">
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-4 border-t border-white/10">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Variações (Tamanho, Sabor, etc)</label>
-                  <button 
-                    onClick={() => {
-                      const vars = editingProduct.variations ? [...editingProduct.variations] : [];
-                      vars.push({ name: '', price: 0 });
-                      setEditingProduct({...editingProduct, variations: vars});
-                    }} 
-                    className="text-[10px] font-black uppercase text-vovoh-gold hover:text-white transition-colors flex items-center gap-1"
-                  >
-                    <Plus size={12}/> Adicionar
-                  </button>
-                </div>
-                
-                {editingProduct.variations && editingProduct.variations.map((v: any, idx: number) => (
-                  <div key={idx} className="flex flex-col  gap-2 items-stretch  bg-white/5 p-3 rounded-2xl  ">
-                    <div className="flex gap-2 flex-grow">
-                      <input type="text" placeholder="Nome (Ex: Grande)" className="flex-[2] p-3 bg-white/5 /5 rounded-xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-xs" value={v.name} onChange={e => {
-                        const vars = [...editingProduct.variations];
-                        vars[idx].name = e.target.value;
-                        setEditingProduct({...editingProduct, variations: vars});
-                      }} />
-                      <input type="number" step="0.5" placeholder="Preço" className="flex-1 p-3 bg-white/5 /5 rounded-xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-xs" value={v.price} onChange={e => {
-                        const vars = [...editingProduct.variations];
-                        vars[idx].price = e.target.value;
-                        setEditingProduct({...editingProduct, variations: vars});
-                      }} />
-                    </div>
-                    <button onClick={() => {
-                      const vars = editingProduct.variations.filter((_:any, i:number) => i !== idx);
-                      setEditingProduct({...editingProduct, variations: vars});
-                    }} className="p-3 bg-red-500/10 /5 hover:bg-vovoh-red text-red-500  hover:text-white rounded-xl transition-all flex items-center justify-center gap-2 ">
-                      <Trash2 size={14}/>
-                      <span className="text-[10px] font-black uppercase">Remover</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2 pt-4 border-t border-white/10">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Adicionais (Somam ao preço)</label>
-                  <button 
-                    onClick={() => {
-                      const adds = editingProduct.additionals ? [...editingProduct.additionals] : [];
-                      adds.push({ name: '', price: 0 });
-                      setEditingProduct({...editingProduct, additionals: adds});
-                    }} 
-                    className="text-[10px] font-black uppercase text-vovoh-gold hover:text-white transition-colors flex items-center gap-1"
-                  >
-                    <Plus size={12}/> Adicionar
-                  </button>
-                </div>
-                
-                {editingProduct.additionals && editingProduct.additionals.map((v: any, idx: number) => (
-                  <div key={idx} className="flex flex-col  gap-2 items-stretch  bg-white/5 p-3 rounded-2xl  ">
-                    <div className="flex gap-2 flex-grow">
-                      <input type="text" placeholder="Nome (Ex: Bacon)" className="flex-[2] p-3 bg-white/5 /5 rounded-xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-xs" value={v.name} onChange={e => {
-                        const adds = [...editingProduct.additionals];
-                        adds[idx].name = e.target.value;
-                        setEditingProduct({...editingProduct, additionals: adds});
-                      }} />
-                      <input type="number" step="0.5" placeholder="Preço" className="flex-1 p-3 bg-white/5 /5 rounded-xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-xs" value={v.price} onChange={e => {
-                        const adds = [...editingProduct.additionals];
-                        adds[idx].price = e.target.value;
-                        setEditingProduct({...editingProduct, additionals: adds});
-                      }} />
-                    </div>
-                    <button onClick={() => {
-                      const adds = editingProduct.additionals.filter((_:any, i:number) => i !== idx);
-                      setEditingProduct({...editingProduct, additionals: adds});
-                    }} className="p-3 bg-red-500/10 /5 hover:bg-vovoh-red text-red-500  hover:text-white rounded-xl transition-all flex items-center justify-center gap-2 ">
-                      <Trash2 size={14}/>
-                      <span className="text-[10px] font-black uppercase">Remover</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-6 shrink-0 mt-4">
-              <button onClick={() => setEditingProduct(null)} className="flex-1 py-4  font-black text-zinc-500 uppercase text-[10px]  bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">Cancelar</button>
-              <button onClick={() => handleSaveProduct(editingProduct)} disabled={syncing} className="flex-[2] py-4  bg-vovoh-red text-white rounded-2xl font-black text-[10px]  uppercase shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
-                {syncing ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16}/>}
-                Salvar Produto
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {editingCoupon && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 overflow-hidden">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setEditingCoupon(null)} />
-          
-          <div className="relative w-full max-w-lg bg-zinc-900 border border-white/10 p-6  rounded-[2.5rem] [3rem] shadow-3xl flex flex-col animate-in zoom-in-95">
-            
-            <div className="flex justify-between items-center mb-6 shrink-0">
-               <h3 className="text-xl  font-black">{isAddingCoupon ? 'Novo Cupom' : 'Editar Cupom'}</h3>
-               <button onClick={() => setEditingCoupon(null)} className="bg-white/5 p-2 rounded-full hover:bg-vovoh-red"><X size={20} className="text-zinc-400 hover:text-white" /></button>
-            </div>
-            
-            <div className="space-y-4 flex-grow">
-              <input type="text" placeholder="Código (Ex: PROMO10)" className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm uppercase" value={editingCoupon.code} onChange={e => setEditingCoupon({...editingCoupon, code: e.target.value.toUpperCase()})} disabled={!isAddingCoupon} />
-              
-              <div className="grid grid-cols-1  gap-4">
-                <input type="text" placeholder="Desconto (Ex: 10 para 10% ou R$10)" className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm" value={editingCoupon.discount} onChange={e => setEditingCoupon({...editingCoupon, discount: e.target.value})} />
-                
-                <select 
-                  className="w-full p-4  bg-white/5 rounded-2xl border border-white/10 font-bold outline-none focus:border-vovoh-red text-sm text-zinc-300 appearance-none"
-                  value={editingCoupon.type}
-                  onChange={e => setEditingCoupon({...editingCoupon, type: e.target.value})}
-                >
-                  <option value="percent" className="bg-zinc-800">Porcentagem (%)</option>
-                  <option value="fixed" className="bg-zinc-800">Valor Fixo (R$)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-6 shrink-0 mt-4">
-              <button onClick={() => setEditingCoupon(null)} className="flex-1 py-4  font-black text-zinc-500 uppercase text-[10px]  bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">Cancelar</button>
-              <button onClick={() => handleSaveCoupon(editingCoupon)} disabled={syncing} className="flex-[2] py-4  bg-vovoh-red text-white rounded-2xl font-black text-[10px]  uppercase shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
-                {syncing ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16}/>}
-                Salvar Cupom
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {editingNeighborhood && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 overflow-hidden">
           <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setEditingNeighborhood(null)} />
@@ -2683,7 +2196,7 @@ export default function AdminPage() {
               onChange={e => setRefusalReason(e.target.value)}
             />
             
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => setRefusalModal({isOpen: false, orderId: null})} className="flex-1 py-3 bg-white/5 text-zinc-400 rounded-xl font-black text-xs uppercase hover:bg-white/10">Cancelar</button>
               <button onClick={handleRefuseOrder} disabled={!refusalReason.trim() || syncing} className="flex-1 py-3 bg-vovoh-red text-white rounded-xl font-black text-xs uppercase hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 {syncing ? <Loader2 className="animate-spin" size={16}/> : <X size={16}/>}
