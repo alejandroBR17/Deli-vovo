@@ -1,5 +1,7 @@
 # Prévia online do Delivovo
 
+Acesso atual após simplificar a senha do painel a pedido do responsável: https://delivovo-d7y9fn9yl-alesobralcortes-9387s-projects.vercel.app , deployment `dpl_JQJyrHMZyjUfMQMpsr4sjvkExoND`, READY, mesmo código `ec7f4d8`. Variável ADMIN_PASSWORD alterada exclusivamente para Preview e login com a nova senha verificado. A senha fica no arquivo local privado `data/acesso-previa.txt`, sem ser colocada no Git. O link anterior mantém suas variáveis antigas. Produção preservada.
+
 Prévia atual após correções da manhã: https://delivovo-2schayp5n-alesobralcortes-9387s-projects.vercel.app , commit `ec7f4d8`, deployment `dpl_2LHZbnKjwAeEjTbf7kgceWzzgB3j`, READY. Consolida os ajustes abaixo com cancelamento de frete/CEP/GPS obsoletos e recuperação após buscas demoradas. Build local/remoto, API/painel real online e fluxo de cotação simulado no código remoto em 390/1365 passaram. Produção confirmada inalterada. Detalhes e limites no relatório; não houve pedido/pagamento fictício remoto.
 
 ## Histórico das prévias anteriores
