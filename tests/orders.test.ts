@@ -261,3 +261,13 @@ test('immediate orders stop at closing, retries remain idempotent and future slo
  await request('/configs',{key:'working_days',value:'[]'},headers);
  assert.equal((await request('/orders',body(),{'X-Order-Request':randomUUID()})).status,409);
 });
+
+
+test('new orders require a chosen customer name instead of the old guest placeholder', async () => {
+  for (const name of ['Visitante', '  visitante  ', '  ', 'Jo']) {
+    const candidate={...order,id:randomUUID(),customer:{...order.customer,name}};
+    const result=await request('/orders',candidate,{'x-order-request':randomUUID()});
+    assert.equal(result.status,400);
+    assert.match((await result.json()).error,/nome/);
+  }
+});

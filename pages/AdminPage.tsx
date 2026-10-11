@@ -768,7 +768,7 @@ export default function AdminPage() {
   if (!isAuthenticated) {
     return (
       <div className="admin-page min-h-screen bg-vovoh-dark flex items-center justify-center p-6">
-        {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+        {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
         <form onSubmit={handleLogin} className="bg-zinc-900 border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
           <div className="w-20 h-20 bg-vovoh-red text-white rounded-[2rem] flex items-center justify-center shadow-2xl shadow-red-900/50 mx-auto rotate-3">
             <ChefHat size={40} />
@@ -799,7 +799,7 @@ export default function AdminPage() {
     
     return (
       <div className="min-h-screen bg-black text-white p-4  font-sans overflow-hidden flex flex-col">
-        {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+        {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
         
         <header className="flex justify-between items-center mb-8 shrink-0">
           <div className="flex items-center gap-4">
@@ -964,7 +964,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-vovoh-dark text-white p-4  font-sans selection:bg-vovoh-red pb-36 ">
-      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+      {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
       
       {showIOSBanner && (
         <div className="mb-8 bg-blue-500/20 border border-blue-500/50 p-4 rounded-2xl text-blue-200 text-sm flex items-start gap-3">

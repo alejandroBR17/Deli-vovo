@@ -1,17 +1,18 @@
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import React, { useState, useEffect, useRef } from 'react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
-import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin } from 'lucide-react';
-import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL } from '../constants/index';
+import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin, ShoppingBag, ClipboardList } from 'lucide-react';
+import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL, WHATSAPP_NUMBER } from '../constants/index';
 import { GrandmaLoader } from './UI';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const money = (value: number) => currencyFormatter.format(value);
 const searchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
-export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs, isClosed }: any) => {
+export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs, isClosed, onTrackOrders }: any) => {
   const [activeCat, setActiveCat] = useState('todos');
   const [search, setSearch] = useState('');
   const [logoFailed, setLogoFailed] = useState(false);
+  const [storyExpanded, setStoryExpanded] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [selectedVariation, setSelectedVariation] = useState<any>(null);
@@ -24,6 +25,8 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
   useModalFocus(productDialog, Boolean(selectedProduct), () => setSelectedProduct(null));
   useModalFocus(imageDialog, Boolean(selectedZoomImage), () => setSelectedZoomImage(null));
 
+  const contactDigits = String(dynamicConfigs?.whatsapp_number || WHATSAPP_NUMBER).replace(/\D/g, '');
+  const contactNumber = contactDigits.startsWith('55') ? contactDigits : '55' + contactDigits;
   const FAQS = [
     { q: "Como consulto o frete?", a: "Informe seu endereço na sacola e toque em Calcular Frete para conferir a disponibilidade e o valor antes de pagar." },
     { q: "Posso agendar um pedido?", a: "Sim. Nos detalhes da sacola, escolha Agendar Entrega e informe uma data e um horário dentro do expediente da loja." },
@@ -46,7 +49,8 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
     ? (() => {
         try {
           const parsed = JSON.parse(dynamicConfigs.faqs);
-          return Array.isArray(parsed) && parsed.length > 0 ? parsed : FAQS;
+          const valid = Array.isArray(parsed) ? parsed.filter(item => typeof item?.q === 'string' && item.q.trim() && typeof item?.a === 'string') : [];
+          return valid.length ? valid : FAQS;
         } catch (e) {
           return FAQS;
         }
@@ -338,45 +342,18 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         </div>
       )}
 
-      <section className="py-16 md:py-24 bg-white border-y border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
-            <div className="w-full relative max-w-md mx-auto md:max-w-none">
-              <div className="aspect-square bg-vovoh-cream rounded-3xl md:rounded-[3rem] overflow-hidden shadow-2xl">
-                <img 
-                  src={dynamicConfigs?.story_image || "https://imgur.com/lrKC57Q.png"} 
-                  className="w-full h-full object-cover hover:scale-105 transition-all duration-700" 
-                  alt="Nossa História" 
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            </div>
-            <div className="w-full space-y-6 text-left">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-vovoh-cream text-vovoh-gold rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest">
-                Nossa História
-              </div>
-              <h3 className="text-3xl md:text-5xl font-black text-vovoh-dark tracking-tighter leading-tight">
-                Da nossa cozinha <br/>
-                <span className="text-vovoh-red font-serif italic">para a sua mesa.</span>
-              </h3>
-              <div className="text-gray-500 font-medium text-sm md:text-base leading-relaxed whitespace-pre-line">
-                {dynamicConfigs?.story_text || `A Delícias da Vovó nasceu do desejo de compartilhar o sabor autêntico da comida caseira. Tudo começou na cozinha da Vovó Grazy, onde cada salgado era feito com um cuidado que só quem ama cozinhar entende.
-
-Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanadas, criando uma mistura única de sabores que conquistou toda a vizinhança de Colombo. Hoje, mantemos a mesma essência: massa fresca, recheio generoso e muito capricho.`}
-              </div>
-              <div className="pt-4 flex items-center gap-4">
-                <Heart size={28} className="text-vovoh-red shrink-0" aria-hidden="true" />
-                <p className="text-xs md:text-sm font-bold text-vovoh-dark">
-                  Receitas de família, preparadas com carinho
-                </p>
-              </div>
-            </div>
+      <section id="nossa-historia" className="scroll-mt-20 bg-[#FFF8EF] border-y border-orange-100 py-8 md:py-10">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 grid md:grid-cols-[0.85fr_1.15fr] gap-6 md:gap-10 items-center">
+          <div className="relative"><img loading="lazy" decoding="async" src={dynamicConfigs?.story_image || 'https://imgur.com/lrKC57Q.png'} alt="A família por trás da Delícias da Vovó" referrerPolicy="no-referrer" className="w-full h-56 md:h-72 object-cover rounded-3xl" /><div className="absolute bottom-4 left-4 right-4 rounded-xl bg-white/95 px-4 py-3 flex gap-2 items-center text-sm font-semibold text-vovoh-dark shadow-sm"><Heart size={18} className="text-vovoh-red shrink-0" aria-hidden="true" /> Receitas de família, feitas com carinho</div></div>
+          <div className="min-w-0"><p className="text-xs font-bold text-vovoh-red uppercase tracking-wider">Nossa história</p><h2 className="font-sans text-2xl md:text-3xl font-bold text-vovoh-dark mt-2">Uma cozinha de família.<br /><span className="text-vovoh-red">Um cuidado em cada pedido.</span></h2>
+            <div id="store-story" className={'text-sm md:text-base text-gray-600 leading-relaxed whitespace-pre-line mt-4 '+(storyExpanded ? '' : 'line-clamp-4')}>{dynamicConfigs?.story_text || 'A Delícias da Vovó nasceu do desejo de compartilhar o sabor autêntico da comida caseira. Tudo começou na cozinha da Vovó Grazy, onde cada salgado era feito com um cuidado que só quem ama cozinhar entende.\n\nCom o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanadas, criando uma mistura única de sabores que conquistou toda a vizinhança de Colombo. Hoje, mantemos a mesma essência: massa fresca, recheio generoso e muito capricho.'}</div>
+            <button type="button" aria-expanded={storyExpanded} aria-controls="store-story" onClick={() => setStoryExpanded(!storyExpanded)} className="min-h-11 mt-2 text-sm font-semibold text-vovoh-red underline underline-offset-4">{storyExpanded ? 'Recolher história' : 'Ler nossa história'}</button>
           </div>
         </div>
       </section>
 
-      {testimonials.length > 0 && <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 md:px-6">
-        <div className="text-center mb-12">
+      {testimonials.length > 0 && <section className="py-8 md:py-10 max-w-7xl mx-auto px-4 md:px-6">
+        <div className="text-center mb-6">
           <h3 className="text-3xl md:text-4xl font-black text-vovoh-dark tracking-tighter mb-3">O que dizem os netinhos...</h3>
           <p className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest">Avaliações reais de clientes da região</p>
         </div>
@@ -400,62 +377,21 @@ Com o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanad
         </div>
       </section>}
 
-      <section className="py-16 md:py-24 bg-vovoh-dark relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
-          <div className="absolute top-10 left-10 w-64 h-64 bg-vovoh-red rounded-full blur-3xl"></div>
-          <div className="absolute bottom-10 right-10 w-64 h-64 bg-vovoh-gold rounded-full blur-3xl"></div>
-        </div>
-
-        <div className="max-w-4xl mx-auto px-4 md:px-6 relative z-10">
-          <div className="text-center mb-12 md:mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/5 text-vovoh-gold rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest mb-4 border border-white/10">
-              Central de Ajuda
+      <section id="ajuda" className="scroll-mt-20 bg-white py-8 md:py-10">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 grid lg:grid-cols-[0.8fr_1.2fr] gap-6 md:gap-10">
+          <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-vovoh-red">Central de ajuda</p><h2 className="font-sans text-2xl md:text-3xl font-bold text-vovoh-dark mt-2">Precisa de uma mão?</h2><p className="text-sm text-gray-600 leading-relaxed mt-3">Confira as dúvidas ou fale com a loja antes de finalizar.</p>
+            <div className="mt-5 grid grid-cols-2 lg:grid-cols-1 gap-2">
+              <a href="#menu" className="min-h-14 rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ShoppingBag size={20} className="text-vovoh-red" aria-hidden="true" />Escolher meus produtos</a>
+              <button type="button" onClick={onTrackOrders} className="min-h-14 text-left rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ClipboardList size={20} className="text-vovoh-red" aria-hidden="true" />Acompanhar meu pedido</button>
+              <a href={'https://wa.me/'+contactNumber} target="_blank" rel="noopener noreferrer" className="col-span-2 lg:col-span-1 min-h-14 rounded-2xl px-4 py-3 bg-[#FFF5E9] border border-orange-100 flex items-center gap-3 text-sm font-semibold text-vovoh-dark"><MessageSquare size={20} className="text-vovoh-red" aria-hidden="true" />Falar com a loja pelo WhatsApp</a>
             </div>
-            <h3 className="text-3xl md:text-5xl font-black text-white tracking-tighter mb-4">Dúvidas Frequentes</h3>
-            <p className="text-gray-400 font-bold text-xs md:text-sm uppercase tracking-widest">Tudo o que você precisa saber sobre as delícias</p>
           </div>
-
-          <div className="grid gap-4">
-            {faqs.map((faq: any, i: number) => (
-              <div 
-                key={i} 
-                className={`group rounded-2xl md:rounded-3xl border transition-all duration-300 overflow-hidden ${
-                  openFaq === i 
-                    ? 'bg-white/10 border-white/20 shadow-2xl' 
-                    : 'bg-white/5 border-white/5 hover:bg-white/[0.08] hover:border-white/10'
-                }`}
-              >
-                <button 
-                  aria-expanded={openFaq === i}
-                  aria-controls={`faq-answer-${i}`}
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full p-5 md:p-6 text-left flex justify-between items-center"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs transition-colors shrink-0 ${
-                      openFaq === i ? 'bg-vovoh-red text-white' : 'bg-white/10 text-vovoh-gold'
-                    }`}>
-                      {i + 1}
-                    </div>
-                    <span className="font-black text-white text-sm md:text-base tracking-tight">{faq.q}</span>
-                  </div>
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center bg-white/5 text-white/40 group-hover:text-white transition-all shrink-0 ${
-                    openFaq === i ? 'rotate-180 bg-vovoh-red text-white' : ''
-                  }`}>
-                    <ChevronDown size={18} />
-                  </div>
-                </button>
-                <div id={`faq-answer-${i}`} hidden={openFaq !== i}>
-                  <div className="px-6 pb-6 md:pb-8 ml-12">
-                    <div className="h-px w-12 bg-vovoh-red/30 mb-4"></div>
-                    <p className="text-gray-300 font-medium text-xs md:text-sm leading-relaxed">
-                      {faq.a}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="min-w-0"><h3 className="font-sans text-lg font-bold text-vovoh-dark mb-3">Dúvidas frequentes</h3><div className="space-y-2">{faqs.map((faq: any, i: number) => (
+            <div key={i} className={'rounded-2xl border overflow-hidden '+(openFaq === i ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white')}>
+              <button type="button" aria-expanded={openFaq === i} aria-controls={'faq-answer-'+i} onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full min-h-14 p-4 text-left flex items-center justify-between gap-4 text-sm font-semibold text-vovoh-dark"><span className="min-w-0 break-words">{faq.q}</span><ChevronDown size={19} className={'shrink-0 text-vovoh-red transition-transform '+(openFaq === i ? 'rotate-180' : '')} aria-hidden="true" /></button>
+              <div id={'faq-answer-'+i} hidden={openFaq !== i} className="px-4 pb-4"><p className="text-sm text-gray-600 leading-relaxed break-words whitespace-pre-line">{faq.a}</p></div>
+            </div>
+          ))}</div></div>
         </div>
       </section>
     </>

@@ -1,3 +1,4 @@
+import { customerName } from './customer-name.js';
 export type DeliveryAddress = { street: string; number: string; neighborhood: string; city: string; state: string; cep: string };
 export type CustomerDetails = { name: string; phone: string; address: string; deliveryAddress?: DeliveryAddress };
 export type SavedCustomer = CustomerDetails & { id: string };
@@ -34,11 +35,11 @@ export function rememberCustomer(customer: CustomerDetails, storage?: Storage): 
 
 export function lastCustomer(storage?: Storage): CustomerDetails {
   const saved = readSavedCustomers(storage)[0];
-  if (saved) return saved;
+  if (saved) return {...saved, name:customerName(saved.name)};
   try {
     const orders = JSON.parse((storage || localStorage).getItem('vovoh_active_orders') || '[]');
     const customer = Array.isArray(orders) ? orders[0]?.customer : undefined;
-    if (customer && ['name','phone','address'].every(field => typeof customer[field] === 'string')) return {name:customer.name, address:customer.address, phone:customer.phone.replace(/\D/g,''), ...(validAddress(customer.deliveryAddress) ? {deliveryAddress:customer.deliveryAddress} : {})};
+    if (customer && ['name','phone','address'].every(field => typeof customer[field] === 'string')) return {name:customerName(customer.name), address:customer.address, phone:customer.phone.replace(/\D/g,''), ...(validAddress(customer.deliveryAddress) ? {deliveryAddress:customer.deliveryAddress} : {})};
   } catch { /* Missing or unavailable history is equivalent to no saved details. */ }
   return {...emptyCustomer};
 }

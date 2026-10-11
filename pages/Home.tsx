@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Bell, BellOff, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
-import { STORE_NAME, GAS_API_URL, PIX_KEY, STORE_ADDRESS, OPENING_HOURS, PLACEHOLDER_IMG } from '../constants/index';
+import { STORE_NAME, GAS_API_URL, PIX_KEY, WHATSAPP_NUMBER, STORE_ADDRESS, OPENING_HOURS, PLACEHOLDER_IMG } from '../constants/index';
 import { Product, CartItem, Order, User as UserType } from '../types/index';
 import { Toast } from '../components/UI';
 import { StoreFront } from '../components/StoreFront';
@@ -10,6 +10,7 @@ import { AuthModal } from '../components/Auth';
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import { QuickReorder } from '../components/QuickReorder';
 import { storeAvailability, openingTime } from '../src/utils/store-hours';
+import { customerName, validCustomerName, localGuest } from '../src/utils/customer-name';
 import { CustomerDetails, lastCustomer, rememberCustomer } from '../src/utils/saved-checkout';
 
 const LOGO = "https://i.ibb.co/Rkt5c0zk/Del-cias-Da-Vov.png";
@@ -21,11 +22,11 @@ export default function Home() {
   const pendingSubmissionKey = useRef<string | null>(null);
   const pendingSubmissionId = useRef<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  
+
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  
+
   const [user, setUser] = useState<UserType | null>(null);
   const [lastSyncedUser, setLastSyncedUser] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -39,7 +40,6 @@ export default function Home() {
   const [retryOrderId, setRetryOrderId] = useState<string | null>(null);
   const pollingRef = useRef<any>(null);
   const productsPollingRef = useRef<any>(null);
-  const secretTimeoutRef = useRef<any>(null);
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -48,8 +48,7 @@ export default function Home() {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [dynamicConfigs, setDynamicConfigs] = useState<any>(null);
   const [flyingItems, setFlyingItems] = useState<{id: number, x: number, y: number, image: string}[]>([]);
-  const [clickCount, setClickCount] = useState(0);
-  
+
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const mobileCartButtonRef = useRef<HTMLButtonElement>(null);
   const getSessionId = () => {
@@ -100,18 +99,18 @@ export default function Home() {
     if (localStorage.getItem('vovoh_last_visit_date') === today) return;
 
     const isPwa = window.matchMedia('(display-mode: standalone)').matches;
-    
+
     let initialAuthType = 'none';
     if (user) {
-      initialAuthType = user.name === 'Visitante' ? 'guest' : 'registered';
+      initialAuthType = localGuest(user) ? 'guest' : 'registered';
     }
 
     try {
       const response = await fetch(`${GAS_API_URL}/visits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user?.id || 'anonymous', 
+        body: JSON.stringify({
+          userId: user?.id || 'anonymous',
           isPwa,
           userAgent: navigator.userAgent,
           sessionId: sessionIdRef.current,
@@ -127,7 +126,7 @@ export default function Home() {
       await fetch(`${GAS_API_URL}/presence`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           id: sessionIdRef.current,
           userId: user?.id || 'anonymous',
           userName: user?.name || 'Visitante',
@@ -160,7 +159,7 @@ export default function Home() {
           await fetch(`${GAS_API_URL}/presence`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               id: sessionIdRef.current,
               userId: user?.id || 'anonymous',
               userName: user?.name || 'Visitante',
@@ -217,7 +216,7 @@ export default function Home() {
 
     checkOpeningHours();
     const stopOpeningHours = startVisiblePolling(checkOpeningHours, 600000, false);
-    
+
     // Polling de produtos (a cada 5 min)
     productsPollingRef.current = startVisiblePolling(fetchProducts, 600000, false);
 
@@ -245,23 +244,31 @@ export default function Home() {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
       const remembered = lastCustomer();
-      setCustomer(remembered.name ? remembered : { name: parsedUser.name, phone: parsedUser.phone || '', address: parsedUser.address || '' });
+      setCustomer(remembered.name ? remembered : { name: customerName(parsedUser.name), phone: parsedUser.phone || '', address: parsedUser.address || '' });
     }
 
     if (window.matchMedia('(display-mode: standalone)').matches) return;
 
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault(); 
+      e.preventDefault();
       setDeferredPrompt(e);
     };
-    
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
+  const previousGuestName = useRef('');
   useEffect(() => {
+    if (localGuest(user) && user) {
+      const oldName = previousGuestName.current;
+      setCustomer(prev => ({...prev, name: !validCustomerName(prev.name) || prev.name === oldName ? customerName(user.name) : prev.name}));
+      previousGuestName.current = customerName(user.name);
+      setLastSyncedUser(user.id);
+      return;
+    }
     if (user && user.id !== lastSyncedUser) {
-      setCustomer(prev => prev.name ? prev : { name: user.name, phone: user.phone || '', address: user.address || '' });
+      setCustomer(prev => prev.name ? prev : { name: customerName(user.name), phone: user.phone || '', address: user.address || '' });
       setLastSyncedUser(user.id);
       setIsSyncing(true);
 
@@ -285,7 +292,7 @@ export default function Home() {
                // Remove duplicatas por ID
                return Array.from(new Map(merged.map(item => [item.id, item])).values());
              });
-             
+
              const active = data.some((o: any) => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado');
              if (active) {
                 setIsTrackingOpen(true);
@@ -307,7 +314,7 @@ export default function Home() {
 
   const savedCart = useRef('');
   useEffect(() => {
-    if (!user || lastSyncedUser !== user.id) return;
+    if (!user || localGuest(user) || lastSyncedUser !== user.id) return;
     const serialized = JSON.stringify(cart);
     if (savedCart.current === user.id + serialized) return;
     const timer = setTimeout(async () => {
@@ -328,7 +335,7 @@ export default function Home() {
     if (outcome === 'accepted') {
       setDeferredPrompt(null);
       setToast({ message: "Que alegria ter você pertinho! App instalado.", type: 'success' });
-      
+
       if (localStorage.getItem('vovoh_app_installed')) return;
 
       // Track install
@@ -336,8 +343,8 @@ export default function Home() {
         await fetch(`${GAS_API_URL}/visits`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            userId: user?.id || 'anonymous', 
+          body: JSON.stringify({
+            userId: user?.id || 'anonymous',
             isPwa: true,
             userAgent: 'PWA_INSTALL_EVENT'
           })
@@ -354,12 +361,12 @@ export default function Home() {
       const data = await res.json();
       const parsed = data.map((p: any) => {
         if (typeof p.variations === 'string') {
-          try { 
-            const allVars = JSON.parse(p.variations); 
+          try {
+            const allVars = JSON.parse(p.variations);
             p.variations = allVars.filter((v:any) => !v.isAdditional);
             p.additionals = allVars.filter((v:any) => v.isAdditional);
-          } catch(e) { 
-            p.variations = []; 
+          } catch(e) {
+            p.variations = [];
             p.additionals = [];
           }
         }
@@ -382,7 +389,7 @@ export default function Home() {
   const pollOrderStatus = async () => {
     const currentOrders = ordersRef.current;
     if (currentOrders.length === 0) return;
-    
+
     const activeOrders = currentOrders.filter(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado');
     if (activeOrders.length === 0) {
       pollingRef.current?.();
@@ -395,19 +402,19 @@ export default function Home() {
       const res = await fetch(`${GAS_API_URL}/orders/batch/status?ids=${ids}&t=${Date.now()}`);
       if (!res.ok) return false;
       const statuses = await res.json();
-      
+
       let hasChanges = false;
       const updatedOrders = currentOrders.map(order => {
         const newStatus = statuses[order.id];
         if (newStatus && newStatus !== order.status) {
           hasChanges = true;
-          
+
           if (notificationsEnabled) {
-            try { 
+            try {
               const audio = new Audio('https://www.soundjay.com/button/sounds/button-3.mp3');
               audio.play().catch(() => {});
               if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-              
+
               if (Notification.permission === 'granted') {
                 new Notification("Delícias da Vovó", {
                   body: `Pedido #${order.id.slice(-4)}: ${newStatus.toUpperCase()}`,
@@ -416,7 +423,7 @@ export default function Home() {
               }
             } catch(e) {}
           }
-          
+
           if (newStatus === 'concluido') {
              const fid = parseInt(localStorage.getItem('vovoh_fidelidade') || '0');
              localStorage.setItem('vovoh_fidelidade', (fid + 1).toString());
@@ -424,7 +431,7 @@ export default function Home() {
           } else {
              setToast({ message: `Pedido #${order.id.slice(-4)} atualizado: ${newStatus.toUpperCase()}`, type: 'info' });
           }
-          
+
           return { ...order, status: newStatus };
         }
         return order;
@@ -442,11 +449,11 @@ export default function Home() {
 
   useEffect(() => {
     fetchProducts();
-    
+
     // Migração de pedido único para array
     const oldOrder = localStorage.getItem('vovoh_active_order');
     let initialOrders: Order[] = [];
-    
+
     if (oldOrder) {
       try {
         const parsed = JSON.parse(oldOrder);
@@ -466,7 +473,7 @@ export default function Home() {
     }
 
     setOrders(initialOrders);
-    
+
     if (initialOrders.some(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado')) {
       setIsTrackingOpen(true);
       pollingRef.current?.();
@@ -482,21 +489,21 @@ export default function Home() {
     if (event) {
       const isMobile = window.innerWidth < 768;
       const targetRef = isMobile ? mobileCartButtonRef : cartButtonRef;
-      
+
       if (targetRef.current) {
         const rect = targetRef.current.getBoundingClientRect();
         const targetX = rect.left + rect.width / 2;
         const targetY = rect.top + rect.height / 2;
-        
+
         const newItem = {
           id: Date.now(),
           x: event.clientX,
           y: event.clientY,
           image: p.image || PLACEHOLDER_IMG
         };
-        
+
         setFlyingItems(prev => [...prev, newItem]);
-        
+
         // Remove item after animation
         setTimeout(() => {
           setFlyingItems(prev => prev.filter(item => item.id !== newItem.id));
@@ -505,16 +512,16 @@ export default function Home() {
     }
 
     setCart(prev => {
-      const exists = prev.find(i => 
-        i.id === p.id && 
-        i.variation?.name === variation?.name && 
+      const exists = prev.find(i =>
+        i.id === p.id &&
+        i.variation?.name === variation?.name &&
         i.observation === observation &&
         JSON.stringify(i.additionals || []) === JSON.stringify(additionals || [])
       );
       if (exists) return prev.map(i => i === exists ? {...i, quantity: i.quantity + 1} : i);
       return [...prev, {...p, quantity: 1, variation, additionals, observation}];
     });
-    setToast({ message: isClosed ? 'Item adicionado. A loja está fechada agora; escolha uma entrega agendada.' : `Adicionado no capricho: ${p.name}!`, type: 'success' });
+    setToast({ message: isClosed ? 'Adicionado à sacola. Escolha uma entrega agendada.' : 'Adicionado à sacola.', type: 'success' });
   };
 
   const handleReorder = (items: any[]) => {
@@ -537,7 +544,7 @@ export default function Home() {
     localStorage.setItem('vovoh_active_orders', JSON.stringify(updatedOrders));
     if (updatedOrders.length === 0) setIsTrackingOpen(false);
     setSelectedOrder(null);
-    
+
 
   };
 
@@ -548,12 +555,12 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json', 'X-Order-Token': orders.find(order => order.id === orderId)?.accessToken || '' },
         body: JSON.stringify({ status: 'cancelado' })
       });
-      
+
       if (!response.ok) { const result = await response.json(); throw new Error(result.error || 'Não foi possível atualizar o pedido.'); }
       const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: 'cancelado' } : o);
       setOrders(updatedOrders as any);
       localStorage.setItem('vovoh_active_orders', JSON.stringify(updatedOrders));
-      
+
       setToast({ message: "Pedido cancelado com sucesso.", type: 'success' });
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : 'Erro ao cancelar pedido.', type: 'error' });
@@ -566,14 +573,14 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Order-Token': orders.find(order => order.id === orderId)?.accessToken || '' }
       });
-      
+
       if (!response.ok) { const result = await response.json(); throw new Error(result.error || 'Não foi possível atualizar o pedido.'); }
       const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: 'concluido' } : o);
       setOrders(updatedOrders as any);
       localStorage.setItem('vovoh_active_orders', JSON.stringify(updatedOrders));
-      
+
       setToast({ message: "Que bom que recebeu! Bom apetite! ", type: 'success' });
-      
+
       const fid = parseInt(localStorage.getItem('vovoh_fidelidade') || '0');
       localStorage.setItem('vovoh_fidelidade', (fid + 1).toString());
     } catch (e) {
@@ -589,8 +596,8 @@ export default function Home() {
       const updatedUser = { ...user, phone: customer.phone, address: customer.address };
       setUser(updatedUser);
       localStorage.setItem('vovoh_user', JSON.stringify(updatedUser));
-      
-      fetch(GAS_API_URL + '/users/' + updatedUser.id, {
+
+      if (!localGuest(updatedUser)) fetch(GAS_API_URL + '/users/' + updatedUser.id, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedUser)
@@ -601,20 +608,20 @@ export default function Home() {
 
     const newOrder: Order = {
       id: extraDetails?.orderId || (pendingSubmissionId.current ||= crypto.randomUUID()),
-      items: cart, 
+      items: cart,
       total: extraDetails?.finalTotal ?? cart.reduce((a,b) => a + (Number(b.price) * b.quantity), 0),
-      status: 'pendente', 
+      status: 'pendente',
       scheduledTo: extraDetails?.scheduledTo,
-      customer: { ...customer, address: fullAddress }, 
-      payment: { 
-        method: (extraDetails?.method || method) as any, 
+      customer: { ...customer, address: fullAddress },
+      payment: {
+        method: (extraDetails?.method || method) as any,
         ...(extraDetails?.method === 'dinheiro' && extraDetails.changeFor !== undefined ? { changeFor: extraDetails.changeFor } : {}),
-        paid: extraDetails?.method === 'cartao_online' 
+        paid: extraDetails?.method === 'cartao_online'
       },
-      timing: { createdAt: new Date().toISOString() }, 
+      timing: { createdAt: new Date().toISOString() },
       type: 'entrega'
     };
-    
+
     let paymentDetails = '';
     if (extraDetails?.method === 'cartao_online') {
       paymentDetails = `Cartão Online (Pago - ID: ${extraDetails.id})`;
@@ -668,8 +675,8 @@ export default function Home() {
     setIsCartOpen(false);
     setIsTrackingOpen(true);
     setRetryOrderId(null);
-    setToast({ message: "Pedido enviado para a cozinha com sucesso!", type: 'success' });
-    
+    setToast({ message: "Pedido enviado para a cozinha!", type: 'success' });
+
     pollingRef.current?.();
     pollingRef.current = startVisiblePolling(pollOrderStatus, 60000, false);
     return true;
@@ -690,9 +697,9 @@ export default function Home() {
       if (permission === 'granted') {
         setNotificationsEnabled(true);
         localStorage.setItem('vovoh_notifications', 'true');
-        setToast({ message: "Avisos com o site aberto ativados. Para acompanhar com ele fechado, ative os avisos após enviar seu pedido.", type: 'success' });
+        setToast({ message: "Avisos com o site aberto ativados.", type: 'success' });
       } else {
-        setToast({ message: "Poxa, você negou as notificações. Ative nas configurações do navegador!", type: 'error' });
+        setToast({ message: "Permita os avisos nas configurações do navegador.", type: 'error' });
       }
     } else {
       setNotificationsEnabled(false);
@@ -706,13 +713,15 @@ export default function Home() {
     return acc + (itemPrice * item.quantity);
   }, 0);
 
+  const storePhone = String(dynamicConfigs?.whatsapp_number || WHATSAPP_NUMBER).replace(/\D/g, '');
+  const storeWhatsApp = storePhone.startsWith('55') ? storePhone : '55' + storePhone;
   const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
   const cartSubtotal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cartTotal);
 
   return (
     <div className="min-h-screen bg-[#F9F9F9] font-sans flex flex-col relative">
       {dynamicConfigs?.preview_mode === 'true' && <p className="bg-amber-100 text-amber-900 p-3 text-center text-sm font-bold">Prévia local: pedidos de teste. Loja aberta para testar a qualquer hora.</p>}
-      
+
       {isSyncing && (
         <div className="fixed inset-0 z-[9999] bg-[#F9F9F9]/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
           <div className="relative mb-6">
@@ -737,10 +746,10 @@ export default function Home() {
                 O app voltará a funcionar <b>automaticamente</b> assim que terminarmos.
               </p>
             </div>
-            
+
             <div className="pt-4 space-y-4">
               <p className="text-white font-bold text-sm uppercase tracking-widest">Não quer esperar? Peça pelo WhatsApp!</p>
-              <a 
+              <a
                 href="https://wa.me/554195796370?text=Olá! O app está em manutenção, gostaria de fazer um pedido por aqui."
                 target="_blank"
                 rel="noopener noreferrer"
@@ -760,7 +769,7 @@ export default function Home() {
         </div>
       )}
 
-      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+      {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
 
       <nav className="sticky top-0 z-[300] bg-white/85 backdrop-blur-md border-b border-gray-200/50 h-16 px-4 md:px-8 shadow-sm shrink-0 transition-all">
         <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
@@ -774,20 +783,20 @@ export default function Home() {
 
           {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center gap-8">
-            <button 
-              onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} 
+            <button
+              onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}
               className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
             >
               Início
             </button>
-            <button 
-              onClick={() => document.getElementById('menu')?.scrollIntoView({behavior: 'smooth'})} 
+            <button
+              onClick={() => document.getElementById('menu')?.scrollIntoView({behavior: 'smooth'})}
               className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
             >
               Cardápio
             </button>
-            <button 
-              onClick={() => setIsTrackingOpen(true)} 
+            <button
+              onClick={() => setIsTrackingOpen(true)}
               className={`text-xs font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 ${orders.some(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado') ? 'text-vovoh-gold animate-pulse' : 'text-gray-500 hover:text-vovoh-red'}`}
             >
               <ClipboardList size={16} /> Meus Pedidos
@@ -795,8 +804,8 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button 
-              onClick={toggleNotifications} 
+            <button
+              onClick={toggleNotifications}
               className={`min-w-11 min-h-11 flex items-center justify-center rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}
               aria-label={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
               title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
@@ -805,8 +814,8 @@ export default function Home() {
             </button>
 
             {/* Desktop User Profile Button */}
-            <button 
-              onClick={() => setIsAuthOpen(true)} 
+            <button
+              onClick={() => setIsAuthOpen(true)}
               className="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-full border border-gray-200 text-xs font-bold text-vovoh-dark hover:border-vovoh-red hover:text-vovoh-red transition-all"
             >
               <User size={16} />
@@ -814,10 +823,10 @@ export default function Home() {
             </button>
 
             {/* Desktop Cart Button */}
-            <button 
+            <button
               ref={cartButtonRef}
               aria-label="Abrir sacola"
-              onClick={() => setIsCartOpen(true)} 
+              onClick={() => setIsCartOpen(true)}
               className="hidden md:flex items-center gap-2.5 px-4 py-2 bg-vovoh-red text-white rounded-full font-black text-xs uppercase tracking-wider shadow-md hover:bg-red-600 transition-all active:scale-95 relative"
             >
               <ShoppingCart size={16} />
@@ -846,10 +855,10 @@ export default function Home() {
               <motion.div
                 key={item.id}
                 initial={{ x: item.x - 20, y: item.y - 20, scale: 1, opacity: 1 }}
-                animate={{ 
-                  x: targetX - 20, 
-                  y: targetY - 20, 
-                  scale: 0.2, 
+                animate={{
+                  x: targetX - 20,
+                  y: targetY - 20,
+                  scale: 0.2,
                   opacity: 0.5,
                   rotate: 360
                 }}
@@ -888,17 +897,18 @@ export default function Home() {
       </div>}
 
       {/* Wrapper para o conteúdo crescer e empurrar o rodapé */}
-      <div className={cartCount > 0 ? "flex-grow pb-48 md:pb-24" : "flex-grow pb-24"}>
+      <div className="flex-grow">
          {user && <div className="max-w-7xl mx-auto px-4 mt-2">
-            <QuickReorder user={user} onReorder={handleReorder} />
+            <QuickReorder user={localGuest(user) ? null : user} onReorder={handleReorder} />
          </div>}
-         <StoreFront 
-           products={products} 
-           isLoading={loading} 
+         <StoreFront
+           products={products}
+           isLoading={loading}
            onAddToCart={handleAddToCart}
-           logo={LOGO} 
-           dynamicConfigs={dynamicConfigs} 
-           isClosed={isClosed} 
+           logo={LOGO}
+           dynamicConfigs={dynamicConfigs}
+           isClosed={isClosed}
+           onTrackOrders={() => setIsTrackingOpen(true)}
          />
       </div>
 
@@ -913,7 +923,7 @@ export default function Home() {
 
       {/* Bottom Navigation Bar (Mobile Only) */}
       <div className="safe-area-nav md:hidden fixed bottom-0 left-0 right-0 z-[250] bg-white border-t border-gray-100 flex justify-around items-end h-20 pb-2 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)]">
-        
+
         <button onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} className="flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-vovoh-red active:scale-95 transition-all w-16">
           <Store size={22} />
           <span className="text-[10px] font-bold">Início</span>
@@ -925,7 +935,7 @@ export default function Home() {
         </button>
 
         <div className="relative -top-5">
-          <button 
+          <button
             ref={mobileCartButtonRef}
             aria-label="Abrir sacola"
             onClick={() => setIsCartOpen(true)}
@@ -955,18 +965,18 @@ export default function Home() {
 
       </div>
 
-      <AuthModal 
-        isOpen={isAuthOpen} 
-        onClose={() => setIsAuthOpen(false)} 
-        user={user} 
-        setUser={setUser} 
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        user={user}
+        setUser={setUser}
         showMsg={(msg, type) => setToast({ message: msg, type })}
       />
 
-      <Checkout 
+      <Checkout
         isOpen={isCartOpen} onClose={() => setIsCartOpen(false)}
-        cart={cart} setCart={setCart} 
-        customer={customer} setCustomer={setCustomer} 
+        cart={cart} setCart={setCart}
+        customer={customer} setCustomer={setCustomer}
         method={method} setMethod={setMethod}
         changeFor={changeFor} setChangeFor={setChangeFor}
         onOrder={createOrder} pixKey={dynamicConfigs?.pix_key || PIX_KEY}
@@ -983,11 +993,11 @@ export default function Home() {
         })()}
       />
 
-      <TrackingModal 
-        isOpen={isTrackingOpen} 
-        onClose={() => setIsTrackingOpen(false)} 
-        orders={orders} 
-        onClearOrder={clearOrder} 
+      <TrackingModal
+        isOpen={isTrackingOpen}
+        onClose={() => setIsTrackingOpen(false)}
+        orders={orders}
+        onClearOrder={clearOrder}
         onCancelOrder={cancelOrder}
         onReceiveOrder={receiveOrder}
         onRetryPayment={handleRetryPayment}
@@ -1001,86 +1011,17 @@ export default function Home() {
         dynamicConfigs={dynamicConfigs}
       />
 
-      <footer className="bg-vovoh-dark text-white py-16 mt-10 relative overflow-hidden shrink-0">
-         <div className="absolute bottom-0 right-0 w-64 h-64 bg-vovoh-red/10 rounded-full blur-[80px]"></div>
-         <div className="container mx-auto px-6 relative z-10">
-            <div className="grid grid-cols-1 gap-12 text-left mb-16">
-               <div className="col-span-1 space-y-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-vovoh-red rounded-xl flex items-center justify-center text-white shadow-lg rotate-3"><ChefHat size={20} /></div>
-                    <h2 className="text-2xl font-black tracking-tighter">{STORE_NAME}</h2>
-                  </div>
-                  <p className="text-zinc-400 font-medium text-sm max-w-sm">
-                    Salgados artesanais feitos com o carinho que só uma vovó tem. Fritos na hora, quentinhos e entregues na sua porta.
-                  </p>
-                  <div className="flex gap-4">
-                    <a href="https://www.instagram.com/deliciasdavovosalgadinhos/" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center hover:bg-vovoh-red transition-colors"><Instagram size={20} /></a>
-                    <a href="https://www.facebook.com/SovereignsGrazy.Show" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center hover:bg-vovoh-red transition-colors"><Facebook size={20} /></a>
-                  </div>
-               </div>
-               
-               <div className="space-y-6">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-vovoh-gold">Navegação</h4>
-                  <ul className="space-y-4 text-sm font-bold text-zinc-400">
-                    <li><a href="#menu" className="hover:text-white transition-colors">Cardápio</a></li>
-                    <li><button onClick={() => setIsAuthOpen(true)} className="hover:text-white transition-colors">Minha Conta</button></li>
-                  </ul>
-               </div>
-
-               <div className="space-y-6">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-vovoh-gold">Contato</h4>
-                  <ul className="space-y-4 text-sm font-bold text-zinc-400">
-                    <li className="flex items-start gap-3">
-                      <Store size={18} className="shrink-0 text-zinc-600" />
-                      <span>{dynamicConfigs?.store_address || STORE_ADDRESS}</span>
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <MessageSquare size={18} className="shrink-0 text-zinc-600" />
-                      <a 
-                        href={`https://wa.me/554195796370`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-vovoh-gold transition-colors"
-                      >
-                        (41) 9579-6370 <span className="text-[10px] font-bold uppercase bg-green-100 text-green-800 px-1.5 py-0.5 rounded ml-1">WhatsApp</span>
-                      </a>
-                    </li>
-                  </ul>
-               </div>
-            </div>
-            
-            <div className="pt-8 border-t border-white/5 flex flex-col justify-between items-center gap-4">
-               <p className="text-zinc-600 font-bold text-[10px]">© {new Date().getFullYear()} — {STORE_NAME}. Todos os direitos reservados.</p>
-               <button 
-                 onClick={() => { 
-                   if (secretTimeoutRef.current) {
-                     clearTimeout(secretTimeoutRef.current);
-                     secretTimeoutRef.current = null;
-                   }
-
-                   setClickCount(prev => {
-                     const next = prev + 1;
-                     
-                     if (next === 3) {
-                       secretTimeoutRef.current = setTimeout(() => {
-                         window.location.hash = '#vovo-secreta';
-                         setClickCount(0);
-                       }, 1000);
-                     }
-                     return next;
-                   });
-                 }} 
-                 className="opacity-10 hover:opacity-100 transition-opacity text-base select-none"
-                 title="Painel da Vovó" aria-label="Painel da Vovó"
-               >
-                 <ChefHat size={18} aria-hidden="true" />
-               </button>
-               <div className="flex gap-6 text-[10px] font-black uppercase tracking-widest text-zinc-600">
-                  <a href="#" className="hover:text-zinc-400 transition-colors">Privacidade</a>
-                  <a href="#" className="hover:text-zinc-400 transition-colors">Termos</a>
-               </div>
-            </div>
-         </div>
+      <footer className={'bg-vovoh-dark text-white pt-7 md:pt-8 md:pb-6 '+(cartCount > 0 ? 'pb-[calc(12rem+env(safe-area-inset-bottom))]' : 'pb-[calc(6.5rem+env(safe-area-inset-bottom))]')}>
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-[1.4fr_0.7fr_1fr] gap-6 pb-6">
+            <div><div className="flex gap-3 items-center"><ChefHat size={26} className="text-vovoh-gold shrink-0" aria-hidden="true" /><p className="text-lg font-semibold">{STORE_NAME}</p></div><p className="text-sm text-zinc-300 mt-3 max-w-sm">Salgados artesanais e receitas de família, preparados com carinho.</p><div className="flex gap-2 mt-3"><a aria-label="Instagram da Delícias da Vovó" href="https://www.instagram.com/deliciasdavovosalgadinhos/" target="_blank" rel="noopener noreferrer" className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center"><Instagram size={20} /></a><a aria-label="Facebook da Delícias da Vovó" href="https://www.facebook.com/SovereignsGrazy.Show" target="_blank" rel="noopener noreferrer" className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center"><Facebook size={20} /></a></div></div>
+            <div><p className="text-sm font-semibold mb-2">Explore</p><div className="grid grid-cols-2 sm:grid-cols-1 text-sm text-zinc-300"><a href="#menu" className="min-h-11 flex items-center">Cardápio</a><a href="#nossa-historia" className="min-h-11 flex items-center">Nossa história</a><a href="#ajuda" className="min-h-11 flex items-center">Central de ajuda</a><button onClick={() => setIsAuthOpen(true)} className="min-h-11 text-left">Meu perfil</button></div></div>
+            <div><p className="text-sm font-semibold mb-3">Fale com a loja</p><p className="flex gap-2 text-sm text-zinc-300"><Store size={18} className="shrink-0 mt-0.5" aria-hidden="true" /><span>{dynamicConfigs?.store_address || STORE_ADDRESS}</span></p><a href={'https://wa.me/'+storeWhatsApp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 min-h-11 mt-3 text-sm text-white underline underline-offset-4"><MessageSquare size={18} aria-hidden="true" />Falar pelo WhatsApp</a></div>
+          </div>
+          <div className="border-t border-white/10 pt-4 flex gap-4 items-center justify-between"><p className="text-xs text-zinc-400">© {new Date().getFullYear()} · {STORE_NAME}</p>
+            <button type="button" onClick={() => {window.location.hash='#vovo-secreta';}} className="inline-flex gap-2 items-center min-h-11 text-xs text-zinc-300 hover:text-white" aria-label="Painel da Vovó"><ChefHat size={18} aria-hidden="true" /><span>Painel da Vovó</span></button>
+          </div>
+        </div>
       </footer>
     </div>
   );

@@ -1,3 +1,4 @@
+import { customerName, validCustomerName } from '../src/utils/customer-name.js';
 import {RevisionCache} from '../server/revision-cache.js';
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import {validateSchedule} from '../src/utils/order-schedule.js';
@@ -1251,6 +1252,7 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 
   try {
+    if (!validCustomerName(req.body.customer?.name)) return res.status(400).json({error:'Informe seu nome antes de pagar.'});
     const configs = await ConfigRepo.getAll();
     try { req.body.scheduledTo = validateSchedule(req.body.scheduledTo,configs); }
     catch(error) { return res.status(400).json({error:error instanceof Error ? error.message : 'Confira o agendamento.'}); }
@@ -1417,6 +1419,8 @@ app.post('/orders', async (req, res) => {
       return res.json({ success: true, id: order.id, accessToken });
     }
     if (isVercel && !db && !process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('Banco indisponível.');
+    if (!validCustomerName(order.customer.name)) return res.status(400).json({ error: 'Informe seu nome antes de enviar o pedido.' });
+    order.customer.name = customerName(order.customer.name);
     const configs = await ConfigRepo.getAll();
     try { order.scheduledTo = validateSchedule(order.scheduledTo,configs); }
     catch(error) { return res.status(400).json({error:error instanceof Error ? error.message : 'Confira o agendamento.'}); }

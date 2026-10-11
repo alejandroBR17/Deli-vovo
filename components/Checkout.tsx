@@ -1,3 +1,4 @@
+import { customerName, validCustomerName } from '../src/utils/customer-name';
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
 import { Banknote, Bell } from 'lucide-react';
@@ -74,7 +75,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   const [savedCustomers, setSavedCustomers] = useState<SavedCustomer[]>([]);
   const applyCustomer = (details: CustomerDetails) => {
     const parts = addressParts(details);
-    setCustomer({...details, phone: details.phone.replace(/\D/g, '')}); setStreet(parts.street); setNumber(parts.number);
+    setCustomer({...details, name:customerName(details.name), phone: details.phone.replace(/\D/g, '')}); setStreet(parts.street); setNumber(parts.number);
     setNeighborhood(parts.neighborhood); setCity(parts.city); setState(parts.state); setCep(parts.cep);
     setAddressError('');
   };
@@ -265,6 +266,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     if (submitLock.current) return false;
     submitLock.current = true; setSubmitting(true);
     try {
+    if (!validCustomerName(customer.name)) { showMsg('Informe seu nome antes de enviar o pedido.', 'error'); setStep('details'); return false; }
     let scheduledTo = undefined;
     if (isScheduled) {
       try {
@@ -441,7 +443,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                       const saved = savedCustomers.find(item => item.id === event.target.value); if (!saved) return;
                       if (label === 'Cadastro completo') applyCustomer(saved);
                       else if (label === 'Endereço salvo') applyCustomer({...customer,address:saved.address,deliveryAddress:saved.deliveryAddress});
-                      else setCustomer({...customer,...(label === 'Pessoa salva' ? {name:saved.name} : {phone:saved.phone})});
+                      else setCustomer({...customer,...(label === 'Pessoa salva' ? {name:customerName(saved.name)} : {phone:saved.phone})});
                     }}><option value="">Escolher</option>{savedCustomers.map(item => <option key={item.id} value={item.id}>{label === 'Endereço salvo' ? item.address : label === 'WhatsApp salvo' ? formatWhatsApp(item.phone) : label === 'Pessoa salva' ? item.name : `${item.name} — ${formatWhatsApp(item.phone)}`}</option>)}</select></label>)}
                   </div>
                   <button type="button" onClick={() => applyCustomer({...emptyCustomer})} className="text-vovoh-red font-bold text-sm py-2">Trocar todos os dados</button>
@@ -561,7 +563,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                  <button onClick={() => setStep('cart')} className="px-6 py-5 bg-white border border-gray-200 text-gray-500 font-black rounded-2xl text-sm active:scale-95 transition-all">Voltar</button>
                  <button 
                    onClick={() => {
-                     if (!customer.name || customer.name.trim().length < 3) {
+                     if (!validCustomerName(customer.name)) {
                        setAddressError("Por favor, digite seu nome completo, meu anjo.");
                        return;
                      }

@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, User, Mail, Lock, Phone, LogOut, Loader2, Heart, ShieldCheck } from 'lucide-react';
+import { useModalFocus } from '../src/hooks/use-modal-focus';
+import { customerName, validCustomerName, localGuest } from '../src/utils/customer-name';
 import { User as UserType } from '../types/index';
 
 interface AuthProps {
@@ -14,15 +16,21 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [loading, setLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+  const [guestMode, setGuestMode] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestError, setGuestError] = useState('');
   const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '' });
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ name: '', phone: '' });
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef, isOpen, onClose);
   if (!isOpen) return null;
 
   const handleLogout = async () => {
     try { const response = await fetch('/api/auth/logout', { method: 'POST' }); if (!response.ok) throw new Error(); } catch { showMsg('Não foi possível sair. Tente novamente.', 'error'); return; }
     localStorage.removeItem('vovoh_user');
+    setGuestMode(false); setGuestName(''); setIsEditing(false);
     setUser(null);
     showMsg("Você saiu da conta. Volte sempre, querido!", "info");
     onClose();
@@ -30,7 +38,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
 
   const handleStartEdit = () => {
     if (user) {
-      setEditData({ name: user.name, phone: user.phone || '' });
+      setEditData({ name: customerName(user.name), phone: user.phone || '' });
       setIsEditing(true);
     }
   };
@@ -38,17 +46,22 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!editData.name) {
+    if (!validCustomerName(editData.name)) {
       showMsg("O nome é obrigatório, meu anjo.", "error");
       return;
     }
 
+    if (localGuest(user)) {
+      const updatedUser = { ...user, name: customerName(editData.name), phone: editData.phone };
+      try { localStorage.setItem('vovoh_user', JSON.stringify(updatedUser)); } catch {}
+      setUser(updatedUser); setIsEditing(false); showMsg('Dados atualizados neste aparelho.', 'success'); return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/users/${user.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editData)
+        body: JSON.stringify({...editData, name:customerName(editData.name)})
       });
 
       const data = await res.json();
@@ -68,14 +81,17 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
     }
   };
 
-  const handleGuestLogin = async () => {
+  const handleGuestLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!validCustomerName(guestName)) { setGuestError('Informe seu nome com pelo menos 3 caracteres.'); return; }
+    setGuestError('');
     setGuestLoading(true);
     try {
       // Cria um usuário visitante local
       const guestId = "CONV-" + Math.random().toString(36).substr(2, 9).toUpperCase();
       const guestUser: UserType = {
         id: guestId,
-        name: "Visitante",
+        name: customerName(guestName),
         email: "",
         phone: "",
         address: "",
@@ -84,7 +100,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
 
       localStorage.setItem('vovoh_user', JSON.stringify(guestUser));
       setUser(guestUser);
-      showMsg("Bem-vindo! Você está navegando como convidado.", "success");
+      showMsg("Pronto! Continue seu pedido sem criar uma conta.", "success");
       onClose();
 
       // Registra a visita no backend de forma silenciosa
@@ -116,7 +132,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
     }
 
     setLoading(true);
-    
+
     const email = formData.email.trim().toLowerCase();
     const password = formData.password;
 
@@ -174,10 +190,10 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
 
   return (
     <div className="fixed inset-0 z-[600] flex flex-col justify-end md:items-end">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={user ? onClose : undefined} />
-      
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden border-t md:border-t-0 md:border-l border-white/20 z-10">
-        
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />
+
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={user ? "Seu perfil" : "Acesso à loja"} tabIndex={-1} className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden border-t md:border-t-0 md:border-l border-white/20 z-10">
+
         {/* Drag Handle Mobile */}
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer rounded-t-[2.5rem]" onClick={user ? onClose : undefined}>
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
@@ -187,19 +203,19 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-vovoh-dark text-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/5"><User size={22} strokeWidth={2.5}/></div>
             <div>
-              <h3 className="text-xl font-black text-vovoh-dark tracking-tight leading-none">{user ? 'Seu Perfil' : 'Acesso'}</h3>
+              <h3 className="text-xl font-black text-vovoh-dark tracking-tight leading-none">{user ? 'Seu Perfil' : guestMode ? 'Pedir sem conta' : 'Acesso'}</h3>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Área do Cliente</p>
             </div>
           </div>
-          {user && (
-            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-all active:scale-90"><X size={20}/></button>
+          {(
+            <button aria-label="Fechar perfil" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-all active:scale-90"><X size={20}/></button>
           )}
         </header>
 
         <div className="flex-grow min-h-0 overflow-y-auto overflow-x-hidden p-6 space-y-8 bg-[#F9F9F9] no-scrollbar relative">
           {/* Background Decor */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none"><div className="absolute top-0 right-0 w-64 h-64 bg-vovoh-red/5 rounded-full blur-3xl -z-0 translate-x-1/2 -translate-y-1/2" /></div>
-          
+
           {user ? (
             <div className="space-y-6 animate-in fade-in zoom-in-95">
                {isEditing ? (
@@ -212,38 +228,38 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
                     <div className="space-y-4">
                       <div className="relative">
                         <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><User size={18} /></div>
-                        <input 
-                          type="text" 
-                          placeholder="Como a vovó deve te chamar?" 
-                          className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors" 
-                          value={editData.name} 
-                          onChange={e => setEditData({...editData, name: e.target.value})} 
+                        <input
+                          type="text"
+                          placeholder="Como a vovó deve te chamar?"
+                          className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors"
+                          value={editData.name}
+                          onChange={e => setEditData({...editData, name: e.target.value})}
                         />
                       </div>
 
                       <div className="relative">
                         <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><Phone size={18} /></div>
-                        <input 
-                          type="tel" 
-                          placeholder="Seu WhatsApp" 
-                          className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors" 
-                          value={editData.phone} 
-                          onChange={e => setEditData({...editData, phone: e.target.value})} 
+                        <input
+                          type="tel"
+                          placeholder="Seu WhatsApp"
+                          className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors"
+                          value={editData.phone}
+                          onChange={e => setEditData({...editData, phone: e.target.value})}
                         />
                       </div>
                     </div>
 
                     <div className="flex gap-3 pt-4">
-                      <button 
-                        type="button" 
-                        onClick={() => setIsEditing(false)} 
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(false)}
                         className="flex-1 py-4 bg-gray-100 text-gray-500 font-black rounded-2xl text-sm active:scale-95 transition-all"
                       >
                         Cancelar
                       </button>
-                      <button 
-                        type="submit" 
-                        disabled={loading} 
+                      <button
+                        type="submit"
+                        disabled={loading}
                         className="flex-2 py-4 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-100 text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
                       >
                         {loading ? <Loader2 className="animate-spin" size={18} /> : 'Salvar Mudanças'}
@@ -257,16 +273,16 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
                       <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center text-3xl font-black text-vovoh-red shadow-lg border-4 border-white relative z-10 mb-4 uppercase">
                         {user.name.charAt(0)}
                       </div>
-                      <h3 className="text-2xl font-black text-vovoh-dark tracking-tight">{user.name}</h3>
+                      <h3 className="text-2xl font-black text-vovoh-dark tracking-tight">{customerName(user.name) || "Escolha seu nome"}</h3>
                       {user.email && <p className="text-sm font-bold text-gray-400 mt-1">{user.email}</p>}
-                      
+
                       {user.phone && (
                         <div className="flex items-center gap-2 mt-4 px-4 py-2 bg-gray-50 rounded-full text-xs font-black text-gray-500">
                           <Phone size={14} /> {user.phone}
                         </div>
                       )}
 
-                      <button 
+                      <button
                         onClick={handleStartEdit}
                         className="mt-6 text-xs font-black text-vovoh-red uppercase tracking-widest hover:underline"
                       >
@@ -288,9 +304,16 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
                   </>
                )}
             </div>
+          ) : guestMode ? (
+            <form onSubmit={handleGuestLogin} className="relative space-y-5">
+              <div><h4 className="font-sans text-xl font-bold text-vovoh-dark">Como podemos te chamar?</h4><p className="text-sm text-gray-600 mt-2">Esse nome identifica você no pedido. Não precisa de e-mail ou senha.</p></div>
+              <div><label htmlFor="guest-name" className="block text-sm font-semibold mb-2">Seu nome</label><input id="guest-name" autoFocus autoComplete="name" maxLength={100} value={guestName} onChange={event => {setGuestName(event.target.value);setGuestError('');}} aria-invalid={!!guestError} aria-describedby={guestError ? 'guest-name-error' : undefined} placeholder="Ex: Maria Silva" className="w-full min-h-12 p-3 rounded-xl bg-white border border-gray-300 outline-none focus:ring-2 focus:ring-vovoh-red/30" />{guestError && <p id="guest-name-error" role="alert" className="text-sm text-red-700 mt-2">{guestError}</p>}</div>
+              <button type="submit" disabled={guestLoading} className="w-full min-h-12 rounded-xl bg-vovoh-red text-white font-semibold">{guestLoading ? 'Continuando…' : 'Continuar com esse nome'}</button>
+              <button type="button" onClick={() => setGuestMode(false)} className="w-full min-h-11 text-sm font-semibold text-gray-600">Voltar para entrar na conta</button>
+            </form>
           ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-               
+
                <div className="flex p-1 bg-gray-200/50 rounded-2xl">
                  <button onClick={() => setMode('login')} className={`flex-1 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all ${mode === 'login' ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400'}`}>Entrar</button>
                  <button onClick={() => setMode('register')} className={`flex-1 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all ${mode === 'register' ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400'}`}>Criar Conta</button>
@@ -339,9 +362,9 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
                     <span className="relative bg-[#F9F9F9] px-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Ou</span>
                   </div>
 
-                  <button 
-                    type="button" 
-                    onClick={handleGuestLogin} 
+                  <button
+                    type="button"
+                    onClick={() => {setGuestMode(true);setGuestError('');}}
                     disabled={guestLoading}
                     className="w-full py-4 bg-white border border-gray-200 text-gray-500 font-black rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-gray-100 active:scale-95 transition-all shadow-sm"
                   >

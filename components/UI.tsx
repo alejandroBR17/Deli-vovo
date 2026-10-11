@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Heart, Zap, Bell, X, ChefHat, CreditCard, Copy, Check, Smartphone, ShieldCheck, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Heart, Zap, Bell, X, ChefHat, CreditCard, Copy, Check, Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PaymentElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
@@ -60,21 +60,41 @@ export const GrandmaLoader = () => (
   </div>
 );
 
-export const Toast = ({ message, type, onClose }: { message: string, type: any, onClose: () => void }) => {
-  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, [onClose]);
-  
-  const colors = {
-    success: 'bg-green-600 text-white shadow-green-200',
-    error: 'bg-vovoh-red text-white shadow-red-200',
-    info: 'bg-vovoh-dark text-white shadow-zinc-200'
-  };
-
+export const Toast = ({ message, type, onClose, notification }: { notification?: object, message: string, type: 'success' | 'error' | 'info', onClose: () => void }) => {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [expanded, setExpanded] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  const [hasDetails, setHasDetails] = useState(false);
+  useEffect(() => {
+    if (expanded) return;
+    const element = messageRef.current;
+    if (!element) return;
+    const check = () => setHasDetails(element.scrollHeight > element.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [message, expanded]);
+  useEffect(() => { setExpanded(false); }, [message, type, notification]);
+  useEffect(() => {
+    if (paused || expanded) return;
+    const delay = Math.min(12000, Math.max(type === 'error' ? 8000 : 4000, message.length * 45));
+    const timer = setTimeout(() => closeRef.current(), delay);
+    return () => clearTimeout(timer);
+  }, [message, type, paused, expanded, notification]);
+  const color = type === 'success' ? 'bg-green-50 text-green-700' : type === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700';
+  const Icon = type === 'success' ? CheckCircle2 : type === 'error' ? AlertTriangle : Info;
   return (
-    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-10 duration-500 w-[90%] max-w-md">
-      <div className={`${colors[type as keyof typeof colors]} rounded-full px-8 py-4 flex items-center gap-4 shadow-2xl font-black text-sm`}>
-        {type === 'success' ? <Check size={18} /> : <Bell size={18}/>}
-        <span className="flex-grow">{message}</span>
-        <button onClick={onClose} className="hover:scale-110 transition-transform active:scale-90"><X size={18}/></button>
+    <div className="fixed top-[calc(4.75rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-2rem)] max-w-sm" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocusCapture={() => setPaused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }}>
+      <div className="bg-white text-vovoh-dark border border-gray-200 rounded-2xl p-3 flex items-start gap-3 shadow-lg">
+        <span className={'w-9 h-9 shrink-0 rounded-xl flex items-center justify-center '+color}><Icon size={19} aria-hidden="true" /></span>
+        <div className="flex-1 min-w-0 pt-1">
+          <p ref={messageRef} role={type === 'error' ? 'alert' : 'status'} aria-atomic="true" className={'text-sm font-medium leading-relaxed break-words '+(expanded ? 'max-h-48 overflow-y-auto' : 'line-clamp-2')}>{message}</p>
+          {(hasDetails || message.length > 120) && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)} className="text-xs text-vovoh-red font-semibold min-h-9 underline underline-offset-2">{expanded ? 'Recolher detalhes' : 'Mostrar detalhes'}</button>}
+        </div>
+        <button type="button" aria-label="Fechar aviso" onClick={onClose} className="w-11 h-11 -m-1 shrink-0 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red"><X size={18} /></button>
       </div>
     </div>
   );
