@@ -16,6 +16,15 @@ const snapshot = (id: string, payload?: string) => ({ id, exists: payload !== un
 // Schemas are applied explicitly by db:migrate, never when a function starts.
 export async function migrate(client: Client) {
   await client.batch(tables.map(name => `CREATE TABLE IF NOT EXISTS ${name} (id TEXT PRIMARY KEY, payload TEXT NOT NULL CHECK(json_valid(payload)))`), 'write');
+  // Triggers update the revision in the same transaction as the configuration,
+  // including writes from another instance and batch saves that later roll back.
+  await client.batch([
+    'CREATE TABLE IF NOT EXISTS cache_revisions (id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0)',
+    "INSERT INTO cache_revisions(id,version) VALUES ('configs',0) ON CONFLICT(id) DO NOTHING",
+    "CREATE TRIGGER IF NOT EXISTS configs_revision_insert AFTER INSERT ON configs BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='configs'; END",
+    "CREATE TRIGGER IF NOT EXISTS configs_revision_update AFTER UPDATE ON configs WHEN OLD.payload IS NOT NEW.payload BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='configs'; END",
+    "CREATE TRIGGER IF NOT EXISTS configs_revision_delete AFTER DELETE ON configs BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='configs'; END",
+  ], 'write');
   const indexes: [Table, string[]][] = [
     ['orders', ['userId', 'date']], ['orders', ['status', 'date']], ['orders', ['date']],
     ['users', ['email']], ['visits', ['sessionId', 'timestamp']], ['visits', ['timestamp']],
@@ -30,6 +39,12 @@ export class Database {
   constructor(readonly client: Client) {}
   collection(name: string) { return new Query(this, table(name)); }
   async rows(sql: string, args: InValue[] = []) { return (await this.client.execute({ sql, args })).rows; }
+  async configRevision() {
+    const rows = await this.rows("SELECT version FROM cache_revisions WHERE id='configs'");
+    const revision = Number(rows[0]?.version);
+    if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Execute a migração das configurações antes de iniciar o servidor.');
+    return revision;
+  }
   async updateVisitAuth(sessionId: string, userId: string, authType: string, now = new Date()) {
     const start = now.toISOString().slice(0, 10) + 'T00:00:00.000Z';
     const end = new Date(Date.parse(start) + 86400000).toISOString();

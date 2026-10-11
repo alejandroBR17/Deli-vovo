@@ -82,6 +82,14 @@ test('API stores orders durably, isolates images from catalog responses and prot
     const login=await request('/admin/login',{password:'test-only'},{'X-Vovo-Admin':'1'});
     const cookie=login.headers.get('set-cookie')!.split(';')[0];
     const headers={Cookie:cookie,'X-Vovo-Admin':'1'};
+    assert.equal((await (await request('/configs')).json()).cash_enabled,undefined);
+    // Simulate another server writing: the API's local cache is not invalidated.
+    await database.collection('configs').doc('cash_enabled').set({value:'true'});
+    assert.equal((await (await request('/configs')).json()).cash_enabled,'true');
+    assert.match((await request('/configs')).headers.get('cache-control')!, /private, no-store/);
+    assert.equal((await (await request('/stats/prep-time')).json()).forecast,'40-50 min');
+    await database.collection('configs').doc('kitchen_forecast').set({value:'25-35 min'});
+    assert.equal((await (await request('/stats/prep-time')).json()).forecast,'25-35 min');
     const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7dcAAAAASUVORK5CYII=';
     const product=await request('/products',{id:'test-product',name:'Teste',price:10,image},headers);
     assert.equal(product.status,200);
@@ -94,7 +102,9 @@ test('API stores orders durably, isolates images from catalog responses and prot
     const delivery={free_delivery_radius:'2',fee_per_km:'2',max_delivery_radius:'20'};
     assert.equal((await request('/configs/batch',{updates:delivery},headers)).status,200);
     await client.execute("CREATE TRIGGER fail_config_save BEFORE UPDATE ON configs WHEN NEW.id='fee_per_km' AND json_extract(NEW.payload,'$.value')='9' BEGIN SELECT RAISE(ABORT,'simulated write failure'); END");
+    const revisionBeforeFailure=await database.configRevision();
     assert.equal((await request('/configs/batch',{updates:{free_delivery_radius:'3',fee_per_km:'9',max_delivery_radius:'30'}},headers)).status,503);
+    assert.equal(await database.configRevision(),revisionBeforeFailure);
     for(const [key,value] of Object.entries(delivery)) assert.equal((await database.collection('configs').doc(key).get()).data().value,value);
     await client.execute('DROP TRIGGER fail_config_save');
     const id=randomUUID(); const nonce=randomUUID();

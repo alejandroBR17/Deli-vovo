@@ -1,3 +1,4 @@
+import {RevisionCache} from '../server/revision-cache.js';
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import {validateSchedule} from '../src/utils/order-schedule.js';
 import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
@@ -211,10 +212,8 @@ async function callGAS(action: string, payload?: any, queryParams: Record<string
 // --- Cache System ---
 let cache: {
   products: { data: Product[] | null, lastFetch: number },
-  configs: { data: Record<string, string> | null, lastFetch: number }
 } = {
-  products: { data: null, lastFetch: 0 },
-  configs: { data: null, lastFetch: 0 }
+  products: { data: null, lastFetch: 0 }
 };
 
 const CACHE_TTL = 300000; // 5 minutos
@@ -1043,13 +1042,7 @@ const UserRepo = {
 };
 
 // Configurações
-const ConfigRepo = {
-  getAll: async (): Promise<Record<string, string>> => {
-    const now = Date.now();
-    if (cache.configs.data && (now - cache.configs.lastFetch < CACHE_TTL)) {
-      return cache.configs.data;
-    }
-
+async function loadConfigs(): Promise<Record<string, string>> {
     let configObj: Record<string, string> = {};
     if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
@@ -1078,15 +1071,17 @@ const ConfigRepo = {
       configs.forEach((c: Config) => configObj[c.key] = c.value);
     }
 
-    cache.configs = { data: configObj, lastFetch: now };
-    return configObj;
-  },
+    return Object.freeze(configObj);
+}
+const configCache = db ? new RevisionCache(() => db.configRevision(), loadConfigs) : null;
+const ConfigRepo = {
+  getAll: () => configCache ? configCache.read() : loadConfigs(),
   update: async (key: string, value: string) => {
     if (db && key === "story_image") value = await separateImage(db, value) || "";
     if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
         await callGAS('updateConfig', { key, value });
-        cache.configs.data = null;
+        configCache?.invalidate();
         return;
       } catch (e) {
         console.error("Google Sheets Error updating config:", e);
@@ -1094,7 +1089,7 @@ const ConfigRepo = {
     } else if (db) {
       try {
         await setDoc(doc(db, 'configs', key), { value });
-        cache.configs.data = null;
+        configCache?.invalidate();
         return;
       } catch (e) {
         console.error("Turso Error updating config:", e);
@@ -1111,7 +1106,7 @@ const ConfigRepo = {
     }
     requireLocalStorage();
     await fs.writeJson(FILES.configs, configs);
-    cache.configs.data = null;
+    configCache?.invalidate();
   },
   updateMany: async (updates: Record<string,string>) => {
     if (db) {
@@ -1126,7 +1121,7 @@ const ConfigRepo = {
       }
       await fs.writeJson(FILES.configs,configs);
     }
-    cache.configs.data=null;
+    configCache?.invalidate();
   },
 };
 
@@ -1690,6 +1685,7 @@ app.post('/delivery/quote', rateLimit({ windowMs: 60000, limit: 10, legacyHeader
 });
 
 app.get('/configs', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
   try {
     const allConfigs = await ConfigRepo.getAll();
     const configs = Object.fromEntries(Object.entries(allConfigs).filter(([key]) => !/vapid|secret|password|token|private/i.test(key) && (hasAdminSession(req) || !internalStoreFields.has(key))));
@@ -1812,16 +1808,18 @@ app.get('/admin/stats', async (req, res) => {
   }
 });
 
-let prepCache: { value: any; expires: number } | undefined;
-let prepRequest: Promise<any> | undefined;
+let prepCache: { value: number; expires: number } | undefined;
+let prepRequest: Promise<number> | undefined;
 app.get('/stats/prep-time', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
-    if (prepCache && prepCache.expires > Date.now()) return res.json(prepCache.value);
-    prepRequest ||= Promise.all([OrderRepo.countActive(), ConfigRepo.getAll()]).then(([activeOrders, configs]) => {
-      const value = { activeOrders, forecast: configs['kitchen_forecast'] || '40-50 min' };
-      prepCache = { value, expires: Date.now() + 60000 }; return value;
-    }).finally(() => { prepRequest = undefined; });
-    res.json(await prepRequest);
+    const activeRequest = prepCache && prepCache.expires > Date.now()
+      ? Promise.resolve(prepCache.value)
+      : (prepRequest ||= OrderRepo.countActive().then(value => {
+          prepCache = { value, expires: Date.now() + 60000 }; return value;
+        }).finally(() => { prepRequest = undefined; }));
+    const [activeOrders, configs] = await Promise.all([activeRequest, ConfigRepo.getAll()]);
+    res.json({ activeOrders, forecast: configs['kitchen_forecast'] || '40-50 min' });
   } catch { res.status(503).json({ error: 'Previsão indisponível.' }); }
 });
 
