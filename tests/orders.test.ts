@@ -215,3 +215,16 @@ test('cash can leave for delivery before receipt but completion requires persist
  const pix=stored.find((item:any)=>item.payment?.method==='pix'&&item.status==='cancelado');assert.ok(pix);
  assert.equal((await request('/orders/'+pix.id+'/payment/confirm',{},headers)).status,409);
 });
+
+test('API rejects invalid schedules without writes and stores valid schedules with the shop timezone',async()=>{
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ assert.equal((await request('/configs/batch',{updates:{opening_start:'10:00',opening_end:'22:00',working_days:'[0,1,2,3,4,5,6]'}},headers)).status,200);
+ const before=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).length;
+ const body=(scheduledTo:any)=>({...order,id:randomUUID(),scheduledTo});
+ for(const schedule of ['2000-01-01T15:00','2099-02-30T15:00','2099-01-01T23:00',{},'tomorrow']){
+  const response=await request('/orders',body(schedule),{'X-Order-Request':randomUUID()});assert.equal(response.status,400);assert.ok((await response.json()).error);
+ }
+ assert.equal(JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).length,before);
+ const candidate=body('2099-01-01T15:00');const response=await request('/orders',candidate,{'X-Order-Request':randomUUID()});assert.equal(response.status,200);
+ const saved=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((entry:any)=>entry.id===candidate.id);assert.equal(saved.scheduledTo,'2099-01-01T15:00:00-03:00');
+});

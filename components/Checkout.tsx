@@ -7,6 +7,7 @@ import { subscribeToPush } from '../src/utils/push';
 import { lookupCep, formatCep } from '../src/utils/cep';
 import { formatWhatsApp } from '../src/utils/phone-input';
 import { PhoneInput } from './PhoneInput';
+import {shopDate,validateSchedule} from '../src/utils/order-schedule';
 import { addressParts, emptyCustomer, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
@@ -240,8 +241,13 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     submitLock.current = true; setSubmitting(true);
     try {
     let scheduledTo = undefined;
-    if (isScheduled && scheduledDate && scheduledTime) {
-      scheduledTo = `${scheduledDate}T${scheduledTime}:00`;
+    if (isScheduled) {
+      try {
+        if (!scheduledDate || !scheduledTime) throw new Error('Escolha a data e o horário da entrega agendada.');
+        scheduledTo = validateSchedule(`${scheduledDate}T${scheduledTime}:00`,dynamicConfigs);
+      } catch(error) {
+        showMsg(error instanceof Error ? error.message : 'Confira o agendamento.', 'error'); return false;
+      }
     }
     if (method === 'dinheiro' && (!cashEnabled || (changeFor !== '' && (!Number.isFinite(Number(changeFor)) || Number(changeFor) < total)))) {
       showMsg('Confira a forma de pagamento e o valor para troco.', 'error');
@@ -463,12 +469,14 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                   <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
                     <button 
                       onClick={() => setIsScheduled(false)}
+                      aria-pressed={!isScheduled}
                       className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                       Entrega Agora
                     </button>
                     <button 
                       onClick={() => setIsScheduled(true)}
+                      aria-pressed={isScheduled}
                       className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                       Agendar Entrega
@@ -477,19 +485,21 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 
                   {isScheduled && (
                     <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Data</label>
+                      <div className="space-y-1 min-w-0">
+                        <label htmlFor="scheduled-date" className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Data</label>
                         <input 
+                          id="scheduled-date"
                           type="date" 
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 font-bold text-sm outline-none focus:border-vovoh-gold text-gray-600"
                           value={scheduledDate}
                           onChange={e => setScheduledDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
+                          min={shopDate()}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Horário</label>
+                      <div className="space-y-1 min-w-0">
+                        <label htmlFor="scheduled-time" className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Horário</label>
                         <input 
+                          id="scheduled-time"
                           type="time" 
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 font-bold text-sm outline-none focus:border-vovoh-gold text-gray-600"
                           value={scheduledTime}
@@ -498,6 +508,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                       </div>
                     </div>
                   )}
+                  {isScheduled && <p className="text-xs text-gray-500">Escolha um dia e horário do expediente da loja. Usamos o horário de Brasília.</p>}
                 </div>
 
                 {feeCalculated && (
@@ -526,6 +537,12 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                      if (!feeCalculated) {
                        setAddressError("Por favor, calcule o frete antes de prosseguir para o pagamento.");
                        return;
+                     }
+                     if (isScheduled) {
+                       try {
+                         if (!scheduledDate || !scheduledTime) throw new Error('Escolha a data e o horário da entrega agendada.');
+                         validateSchedule(`${scheduledDate}T${scheduledTime}:00`,dynamicConfigs);
+                       } catch(error) { setAddressError(error instanceof Error ? error.message : 'Confira o agendamento.'); return; }
                      }
                      rememberCustomer(customer);
                      setStep('payment');
@@ -590,7 +607,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                  {method === 'pix' ? (
                    <PixBox pixKey={pixKey} total={total} onComplete={handleOrder} />
                  ) : method === 'cartao_online' ? (
-                   <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer }} />
+                   <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer, ...(isScheduled ? {scheduledTo:`${scheduledDate}T${scheduledTime}:00-03:00`} : {}) }} />
                  ) : (
                    <button onClick={() => handleOrder()} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
                      Confirmar e Enviar Pedido
@@ -643,7 +660,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
     
     if (order.scheduledTo) {
       const scheduledDate = new Date(order.scheduledTo);
-      return `Agendado: ${scheduledDate.toLocaleDateString('pt-BR')} às ${scheduledDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`;
+      return `Agendado: ${scheduledDate.toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo'})} às ${scheduledDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit',timeZone:'America/Sao_Paulo'})}`;
     }
 
     let minDelay = 0; let maxDelay = 0;

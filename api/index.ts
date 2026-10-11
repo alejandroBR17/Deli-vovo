@@ -1,4 +1,5 @@
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
+import {validateSchedule} from '../src/utils/order-schedule.js';
 import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
 import { validateStoreConfig } from '../server/store-config.js';
 import { productOptions } from '../src/utils/product-options.js';
@@ -1249,7 +1250,10 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 
   try {
-    const priced = priceOrder(req.body, await ProductRepo.getAll(), await ConfigRepo.getAll());
+    const configs = await ConfigRepo.getAll();
+    try { req.body.scheduledTo = validateSchedule(req.body.scheduledTo,configs); }
+    catch(error) { return res.status(400).json({error:error instanceof Error ? error.message : 'Confira o agendamento.'}); }
+    const priced = priceOrder(req.body, await ProductRepo.getAll(), configs);
     if (!Number.isFinite(req.body.total) || Math.abs(req.body.total - priced.total) > 0.009) return res.status(409).json({ error: 'Os valores mudaram. Reabra a sacola e confira o pedido.' });
     const orderId = uuidv4();
     const paymentIntent = await stripe.paymentIntents.create({
@@ -1412,6 +1416,8 @@ app.post('/orders', async (req, res) => {
     }
     if (isVercel && !db && !process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('Banco indisponível.');
     const configs = await ConfigRepo.getAll();
+    try { order.scheduledTo = validateSchedule(order.scheduledTo,configs); }
+    catch(error) { return res.status(400).json({error:error instanceof Error ? error.message : 'Confira o agendamento.'}); }
     const paymentMethod = order.payment?.method ?? 'pix';
     if (!['pix', 'cartao_online', 'dinheiro'].includes(paymentMethod)) return res.status(400).json({ error: 'Escolha uma forma de pagamento válida.' });
     if (paymentMethod === 'dinheiro' && configs.cash_enabled !== 'true') return res.status(400).json({ error: 'A loja não está aceitando dinheiro. Escolha Pix ou cartão online.' });
