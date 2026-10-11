@@ -2,7 +2,9 @@
 
 ## Situação
 
-O código foi preparado para Turso/libSQL, com testes em SQLite local. O Firebase não é mais uma dependência da aplicação. O novo banco foi conectado ao Delivovo na Vercel, mas tabelas e dados remotos ainda precisam ser preparados e conferidos. A troca da produção não foi realizada. O Observatório do Voto não foi alterado. A API da Vercel confirmou as variáveis sensíveis da integração, mas não fornece seus valores; o acesso para a migração está pendente.
+O código foi preparado para Turso/libSQL, com testes em SQLite local. O Firebase não é mais uma dependência da aplicação. O novo banco foi conectado ao Delivovo na Vercel e o acesso remoto foi validado com credenciais privadas locais. O banco estava vazio; oito tabelas e onze índices explícitos foram preparados. Fila, histórico, financeiro e estatísticas funcionaram no banco remoto vazio. A troca da produção não foi realizada. O Observatório do Voto não foi alterado.
+
+O responsável decidiu começar sem importar dados antigos. Produtos, pedidos, usuários e configurações não foram copiados. O banco Firebase antigo permanece preservado. Os passos de exportação/importação abaixo ficam disponíveis para uma recuperação futura; não são necessários para iniciar o novo banco vazio. Antes da publicação, cadastrar e conferir o novo cardápio e as configurações de operação.
 
 O print de uso fornecido em 10/10/2026 mostrava 30,94 mil leituras de 500 milhões, 10,13 mil escritas de 10 milhões, 2,22 MB de 5 GB e 48 bancos de 100. É uma referência daquele momento, não uma garantia de consumo futuro.
 
@@ -59,7 +61,7 @@ Nunca remover o banco antigo antes da conferência e do período de recuperaçã
 - Em navegador com tela de 390 × 844, a versão compilada abriu a fila, o histórico e o financeiro, bloqueou a API após sair e exibiu o cardápio, sem erro JavaScript não tratado. As estatísticas não foram consultadas ao entrar no painel.
 - Migração e importação com um pedido fictício passaram em banco local separado. A prévia não grava e uma segunda importação foi recusada para impedir sobrescrita.
 
-Essas evidências não cobrem o banco remoto, os dados reais, pagamentos externos nem o recebimento de push em aparelho Android.
+As consultas também foram conferidas no Turso remoto vazio. Essas evidências não cobrem registros reais, pagamentos externos nem o recebimento de push em aparelho Android.
 
 ## Fontes
 
