@@ -1,5 +1,6 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name.js';
 import {RevisionCache} from '../server/revision-cache.js';
+import { adminCredentialStore } from '../server/admin-credentials.js';
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import {validateSchedule} from '../src/utils/order-schedule.js';
 import {storeAvailability} from '../src/utils/store-hours.js';
@@ -19,7 +20,7 @@ import { separateImage } from '../server/media.js';
 import { configuredDatabase, Database, Query, DocumentReference } from '../server/database.js';
 import { waitUntil } from '@vercel/functions';
 import { rateLimit } from 'express-rate-limit';
-import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin } from '../server/admin-auth.js';
+import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin, configureAdminCredentials, prepareAdminCredential, changeAdminPassword } from '../server/admin-auth.js';
 
 dotenv.config();
 
@@ -1198,6 +1199,7 @@ function backgroundNotification(task: Promise<unknown>) {
 }
 
 const app = express.Router();
+configureAdminCredentials(adminCredentialStore(db, DATA_DIR, requireLocalStorage));
 
 // Middleware
 app.use(cors());
@@ -1210,7 +1212,12 @@ app.use((req, res, next) => {
 });
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
-app.post('/admin/login', loginLimiter, loginAdmin);
+app.use((req,res,next)=>req.path==='/admin/login'?next():prepareAdminCredential(req,res,next));
+app.post('/admin/login', loginLimiter, prepareAdminCredential, loginAdmin);
+app.post('/admin/password', requireAdminWrite, rateLimit({windowMs:15*60*1000,limit:6,standardHeaders:'draft-7',legacyHeaders:false}), async (req,res) => {
+  try { await changeAdminPassword(req,res); }
+  catch { res.status(503).json({error:'Não foi possível alterar a senha. Confira a conexão e tente novamente.'}); }
+});
 app.get('/admin/session', requireAdmin, (_req, res) => res.json({ authenticated: true }));
 app.post('/admin/logout', requireAdminWrite, logoutAdmin);
 app.use('/admin', requireAdminWrite);

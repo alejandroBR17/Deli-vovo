@@ -1,31 +1,53 @@
 import { createHash, createHmac, timingSafeEqual, randomBytes, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { Request, Response, NextFunction } from 'express';
+import type { AdminCredential } from './admin-credentials';
 
 const cookieName = 'vovo_admin_session';
 const lifetime = 60 * 60 * 24 * 7;
+type Credential = { version: string; hash?: string; password?: string };
+let credentialStore: { read(): Promise<AdminCredential | null>; change(expected: string, next: AdminCredential): Promise<boolean> } | undefined;
+const requestCredentials = new WeakMap<Request, Credential>();
+export function configureAdminCredentials(store: NonNullable<typeof credentialStore>) { credentialStore = store; }
+function bootstrap(): Credential { return {password: process.env.ADMIN_PASSWORD, version: (process.env.ADMIN_SESSION_SECRET?.length || 0) >= 32 ? sign('bootstrap:'+(process.env.ADMIN_PASSWORD || '')) : 'unconfigured'}; }
+function credential(req: Request) { return requestCredentials.get(req) || bootstrap(); }
+export async function prepareAdminCredential(req: Request, res: Response, next: NextFunction) {
+  if ((process.env.ADMIN_SESSION_SECRET?.length || 0) < 32) return next();
+  if (req.path !== '/admin/login' && !signedSession(req)) return next();
+  try { requestCredentials.set(req, await credentialStore?.read() || bootstrap()); next(); }
+  catch { res.status(503).json({error:'Não foi possível verificar o acesso ao painel. Tente novamente.'}); }
+}
 
 function equal(a: string, b: string) {
   const hash = (value: string) => createHash('sha256').update(value).digest();
   return timingSafeEqual(hash(a), hash(b));
 }
 
-function configured() {
-  return !!process.env.ADMIN_PASSWORD && (process.env.ADMIN_SESSION_SECRET?.length || 0) >= 32;
+function configured(req: Request) {
+  const current = credential(req);
+  return !!(current.hash || current.password) && (process.env.ADMIN_SESSION_SECRET?.length || 0) >= 32;
 }
 
 function sign(value: string) {
   return createHmac('sha256', process.env.ADMIN_SESSION_SECRET!).update(value).digest('base64url');
 }
 
-export function hasAdminSession(req: Request) {
-  if (!configured()) return false;
+function signedSession(req: Request) {
+  if ((process.env.ADMIN_SESSION_SECRET?.length || 0) < 32) return null;
   const raw = (req.headers.cookie || '').split(';').map(part => part.trim())
     .find(part => part.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
-  if (!raw) return false;
-  const [expires, signature, extra] = raw.split('.');
-  if (!signature || extra || !/^\d+$/.test(expires)) return false;
-  return Number(expires) > Math.floor(Date.now() / 1000) && equal(signature, sign(expires));
+  if (!raw) return null;
+  const parts = raw.split('.');
+  const [expires, version, signature] = parts;
+  if (!/^\d+$/.test(expires) || Number(expires) <= Math.floor(Date.now()/1000)) return null;
+  if (parts.length === 2 && equal(version,sign(expires))) return parts;
+  if (parts.length === 3 && !!signature && equal(signature,sign(expires+'.'+version))) return parts;
+  return null;
+}
+export function hasAdminSession(req: Request) {
+  if (!configured(req)) return false;
+  const parts=signedSession(req),current=credential(req);
+  return !!parts && (parts.length === 2 ? !current.hash : parts[1] === current.version);
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -46,9 +68,17 @@ export function requireAdminWrite(req: Request, res: Response, next: NextFunctio
   requireAdmin(req, res, next);
 }
 
-export function loginAdmin(req: Request, res: Response) {
+function issueAdminSession(res: Response, version: string) {
+  const expires = String(Math.floor(Date.now() / 1000) + lifetime);
+  res.cookie(cookieName, `${expires}.${version}.${sign(expires+'.'+version)}`, {
+    httpOnly: true, secure: !!process.env.VERCEL || process.env.NODE_ENV === 'production',
+    sameSite: 'strict', path: '/', maxAge: lifetime * 1000,
+  });
+}
+async function matchesPassword(password: string, current: Credential) { return current.hash ? verifyPassword(password,current.hash) : !!current.password && equal(password,current.password); }
+export async function loginAdmin(req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store');
-  if (!configured()) {
+  if (!configured(req)) {
     res.status(503).json({ error: 'O acesso ao painel ainda precisa ser configurado.' });
     return;
   }
@@ -56,16 +86,25 @@ export function loginAdmin(req: Request, res: Response) {
     res.status(403).json({ error: 'Solicitação inválida.' });
     return;
   }
-  if (typeof req.body.password !== 'string' || !equal(req.body.password, process.env.ADMIN_PASSWORD!)) {
+  if (typeof req.body.password !== 'string' || req.body.password.length > 128 || !await matchesPassword(req.body.password,credential(req))) {
     res.status(401).json({ error: 'Senha incorreta.' });
     return;
   }
-  const expires = String(Math.floor(Date.now() / 1000) + lifetime);
-  res.cookie(cookieName, `${expires}.${sign(expires)}`, {
-    httpOnly: true, secure: !!process.env.VERCEL || process.env.NODE_ENV === 'production',
-    sameSite: 'strict', path: '/', maxAge: lifetime * 1000,
-  });
+  issueAdminSession(res,credential(req).version);
   res.json({ success: true });
+}
+
+export async function changeAdminPassword(req: Request, res: Response) {
+  res.setHeader('Cache-Control','no-store');
+  const {currentPassword,newPassword,confirmation}=req.body;
+  if (typeof currentPassword !== 'string' || currentPassword.length > 128 || typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128 || !newPassword.trim() || confirmation !== newPassword) return res.status(400).json({error:'Confira a confirmação e use uma nova senha de 8 a 128 caracteres.'});
+  const current=credential(req);
+  if (!await matchesPassword(currentPassword,current)) return res.status(400).json({error:'A senha atual está incorreta.'});
+  if (currentPassword === newPassword) return res.status(400).json({error:'Escolha uma senha diferente da atual.'});
+  const next={hash:await hashPassword(newPassword),version:randomBytes(18).toString('base64url')};
+  if (!credentialStore || !await credentialStore.change(current.version,next)) return res.status(409).json({error:'O acesso mudou. Entre no painel novamente antes de trocar a senha.'});
+  requestCredentials.set(req,next);issueAdminSession(res,next.version);
+  res.json({success:true});
 }
 
 export function logoutAdmin(_req: Request, res: Response) {
