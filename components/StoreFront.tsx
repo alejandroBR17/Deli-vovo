@@ -1,13 +1,17 @@
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import React, { useState, useEffect, useRef } from 'react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
-import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin, ShoppingBag, ClipboardList } from 'lucide-react';
+import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin, ShoppingBag, ClipboardList, BookOpen, CreditCard, Minus } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL, WHATSAPP_NUMBER } from '../constants/index';
 import { GrandmaLoader } from './UI';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const money = (value: number) => currencyFormatter.format(value);
 const searchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
+const faqSymbol = (question: string) => {
+  const key = searchText(question);
+  return /agend|horario/.test(key) ? Clock : /pag|pix|cartao/.test(key) ? CreditCard : /frete|entrega/.test(key) ? MapPin : /acompanh|pedido/.test(key) ? ClipboardList : MessageSquare;
+};
 export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs, isClosed, onTrackOrders }: any) => {
   const [activeCat, setActiveCat] = useState('todos');
   const [search, setSearch] = useState('');
@@ -85,7 +89,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
   return (
     <>
       <header className="max-w-7xl mx-auto px-4 md:px-6 pt-3 md:pt-8 pb-5">
-        <div className="rounded-3xl bg-[#FFF5E9] border border-orange-100 p-4 md:p-8 grid md:grid-cols-[1.5fr_1fr] gap-4 md:gap-10 items-center">
+        <div className="store-hero rounded-3xl border border-orange-100 p-4 md:p-8 grid md:grid-cols-[1.5fr_1fr] gap-4 md:gap-10 items-center">
           <div className="min-w-0">
             <div className="flex items-center gap-4">
               <div className="relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-vovoh-red/5 flex items-center justify-center">
@@ -142,7 +146,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {filteredProducts.map((p: any) => (
-              <div key={p.id} className="group bg-white rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-3.5 hover:border-vovoh-red/30 hover:shadow-xl transition-all duration-300 items-stretch">
+              <div key={p.id} className="menu-product-card group bg-white rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-3.5 hover:border-vovoh-red/30 hover:shadow-xl transition-all duration-300 items-stretch">
                 <button type="button" aria-label={`Ampliar foto de ${p.name}`}
                   className="w-24 h-24 md:w-28 md:h-28 flex-shrink-0 rounded-xl md:rounded-2xl overflow-hidden bg-vovoh-cream relative cursor-zoom-in group/img self-center"
                   onClick={() => setSelectedZoomImage(p.image || PLACEHOLDER_IMG)}
@@ -342,9 +346,9 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         </div>
       )}
 
-      <section id="nossa-historia" className="scroll-mt-20 bg-[#FFF8EF] border-y border-orange-100 py-8 md:py-10">
+      <section id="nossa-historia" className="story-section scroll-mt-20 border-y border-orange-100 py-8 md:py-10">
         <div className="max-w-7xl mx-auto px-4 md:px-6 grid md:grid-cols-[0.85fr_1.15fr] gap-6 md:gap-10 items-center">
-          <div className="relative"><img loading="lazy" decoding="async" src={dynamicConfigs?.story_image || 'https://imgur.com/lrKC57Q.png'} alt="A família por trás da Delícias da Vovó" referrerPolicy="no-referrer" className="w-full h-56 md:h-72 object-cover rounded-3xl" /><div className="absolute bottom-4 left-4 right-4 rounded-xl bg-white/95 px-4 py-3 flex gap-2 items-center text-sm font-semibold text-vovoh-dark shadow-sm"><Heart size={18} className="text-vovoh-red shrink-0" aria-hidden="true" /> Receitas de família, feitas com carinho</div></div>
+          <figure className="story-photo"><img loading="lazy" decoding="async" src={dynamicConfigs?.story_image || 'https://imgur.com/lrKC57Q.png'} alt="A família por trás da Delícias da Vovó" referrerPolicy="no-referrer" /><figcaption className="story-caption"><Heart size={18} aria-hidden="true" /> Receitas de família, feitas com carinho</figcaption></figure>
           <div className="min-w-0"><p className="text-xs font-bold text-vovoh-red uppercase tracking-wider">Nossa história</p><h2 className="font-sans text-2xl md:text-3xl font-bold text-vovoh-dark mt-2">Uma cozinha de família.<br /><span className="text-vovoh-red">Um cuidado em cada pedido.</span></h2>
             <div id="store-story" className={'text-sm md:text-base text-gray-600 leading-relaxed whitespace-pre-line mt-4 '+(storyExpanded ? '' : 'line-clamp-4')}>{dynamicConfigs?.story_text || 'A Delícias da Vovó nasceu do desejo de compartilhar o sabor autêntico da comida caseira. Tudo começou na cozinha da Vovó Grazy, onde cada salgado era feito com um cuidado que só quem ama cozinhar entende.\n\nCom o tempo, o Vovô (que é argentino!) trouxe suas famosas receitas de empanadas, criando uma mistura única de sabores que conquistou toda a vizinhança de Colombo. Hoje, mantemos a mesma essência: massa fresca, recheio generoso e muito capricho.'}</div>
             <button type="button" aria-expanded={storyExpanded} aria-controls="store-story" onClick={() => setStoryExpanded(!storyExpanded)} className="min-h-11 mt-2 text-sm font-semibold text-vovoh-red underline underline-offset-4">{storyExpanded ? 'Recolher história' : 'Ler nossa história'}</button>
@@ -377,19 +381,19 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         </div>
       </section>}
 
-      <section id="ajuda" className="scroll-mt-20 bg-white py-8 md:py-10">
+      <section id="ajuda" className="help-section scroll-mt-20 py-8 md:py-10">
         <div className="max-w-7xl mx-auto px-4 md:px-6 grid lg:grid-cols-[0.8fr_1.2fr] gap-6 md:gap-10">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-vovoh-red">Central de ajuda</p><h2 className="font-sans text-2xl md:text-3xl font-bold text-vovoh-dark mt-2">Precisa de uma mão?</h2><p className="text-sm text-gray-600 leading-relaxed mt-3">Confira as dúvidas ou fale com a loja antes de finalizar.</p>
             <div className="mt-5 grid grid-cols-2 lg:grid-cols-1 gap-2">
-              <a href="#menu" className="min-h-14 rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ShoppingBag size={20} className="text-vovoh-red" aria-hidden="true" />Escolher meus produtos</a>
-              <button type="button" onClick={onTrackOrders} className="min-h-14 text-left rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ClipboardList size={20} className="text-vovoh-red" aria-hidden="true" />Acompanhar meu pedido</button>
-              <a href={'https://wa.me/'+contactNumber} target="_blank" rel="noopener noreferrer" className="col-span-2 lg:col-span-1 min-h-14 rounded-2xl px-4 py-3 bg-[#FFF5E9] border border-orange-100 flex items-center gap-3 text-sm font-semibold text-vovoh-dark"><MessageSquare size={20} className="text-vovoh-red" aria-hidden="true" />Falar com a loja pelo WhatsApp</a>
+              <a href="#menu" className="help-action min-h-14 rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ShoppingBag size={20} className="text-vovoh-red" aria-hidden="true" />Escolher meus produtos</a>
+              <button type="button" onClick={onTrackOrders} className="help-action min-h-14 text-left rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ClipboardList size={20} className="text-vovoh-red" aria-hidden="true" />Acompanhar meu pedido</button>
+              <a href={'https://wa.me/'+contactNumber} target="_blank" rel="noopener noreferrer" className="help-action help-contact col-span-2 lg:col-span-1 min-h-14 rounded-2xl px-4 py-3 bg-[#FFF5E9] border border-orange-100 flex items-center gap-3 text-sm font-semibold text-vovoh-dark"><MessageSquare size={20} className="text-vovoh-red" aria-hidden="true" />Falar com a loja pelo WhatsApp</a>
             </div>
           </div>
-          <div className="min-w-0"><h3 className="font-sans text-lg font-bold text-vovoh-dark mb-3">Dúvidas frequentes</h3><div className="space-y-2">{faqs.map((faq: any, i: number) => (
-            <div key={i} className={'rounded-2xl border overflow-hidden '+(openFaq === i ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white')}>
-              <button type="button" aria-expanded={openFaq === i} aria-controls={'faq-answer-'+i} onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full min-h-14 p-4 text-left flex items-center justify-between gap-4 text-sm font-semibold text-vovoh-dark"><span className="min-w-0 break-words">{faq.q}</span><ChevronDown size={19} className={'shrink-0 text-vovoh-red transition-transform '+(openFaq === i ? 'rotate-180' : '')} aria-hidden="true" /></button>
-              <div id={'faq-answer-'+i} hidden={openFaq !== i} className="px-4 pb-4"><p className="text-sm text-gray-600 leading-relaxed break-words whitespace-pre-line">{faq.a}</p></div>
+          <div className="faq-panel min-w-0"><div className="faq-header"><span className="faq-emblem"><BookOpen size={23} aria-hidden="true" /></span><div><small>Antes de finalizar</small><h3>Dúvidas frequentes</h3></div></div><div className="space-y-3">{faqs.map((faq: any, i: number) => (
+            <div key={i} className={'faq-card '+(openFaq === i ? 'is-expanded' : '')}>
+              <button type="button" aria-expanded={openFaq === i} aria-controls={'faq-answer-'+i} onClick={() => setOpenFaq(openFaq === i ? null : i)} className="faq-question"><span className="faq-question-label"><span className="faq-topic">{React.createElement(faqSymbol(faq.q), {size:18, 'aria-hidden':true})}</span><span>{faq.q}</span></span><span className="faq-toggle">{openFaq === i ? <Minus size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}</span></button>
+              <div id={'faq-answer-'+i} hidden={openFaq !== i} className="faq-answer">{faq.a}</div>
             </div>
           ))}</div></div>
         </div>

@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/globals.css';
+import './styles/theme.css';
+import { ThemeProvider } from './src/theme/ThemeProvider';
 
 // Força a atualização do cache para todos os usuários
 const APP_VERSION = '1.1.0-urgent-update';
@@ -96,7 +98,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider><App /></ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

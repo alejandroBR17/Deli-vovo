@@ -1,3 +1,4 @@
+import { ThemeSwitcher } from '../components/ThemeSwitcher';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Bell, BellOff, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
@@ -782,7 +783,7 @@ export default function Home() {
           </button>
 
           {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-8">
             <button
               onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}
               className="text-xs font-black uppercase tracking-wider text-gray-500 hover:text-vovoh-red transition-colors"
@@ -803,7 +804,8 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
+            <ThemeSwitcher />
             <button
               onClick={toggleNotifications}
               className={`min-w-11 min-h-11 flex items-center justify-center rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}

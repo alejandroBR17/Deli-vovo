@@ -1,3 +1,4 @@
+import { useTheme } from '../src/theme/ThemeProvider';
 import React, { useEffect, useState, useRef } from 'react';
 import { Heart, Zap, Bell, X, ChefHat, CreditCard, Copy, Check, Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -101,6 +102,7 @@ export const Toast = ({ message, type, onClose, notification }: { notification?:
 };
 
 export const StripePaymentBox = ({ onComplete, total, customer, checkout }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any, checkout: any }) => {
+  const {resolved} = useTheme();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,7 +160,7 @@ export const StripePaymentBox = ({ onComplete, total, customer, checkout }: { on
     <Elements key={clientSecret} stripe={stripePromise} options={{
       clientSecret, 
       appearance: { 
-        theme: 'stripe',
+        theme: resolved === 'dark' ? 'night' : 'stripe',
         variables: {
           colorPrimary: '#2563eb',
           fontFamily: 'Quicksand, sans-serif',

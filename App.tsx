@@ -31,7 +31,7 @@ export default function App() {
   const isAdmin = currentHash === '#vovo-secreta';
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-900 selection:bg-vovoh-red selection:text-white">
+    <div data-surface={isAdmin ? "admin" : "customer"} className="min-h-screen app-shell selection:bg-vovoh-red selection:text-white">
       {/* Barra de atalho de portfólio no Desktop */}
       <div className="hidden desktop:flex fixed bottom-4 left-4 z-[200] bg-zinc-900/90 backdrop-blur-md border border-white/10 text-white rounded-full px-4 py-2 shadow-2xl items-center gap-3 text-xs">
         <span className="flex items-center gap-1.5 font-bold text-zinc-400">
@@ -61,7 +61,7 @@ export default function App() {
           <Suspense fallback={<p role="status" className="p-6 text-center">Abrindo o painel...</p>}><AdminPage /></Suspense>
         </div>
       ) : (
-        <div className="w-full min-h-screen bg-[#F9F9F9] relative">
+        <div className="w-full min-h-screen relative">
           <Home />
         </div>
       )}

@@ -15,6 +15,11 @@
     
     <!-- Cor da barra do navegador no Celular -->
     <meta name="theme-color" content="#D61F1F">
+    <script>
+      const initialTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = initialTheme;
+      document.documentElement.style.colorScheme = initialTheme;
+    </script>
 
     <!-- Schema.org / Google+ / WhatsApp fallback -->
     <meta itemprop="name" content="Delícias da Vovó Grazy  | Salgados e Empanadas">
