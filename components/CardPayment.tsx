@@ -61,12 +61,13 @@ export function CardPaymentReturn({onApproved}:{onApproved:(order:Order)=>void})
   const [checkoutUrl,setCheckoutUrl]=useState('');const dialog=useRef<HTMLDivElement>(null);const lock=useRef(false);
   const mounted=useRef(true);const approved=useRef(onApproved);approved.current=onApproved;
   useModalFocus(dialog,open,()=>setOpen(false));
-  async function check(signal?:AbortSignal) {
+  async function check() {
     if(!pending||lock.current)return;lock.current=true;setBusy(true);
+    const signal=AbortSignal.timeout(15000);
     try {
       const response=await fetch(`/api/payments/mercado-pago/${pending.id}/status`,{method:'POST',headers:{'Content-Type':'application/json','X-Order-Request':pending.key},body:JSON.stringify({paymentId:pending.paymentId}),signal});
       const result=await response.json();if(!response.ok)throw new Error(result.error||'Não foi possível consultar.');
-      if(signal?.aborted || !mounted.current)return;
+      if(signal.aborted || !mounted.current)return;
       if(result.status==='approved') {
         localStorage.removeItem(pendingKey);
         const url=new URL(window.location.href);['payment_return','payment_id','collection_id','collection_status','status','preference_id','external_reference','merchant_order_id','site_id','processing_mode','merchant_account_id'].forEach(key=>url.searchParams.delete(key));
@@ -78,14 +79,18 @@ export function CardPaymentReturn({onApproved}:{onApproved:(order:Order)=>void})
           'O pagamento ainda não foi confirmado. Se você já pagou, consulte novamente.');
         setCheckoutUrl(['refunded','charged_back'].includes(result.paymentState)?'':result.checkoutUrl||'');
       }
-    } catch(error) {if(!signal?.aborted)setMessage(error instanceof Error?error.message:'Não foi possível consultar o pagamento.');}
-    finally {lock.current=false;if(!signal?.aborted)setBusy(false);}
+    } catch(error) {
+      if(mounted.current)setMessage(signal.aborted
+        ?'A consulta demorou demais. Tente consultar novamente; seu pagamento continua salvo.'
+        :error instanceof Error?error.message:'Não foi possível consultar o pagamento.');
+    }
+    finally {lock.current=false;if(mounted.current)setBusy(false);}
   }
   useEffect(()=>{
     mounted.current=true;
     if(!pending)return;
     localStorage.setItem(pendingKey,JSON.stringify(pending));
-    void check(AbortSignal.timeout(15000));
+    void check();
     return()=>{mounted.current=false;};
   },[pending]);
   if(!pending || finished)return null;

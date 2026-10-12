@@ -1,5 +1,11 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Continuação — consulta de cartão após falha de rede — 12/10/2026
+
+Corrigido travamento demonstrável no retorno do Mercado Pago: quando a consulta automática excedia 15 segundos, o AbortSignal impedia retirar o estado de carregamento e deixava o botão permanentemente desativado. Agora a consulta automática e cada consulta manual têm o mesmo limite de 15 segundos, mostram mensagem de demora e liberam a tentativa seguinte. A chave privada do pagamento pendente permanece no aparelho; não há nova cobrança ou consulta automática repetida. Atualizações de tela respeitam a desmontagem do componente.
+
+Validação em navegador local, somente com respostas simuladas: demora na primeira consulta, demora na consulta manual, botão novamente disponível nos dois casos, chave preservada e aprovação posterior recuperando exatamente um pedido e removendo a chave. Regressão do retorno em 320/390/1365 px, claro/escuro, passou; uma consulta inicial, retorno pendente e aprovação manual sem duplicação. Nenhum dado fictício foi gravado no banco remoto. Catálogo legítimo (um produto), configurações e ausência de pedidos da prévia anterior foram conferidos e preservados privadamente antes da atualização. Produção permanece preservada.
+
 O responsável autorizou trabalho independente durante esta noite, pede um resumo ao acordar e só consegue responder a partir das 07h. Toda publicação continua restrita a Preview no projeto Vercel `delivovo`, sem promover produção. Repositório ativo: `alejandroBR17/Deli-vovo`, branch `fix/unifica-delivery-turso`, pasta local `C:/Users/LGOLMES/Downloads/Github ou Vercel/audit-deli-vovo`. Outros projetos e o banco do Observatório não fazem parte do trabalho.
 
 ## Rodada antes da retomada agendada
