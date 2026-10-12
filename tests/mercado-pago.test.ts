@@ -11,6 +11,7 @@ const payment = {id:456,collector_id:123,live_mode:false,currency_id:'BRL',exter
 test('preference contains canonical total, reference and hosted return without customer data while keeping mandatory MP balance',async()=>{
   let captured:any;
   const client = new MercadoPago(config,async (url, options)=>{
+    if(String(url).endsWith('/users/me'))return Response.json({id:123,tags:['test_user']});
     assert.equal(url,'https://api.mercadopago.com/checkout/preferences');
     assert.equal(options?.redirect,'error');
     assert.equal((options?.headers as any).Authorization,'Bearer private-test-token');
@@ -30,27 +31,40 @@ test('preference contains canonical total, reference and hosted return without c
 
 test('untrusted destinations, redirected checkout and wrong collector fail closed',async()=>{
   let calls=0;
-  const client=new MercadoPago(config,async()=>{calls++;return Response.json({id:'pref',collector_id:123,init_point:'https://evil.example/'});});
+  const client=new MercadoPago(config,async(url)=>{if(String(url).endsWith('/users/me'))return Response.json({id:123,tags:['test_user']});calls++;return Response.json({id:'pref',collector_id:123,init_point:'https://evil.example/'});});
   await assert.rejects(client.createPreference(expected,'http://delivery.example','http://delivery.example/api/payments/mercado-pago/webhook'));
   await assert.rejects(client.createPreference(expected,'https://delivery.example','https://evil.example/api/payments/mercado-pago/webhook'));
   assert.equal(calls,0);
   await assert.rejects(client.createPreference(expected,'https://delivery.example','https://delivery.example/api/payments/mercado-pago/webhook'));
-  const wrong=new MercadoPago(config,async()=>Response.json({id:'pref',collector_id:999,init_point:'https://www.mercadopago.com.br/checkout'}));
+  const wrong=new MercadoPago(config,async(url)=>Response.json(String(url).endsWith('/users/me')?{id:123,tags:['test_user']}:{id:'pref',collector_id:999,init_point:'https://www.mercadopago.com.br/checkout'}));
   await assert.rejects(wrong.createPreference(expected,'https://delivery.example','https://delivery.example/api/payments/mercado-pago/webhook'));
 });
 
-test('only approved matching amount, seller, BRL, order, fingerprint and environment can be paid',()=>{
-  const client=new MercadoPago(config);
-  assert.deepEqual(client.verifyPayment(payment,expected),{approved:true,paymentId:'456',paymentType:'credit_card'});
-  assert.deepEqual(client.verifyPayment({...payment,payment_type_id:'account_money'},expected),{approved:true,paymentId:'456',paymentType:'account_money'});
-  for(const override of [{collector_id:999},{live_mode:true},{currency_id:'USD'},{transaction_amount:0.1},
+test('approved receipts match amount, seller, BRL, order and fingerprint; authenticated test seller supports classic live_mode',async()=>{
+  let lookups=0;
+  const client=new MercadoPago(config,async()=>{lookups++;return Response.json({id:123,tags:['test_user']});});
+  assert.deepEqual(await client.verifyPayment(payment,expected),{approved:true,paymentId:'456',paymentType:'credit_card'});
+  assert.equal((await client.verifyPayment({...payment,live_mode:true},expected)).approved,true);
+  assert.deepEqual(await client.verifyPayment({...payment,payment_type_id:'account_money'},expected),{approved:true,paymentId:'456',paymentType:'account_money'});
+  for(const override of [{collector_id:999},{live_mode:undefined},{currency_id:'USD'},{transaction_amount:0.1},
     {external_reference:'another-order'},{metadata:{checkout:'b'.repeat(64)}},{payment_type_id:'bank_transfer'},{id:'../users/me'}]) {
-    assert.throws(()=>client.verifyPayment({...payment,...override},expected));
+    await assert.rejects(client.verifyPayment({...payment,...override},expected));
   }
   for(const status of ['pending','in_process','rejected','cancelled','refunded','charged_back']) {
-    assert.deepEqual(client.verifyPayment({...payment,status},expected),{approved:false});
+    assert.deepEqual(await client.verifyPayment({...payment,status},expected),{approved:false});
   }
-  assert.deepEqual(client.verifyPayment({...payment,transaction_amount_refunded:1},expected),{approved:false});
+  assert.deepEqual(await client.verifyPayment({...payment,transaction_amount_refunded:1},expected),{approved:false});
+  assert.equal(lookups,1);
+});
+
+test('test mode refuses a real seller before creating preference; live mode refuses test seller and simulated receipts',async()=>{
+  const realSeller=new MercadoPago(config,async()=>Response.json({id:123,tags:[]}));
+  await assert.rejects(realSeller.createPreference(expected,'https://delivery.example','https://delivery.example/api/payments/mercado-pago/webhook'));
+  const testSeller=new MercadoPago({...config,mode:'live'},async()=>Response.json({id:123,tags:['test_user']}));
+  await assert.rejects(testSeller.verifyPayment({...payment,live_mode:true},expected));
+  const live=new MercadoPago({...config,mode:'live'},async()=>Response.json({id:123,tags:[]}));
+  await assert.rejects(live.verifyPayment(payment,expected));
+  assert.equal((await live.verifyPayment({...payment,live_mode:true},expected)).approved,true);
 });
 
 test('provider failure does not leak its body or credentials; payment ids cannot alter path',async()=>{

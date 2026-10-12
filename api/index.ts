@@ -1318,7 +1318,7 @@ async function reconcileMercadoPago(paymentId:string, expectedOrderId?:string) {
   if(typeof payment.external_reference!=='string') return false;
   const checkout=await paymentCheckouts!.get(payment.external_reference);
   if(!checkout) return false;
-  const verified=mercadoPago!.verifyPayment(payment,checkout);
+  const verified=await mercadoPago!.verifyPayment(payment,checkout);
   if(!verified.approved || !verified.paymentId) {
     const state=Number(payment.transaction_amount_refunded)>0?'refunded':String(payment.status);
     if(['refunded','charged_back','cancelled'].includes(state) && await paymentCheckouts!.revokePayment(checkout.orderId,String(payment.id),state)) {

@@ -10,6 +10,7 @@ const cents = (value: unknown) => {
 };
 
 export class MercadoPago {
+  private verifiedAccount: Promise<void>|null=null;
   constructor(private readonly config: MercadoPagoConfig, private readonly transport: typeof fetch = fetch) {
     if (!config.accessToken || !idPattern.test(config.sellerId) || !['test','live'].includes(config.mode)) throw new Error('Configuração do Mercado Pago incompleta.');
   }
@@ -17,12 +18,22 @@ export class MercadoPago {
   private async request(path: string, body?: unknown) {
     // Fixed provider host; never follow webhook URLs or send tokens to a redirect.
     const response = await this.transport(`https://api.mercadopago.com${path}`, {
-      method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(12000),
+      method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
       headers: { Authorization: `Bearer ${this.config.accessToken}`, 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) throw new Error('O Mercado Pago não respondeu. Tente novamente em instantes.');
     return response.json();
+  }
+
+  async verifyAccount() {
+    if(!this.verifiedAccount) {
+      this.verifiedAccount=this.request('/users/me').then(account=>{
+        const testAccount=Array.isArray(account.tags)&&account.tags.includes('test_user');
+        if(String(account.id)!==this.config.sellerId || testAccount!==(this.config.mode==='test')) throw new Error('A conta Mercado Pago não corresponde ao ambiente configurado.');
+      }).catch(error=>{this.verifiedAccount=null;throw error;});
+    }
+    return this.verifiedAccount;
   }
 
   async createPreference(expected: PaymentExpectation, origin: string, webhookUrl: string) {
@@ -31,6 +42,7 @@ export class MercadoPago {
     if (base.protocol !== 'https:' || base.username || base.password || base.pathname !== '/' || base.search || base.hash ||
         webhook.origin !== base.origin || webhook.pathname !== '/api/payments/mercado-pago/webhook' || webhook.search || webhook.hash) throw new Error('Endereço de pagamento inválido.');
     if (!/^[a-zA-Z0-9-]{8,64}$/.test(expected.orderId) || !/^[a-f0-9]{64}$/.test(expected.fingerprint) || cents(expected.total) < 1) throw new Error('Pedido de pagamento inválido.');
+    await this.verifyAccount();
     const back = `${base.origin}/?payment_return=${encodeURIComponent(expected.orderId)}`;
     const preference = await this.request('/checkout/preferences', {
       items: [{ id: expected.orderId, title: 'Pedido Delícias da Vovó', quantity: 1, currency_id: 'BRL', unit_price: cents(expected.total) / 100 }],
@@ -48,12 +60,14 @@ export class MercadoPago {
 
   async getPayment(paymentId: string) {
     if (!idPattern.test(paymentId)) throw new Error('Identificador de pagamento inválido.');
+    await this.verifyAccount();
     return this.request(`/v1/payments/${paymentId}`);
   }
 
-  verifyPayment(payment: any, expected: PaymentExpectation) {
+  async verifyPayment(payment: any, expected: PaymentExpectation) {
+    await this.verifyAccount();
     if (!payment || !idPattern.test(String(payment.id)) || String(payment.collector_id) !== this.config.sellerId ||
-        payment.live_mode !== (this.config.mode === 'live') || payment.currency_id !== 'BRL' ||
+        typeof payment.live_mode!=='boolean' || (this.config.mode==='live' && payment.live_mode!==true) || payment.currency_id !== 'BRL' ||
         payment.external_reference !== expected.orderId || payment.metadata?.checkout !== expected.fingerprint ||
         cents(payment.transaction_amount) !== cents(expected.total) ||
         !['credit_card','debit_card','account_money'].includes(payment.payment_type_id)) throw new Error('Pagamento não corresponde ao pedido.');

@@ -47,6 +47,7 @@ test('API creates no order before approval, verifies signed provider response, r
   let preference:any;let paid=false;let preferenceCalls=0;
   const originalFetch=globalThis.fetch;
   globalThis.fetch=async(url,options)=>{
+    if(String(url)==='https://api.mercadopago.com/users/me')return Response.json({id:123,tags:['test_user']});
     if(String(url)==='https://api.mercadopago.com/checkout/preferences') {
       preferenceCalls++;preference=JSON.parse(String(options?.body));
       return Response.json({id:'local-pref',collector_id:123,init_point:'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=local-pref'});
