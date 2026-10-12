@@ -198,18 +198,18 @@ export default function AdminPage() {
       setPushError(error instanceof Error ? error.message : 'Não foi possível ativar os avisos.');
     }
   };
-  const testNotification = async () => {
+  const testNotification = async (delayed = false) => {
     setTestingPush(true); setPushError('');
     try {
       const subscription = await getPushSubscription();
       if (!subscription) throw new Error('Ative os avisos neste aparelho primeiro.');
       const response = await adminFetch('/admin/test-push', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: subscription.endpoint }),
+        body: JSON.stringify({ endpoint: subscription.endpoint, ...(delayed ? {delaySeconds:10} : {}) }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível enviar o teste.');
-      showMsg('Teste enviado. Confira se o aviso chegou neste aparelho.', 'info');
+      showMsg(delayed ? 'Teste em 10 segundos. Bloqueie a tela agora.' : 'Teste enviado. Confira se o aviso chegou neste aparelho.', 'info');
     } catch (error) {
       setPushError(error instanceof Error ? error.message : 'Falha no teste.');
     } finally { setTestingPush(false); }
@@ -1170,7 +1170,8 @@ export default function AdminPage() {
                 {pushError && <p role="alert" className="text-amber-300 text-sm">{pushError}</p>}
                 <div className="flex flex-wrap gap-3">
                   <button onClick={requestNotification} disabled={pushState === 'registering'} className="min-h-12 px-4 bg-amber-400 text-black rounded-xl font-bold disabled:opacity-50">{pushState === 'registering' ? 'Ativando...' : pushState === 'registered' ? 'Cadastrar novamente' : 'Ativar avisos'}</button>
-                  <button onClick={testNotification} disabled={pushState !== 'registered' || testingPush} className="min-h-12 px-4 bg-white/10 rounded-xl font-bold disabled:opacity-40">{testingPush ? 'Enviando...' : 'Enviar teste'}</button>
+                  <button onClick={()=>testNotification()} disabled={pushState !== 'registered' || testingPush} className="min-h-12 px-4 bg-white/10 rounded-xl font-bold disabled:opacity-40">{testingPush ? 'Enviando...' : 'Enviar teste'}</button>
+                  <button onClick={()=>testNotification(true)} disabled={pushState !== 'registered' || testingPush} className="min-h-12 px-4 bg-white/10 rounded-xl font-bold disabled:opacity-40">Testar com a tela bloqueada</button>
                 </div>
               </details>
             </section>
@@ -1587,7 +1588,7 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Testar Notificações</label>
                     <button
-                      onClick={testNotification}
+                      onClick={()=>testNotification()}
                       disabled={testingPush}
                       className="w-full py-4 bg-vovoh-red/10 text-vovoh-red rounded-2xl font-black text-xs uppercase border border-vovoh-red/20 hover:bg-vovoh-red hover:text-white transition-all"
                     >

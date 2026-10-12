@@ -1877,6 +1877,14 @@ app.post('/admin/test-push', async (req, res) => {
     const { endpoint } = req.body;
     const subscription = (await PushSubscriptionRepo.getAll()).find(sub => sub.endpoint === endpoint && sub.role === 'admin');
     if (!subscription) return res.status(404).json({ error: 'Ative os avisos neste aparelho primeiro.' });
+    if (req.body.delaySeconds !== undefined && req.body.delaySeconds !== 10) return res.status(400).json({error:'O teste pode ser imediato ou em 10 segundos.'});
+    if (req.body.delaySeconds === 10) {
+      backgroundNotification((async () => {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        await sendPushNotification(subscription, {title:'Teste com a tela bloqueada',body:'Avisos da loja funcionando. Este não é um pedido novo.',url:'/#vovo-secreta',tag:'vovo-test'});
+      })());
+      return res.status(202).json({success:true,scheduled:true});
+    }
     const sent = await sendPushNotification(subscription, { title: 'Teste de aviso', body: 'Este é um teste. Não há um pedido novo.', url: '/#vovo-secreta', tag: 'vovo-test' });
     if (!sent) return res.status(502).json({ error: 'O serviço não aceitou o aviso. Ative novamente e tente outra vez.' });
     res.json({ success: true });

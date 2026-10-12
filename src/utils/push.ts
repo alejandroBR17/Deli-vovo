@@ -1,17 +1,13 @@
 import { GAS_API_URL } from '../../constants/index';
 import { adminFetch } from './admin-api';
+import { ensureServiceWorker } from './service-worker';
 function urlBase64ToUint8Array(value: string) {
   const raw = atob((value + '='.repeat((4 - value.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
   return Uint8Array.from(raw, character => character.charCodeAt(0));
 }
 async function readyRegistration() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('No iPhone, instale pela opção Adicionar à Tela de Início e abra pelo ícone (iOS 16.4 ou superior). No Android, use o Chrome.');
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Recarregue o aplicativo e tente novamente.')), 10000);
-    })]);
-  } finally { clearTimeout(timer); }
+  return ensureServiceWorker();
 }
 export async function getPushSubscription() { return (await readyRegistration()).pushManager.getSubscription(); }
 export async function subscribeToPush(userId?: string, role: 'admin' | 'customer' = 'customer') {
