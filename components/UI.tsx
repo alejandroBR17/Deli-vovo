@@ -8,6 +8,7 @@ import { generatePixPayload } from '../utils/pix';
 import {useModalFocus} from '../src/hooks/use-modal-focus';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+export const stripeTestMode = Boolean(stripeKey?.startsWith('pk_test_'));
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }: { isOpen: boolean, title: string, message: string, onConfirm: () => void, onCancel: () => void }) => {
@@ -222,6 +223,7 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {stripeTestMode && <p role="note" className="p-3 rounded-xl bg-blue-50 text-blue-700 text-sm">Pagamento de teste, sem cobrança real. Use somente um cartão de teste do Stripe.</p>}
         <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200">
           <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-4">Dados do Pagamento</label>
           <PaymentElement options={{ 
@@ -259,7 +261,7 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
           {isProcessing ? (
             <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Processando...</>
           ) : (
-            confirmedPayment ? 'Enviar pedido já pago' : `Pagar R$ ${total.toFixed(2)}`
+            confirmedPayment ? 'Enviar pedido já pago' : `${stripeTestMode ? 'Simular pagamento de' : 'Pagar'} R$ ${total.toFixed(2)}`
           )}
         </button>
       </form>
