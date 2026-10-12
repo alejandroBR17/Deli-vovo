@@ -1,6 +1,8 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name.js';
 import {RevisionCache} from '../server/revision-cache.js';
 import { adminCredentialStore } from '../server/admin-credentials.js';
+import { MercadoPago, validMercadoPagoSignature } from '../server/mercado-pago.js';
+import { PaymentCheckoutStore, hasPaymentCheckoutAccess, paymentRequestHash } from '../server/payment-checkouts.js';
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
 import {validateSchedule} from '../src/utils/order-schedule.js';
 import {storeAvailability} from '../src/utils/store-hours.js';
@@ -1259,6 +1261,98 @@ app.post('/push/subscribe', async (req, res) => {
   }
 });
 
+const mercadoPago = process.env.MERCADO_PAGO_ACCESS_TOKEN && process.env.MERCADO_PAGO_SELLER_ID && ['test','live'].includes(process.env.MERCADO_PAGO_MODE || '')
+  ? new MercadoPago({accessToken:process.env.MERCADO_PAGO_ACCESS_TOKEN,sellerId:process.env.MERCADO_PAGO_SELLER_ID,mode:process.env.MERCADO_PAGO_MODE as 'test'|'live'}) : null;
+const paymentCheckouts = db ? new PaymentCheckoutStore(db.client) : null;
+function paymentOrigin() {
+  // Deployment hostname comes from Vercel, never the client-controlled Host header.
+  const origin=process.env.MERCADO_PAGO_RETURN_ORIGIN || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  const url=new URL(origin); if(url.protocol!=='https:' || url.username || url.password || url.pathname!=='/' || url.search || url.hash) throw new Error('Endereço de pagamento incompleto.');
+  return url.origin;
+}
+function mercadoPagoReady() {
+  if(!mercadoPago || !paymentCheckouts || !process.env.MERCADO_PAGO_WEBHOOK_SECRET || process.env.MERCADO_PAGO_CHECKOUT_ENABLED!=='true') return false;
+  try {paymentOrigin();return true;} catch {return false;}
+}
+app.get('/payments/config',(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json({provider:mercadoPagoReady()?'mercado_pago':'stripe',mode:process.env.MERCADO_PAGO_MODE==='live'?'live':'test'});
+});
+const paymentStartLimiter=rateLimit({windowMs:15*60*1000,limit:12,standardHeaders:'draft-7',legacyHeaders:false});
+app.post('/payments/mercado-pago/checkout',paymentStartLimiter,async(req,res)=>{
+  if(!mercadoPagoReady()) return res.status(503).json({error:'O cartão ainda está sendo configurado. Use Pix por enquanto.'});
+  try {
+    const input=req.body; const key=req.headers['x-order-request'];
+    if(typeof input.id!=='string' || !/^[a-zA-Z0-9-]{8,64}$/.test(input.id) || typeof key!=='string' || !/^[a-zA-Z0-9-]{32,64}$/.test(key)) return res.status(400).json({error:'Reabra a sacola para iniciar o pagamento.'});
+    const existing=await paymentCheckouts!.get(input.id);
+    if(existing) {
+      if(!hasPaymentCheckoutAccess(existing,key)) return res.status(409).json({error:'Este pagamento pertence a outra sacola.'});
+      if(!existing.checkoutUrl) return res.status(409).json({error:'Pagamento em preparação. Aguarde antes de tentar novamente.'});
+      return res.json({id:input.id,checkoutUrl:existing.checkoutUrl,mode:process.env.MERCADO_PAGO_MODE});
+    }
+    if(await OrderRepo.getById(input.id)) return res.status(409).json({error:'Este pedido já foi recebido. Consulte o acompanhamento.'});
+    if(!validCustomerName(input.customer?.name) || typeof input.customer?.phone!=='string' || !/^\d{10,13}$/.test(input.customer.phone.replace(/\D/g,'')) ||
+       typeof input.customer?.address!=='string' || input.customer.address.length<10 || input.customer.address.length>500) return res.status(400).json({error:'Confira nome, WhatsApp e endereço antes de pagar.'});
+    const configs=await ConfigRepo.getAll();
+    const scheduledTo=validateSchedule(input.scheduledTo,configs);
+    if(!scheduledTo && !acceptsImmediateOrders(configs)) return res.status(409).json({error:closedOrderMessage});
+    const priced=priceOrder(input,await ProductRepo.getAll(),configs);
+    if(!Number.isFinite(input.total) || Math.abs(input.total-priced.total)>0.009) return res.status(409).json({error:'Os valores mudaram. Reabra a sacola e confira.'});
+    const requestHash=paymentRequestHash(key);
+    const order={...priced,id:input.id,customer:{name:customerName(input.customer.name),phone:input.customer.phone,address:input.customer.address},
+      type:input.type,userId:customerId(req)||'',scheduledTo,submissionKeyHash:requestHash,
+      timing:{createdAt:new Date().toISOString()},itemsSummary:priced.items.map((item:any)=>`${item.quantity}x ${item.name}`).join(', ')};
+    const checkout={orderId:input.id,requestHash,order,total:priced.total,fingerprint:checkoutFingerprint(priced,order.customer.address,scheduledTo)};
+    if(!await paymentCheckouts!.create(checkout)) return res.status(409).json({error:'Pagamento em preparação. Aguarde antes de tentar novamente.'});
+    const origin=paymentOrigin();
+    const preference=await mercadoPago!.createPreference(checkout,origin,`${origin}/api/payments/mercado-pago/webhook`);
+    await paymentCheckouts!.savePreference(checkout.orderId,preference);
+    return res.json({id:checkout.orderId,checkoutUrl:preference.checkoutUrl,mode:preference.mode});
+  } catch {return res.status(400).json({error:'Não foi possível preparar o cartão. Confira a sacola ou escolha Pix.'});}
+});
+
+async function reconcileMercadoPago(paymentId:string, expectedOrderId?:string) {
+  const payment=await mercadoPago!.getPayment(paymentId);
+  if(expectedOrderId && payment.external_reference!==expectedOrderId) throw new Error('Pagamento não corresponde à sacola.');
+  if(typeof payment.external_reference!=='string') return false;
+  const checkout=await paymentCheckouts!.get(payment.external_reference);
+  if(!checkout) return false;
+  const verified=mercadoPago!.verifyPayment(payment,checkout);
+  if(!verified.approved || !verified.paymentId) {
+    const state=Number(payment.transaction_amount_refunded)>0?'refunded':String(payment.status);
+    if(['refunded','charged_back','cancelled'].includes(state) && await paymentCheckouts!.revokePayment(checkout.orderId,String(payment.id),state)) {
+      backgroundNotification(notifyAdmins('Confira o pagamento',`Pedido #${checkout.orderId.slice(-4)}: pagamento devolvido ou contestado. Abra o painel.`,`/?order=${encodeURIComponent(checkout.orderId)}#vovo-secreta`));
+    }
+    return {approved:false,status:state};
+  }
+  const result=await paymentCheckouts!.finalize(checkout,verified.paymentId);
+  if(result.created) backgroundNotification(notifyAdmins('Novo pedido',`Pedido #${checkout.orderId.slice(-4)}. Abra o painel para conferir.`,`/?order=${encodeURIComponent(checkout.orderId)}#vovo-secreta`));
+  return {approved:true,status:'approved'};
+}
+app.post('/payments/mercado-pago/webhook',async(req,res)=>{
+  if(!mercadoPagoReady()) return res.sendStatus(503);
+  const id=req.query['data.id'];
+  if(!validMercadoPagoSignature(process.env.MERCADO_PAGO_WEBHOOK_SECRET||'',req.headers['x-signature'],req.headers['x-request-id'],id)) return res.sendStatus(401);
+  if(req.body.type!=='payment' || String(req.body.data?.id)!==id) return res.sendStatus(400);
+  try {await reconcileMercadoPago(String(id));return res.sendStatus(200);}
+  catch {return res.sendStatus(503);}
+});
+app.post('/payments/mercado-pago/:id/status',rateLimit({windowMs:60000,limit:10,standardHeaders:'draft-7',legacyHeaders:false}),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!mercadoPagoReady()) return res.status(503).json({error:'O cartão ainda está sendo configurado.'});
+  try {
+    const id=String(req.params.id);const checkout=await paymentCheckouts!.get(id);
+    if(!checkout || !hasPaymentCheckoutAccess(checkout,req.headers['x-order-request'])) return res.status(401).json({error:'Abra o pagamento pelo aparelho em que iniciou a compra.'});
+    const paymentState=req.body.paymentId ? await reconcileMercadoPago(String(req.body.paymentId),id) : null;
+    const order=await OrderRepo.getById(id);
+    if(!order) return res.json({status:'pending',paymentState:paymentState && paymentState.status,checkoutUrl:checkout.checkoutUrl});
+    if(order.submissionKeyHash!==checkout.requestHash || !order.paymentMethod?.startsWith('Cartão Online Mercado Pago')) return res.status(409).json({error:'Este pedido precisa ser conferido pela loja.'});
+    if(!order.payment?.paid) return res.json({status:'pending',paymentState:'refunded'});
+    const {submissionKeyHash: _privateHash,...publicOrder}=order;
+    return res.json({status:'approved',order:{...publicOrder,timing:checkout.order.timing,accessToken:orderToken(id)}});
+  } catch {return res.status(400).json({error:'Não foi possível confirmar o pagamento. Tente consultar novamente.'});}
+});
+
 // --- Rotas de Pagamento (Stripe) ---
 app.post('/create-payment-intent', async (req, res) => {
   if (!stripe) {
@@ -1433,6 +1527,7 @@ app.post('/orders', async (req, res) => {
       if (previousToken !== accessToken && existing.submissionKeyHash !== submissionKeyHash) return res.status(409).json({ error: 'Este pedido já foi recebido. Consulte o acompanhamento.' });
       return res.json({ success: true, id: order.id, accessToken });
     }
+    if(paymentCheckouts && await paymentCheckouts.get(order.id)) return res.status(409).json({error:'Este pedido está vinculado ao pagamento por cartão. Consulte o pagamento antes de enviar novamente.'});
     if (isVercel && !db && !process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('Banco indisponível.');
     if (!validCustomerName(order.customer.name)) return res.status(400).json({ error: 'Informe seu nome antes de enviar o pedido.' });
     order.customer.name = customerName(order.customer.name);

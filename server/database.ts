@@ -19,6 +19,7 @@ export async function migrate(client: Client) {
   // Triggers update revisions in the same transaction as configurations/products,
   // including writes from another instance and batch saves that later roll back.
   await client.batch([
+    'CREATE TABLE IF NOT EXISTS payment_checkouts (id TEXT PRIMARY KEY, payload TEXT NOT NULL CHECK(json_valid(payload)))',
     "CREATE TABLE IF NOT EXISTS admin_security (id TEXT PRIMARY KEY CHECK(id='owner'), password_hash TEXT NOT NULL, version TEXT NOT NULL)",
     'CREATE TABLE IF NOT EXISTS cache_revisions (id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0)',
     "INSERT INTO cache_revisions(id,version) VALUES ('configs',0) ON CONFLICT(id) DO NOTHING",

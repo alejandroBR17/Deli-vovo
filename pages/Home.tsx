@@ -1,5 +1,6 @@
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
 import { AppInstallButton } from '../components/AppInstall';
+import {CardPaymentReturn} from '../components/CardPayment';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Bell, BellOff, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
@@ -728,6 +729,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F9F9F9] font-sans flex flex-col relative">
+      <CardPaymentReturn onApproved={order=>{
+        setOrders(previous=>{
+          const next=[order,...previous.filter(item=>item.id!==order.id)];
+          localStorage.setItem('vovoh_active_orders',JSON.stringify(next));return next;
+        });
+        rememberCustomer(order.customer);setCart([]);setSelectedOrder(order);setIsTrackingOpen(true);
+      }}/>
       {dynamicConfigs?.preview_mode === 'true' && <p className="bg-amber-100 text-amber-900 p-3 text-center text-sm font-bold">Prévia local: pedidos de teste. Loja aberta para testar a qualquer hora.</p>}
 
       {isSyncing && (

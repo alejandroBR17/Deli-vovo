@@ -2,7 +2,8 @@ import { customerName, validCustomerName } from '../src/utils/customer-name';
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
 import { Banknote, Bell } from 'lucide-react';
-import { PixBox, StripePaymentBox, stripeTestMode } from './UI';
+import { PixBox } from './UI';
+import {CardPaymentBox} from './CardPayment';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
 import { lookupCep, formatCep } from '../src/utils/cep';
@@ -623,8 +624,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                    <div className="flex items-center gap-4 text-left">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${method === 'cartao_online' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}><CreditCard size={20}/></div>
                     <div>
-                      <p className="font-black text-vovoh-dark text-sm leading-tight">{stripeTestMode ? 'Cartão online — teste' : 'Cartão de Crédito ou Débito (Online)'}</p>
-                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'cartao_online' ? 'text-blue-500' : 'text-gray-400'}`}>{stripeTestMode ? 'Simulação sem cobrança real' : 'Pague agora via Stripe'}</p>
+                      <p className="font-black text-vovoh-dark text-sm leading-tight">Cartão online</p>
+                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'cartao_online' ? 'text-blue-500' : 'text-gray-400'}`}>Pagamento seguro</p>
                     </div>
                   </div>
                   {method === 'cartao_online' && <CheckCircle2 size={20} className="text-blue-500" />}
@@ -657,7 +658,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                  {method === 'pix' ? (
                    <PixBox pixKey={pixKey} total={total} onComplete={handleOrder} />
                  ) : method === 'cartao_online' ? (
-                   <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer, ...(isScheduled ? {scheduledTo:`${scheduledDate}T${scheduledTime}:00-03:00`} : {}) }} />
+                   <CardPaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer, ...(isScheduled ? {scheduledTo:`${scheduledDate}T${scheduledTime}:00-03:00`} : {}) }} />
                  ) : (
                    <button onClick={() => handleOrder()} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
                      Confirmar e Enviar Pedido
