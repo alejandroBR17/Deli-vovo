@@ -138,6 +138,9 @@ html[data-theme="light"] [data-surface="admin"] [class~="hover:text-white"]:hove
 html[data-theme] :is(.bg-vovoh-red,.bg-red-500,.bg-red-600,.bg-blue-500,.bg-blue-600,.bg-green-500,.bg-green-600,.bg-indigo-600,.bg-orange-500) { color: #fff; --on-surface: #fff; }
 html[data-theme] .bg-vovoh-gold { color: #251a10; --on-surface: #251a10; }
 html[data-theme] .bg-vovoh-gold.text-white { color: #251a10; }
+html[data-theme] .bg-amber-500 { color: #251a10; --on-surface: #251a10; }
+html[data-theme] .bg-amber-500.text-white { color: #251a10; }
+html[data-theme] .bg-orange-500 { background-color: #c2410c; }
 html[data-theme] :is(.bg-green-500,.bg-green-600) { background-color: #15803d; }
 html[data-theme] .bg-blue-500 { background-color: #2563eb; }
 html[data-theme] .bg-red-500 { background-color: #c62828; }
