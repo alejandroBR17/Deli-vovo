@@ -5,17 +5,20 @@ import { QRCodeSVG } from 'qrcode.react';
 import { PaymentElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { generatePixPayload } from '../utils/pix';
+import {useModalFocus} from '../src/hooks/use-modal-focus';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }: { isOpen: boolean, title: string, message: string, onConfirm: () => void, onCancel: () => void }) => {
+  const dialogRef=useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef,isOpen,onCancel);
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end items-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onCancel} />
       
-      <div className="relative w-full max-w-md bg-white rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain bg-white rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full">
         
         {/* Drag Handle Mobile */}
         <div className="w-full flex justify-center items-center h-6 bg-white shrink-0 cursor-pointer" onClick={onCancel}>

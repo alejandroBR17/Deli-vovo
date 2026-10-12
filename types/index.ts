@@ -35,6 +35,7 @@ export interface Order {
   total: number;
   status: OrderStatus;
   scheduledTo?: string;
+  acknowledgedAt?: string;
   refusalReason?: string;
   customer: {
     name: string;

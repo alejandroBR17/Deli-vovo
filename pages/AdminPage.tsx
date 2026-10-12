@@ -13,6 +13,8 @@ import { ProductEditor, CouponEditor } from '../components/AdminEditors';
 import { DeliverySettings, HoursSettings, AddressSettings, PaymentSettings } from '../components/AdminSettings';
 import { parseMoneyInput, formatMoneyInput } from '../src/utils/money-input';
 import { PhoneInput } from '../components/PhoneInput';
+import { needsOrderAttention } from '../src/utils/order-attention';
+import { shopDate } from '../src/utils/order-schedule';
 
 
 export default function AdminPage() {
@@ -88,7 +90,7 @@ export default function AdminPage() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundRetry, setSoundRetry] = useState(0);
   const [savingAddress, setSavingAddress] = useState(false);
-  const pendingOrderIds = orders.filter(o => o.status === 'pendente').map(o => o.id).sort().join(',');
+  const pendingOrderIds = orders.filter(needsOrderAttention).map(o => o.id).sort().join(',');
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
@@ -522,6 +524,28 @@ export default function AdminPage() {
     } catch(error) { showMsg(error instanceof Error ? error.message : 'Não foi possível confirmar.', 'error'); }
     finally {setSyncing(false);}
   };
+  const acknowledgeOrder = async (orderId: string) => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const response = await adminFetch(`/orders/${orderId}/acknowledge`,{method:'POST'});
+      const result = await response.json();
+      if (result.success !== true || !result.acknowledgedAt) throw new Error('Confirmação não salva.');
+      setOrders(previous=>previous.map(order=>order.id===orderId ? {...order,acknowledgedAt:result.acknowledgedAt} : order));
+      showMsg('Pedido confirmado. O preparo continua aguardando.', 'success');
+    } catch(error) { showMsg(error instanceof Error ? error.message : 'Não foi possível confirmar.', 'error'); }
+    finally { setSyncing(false); }
+  };
+  const receipt = (order: any) => order.status === 'pendente' && <section className="order-receipt rounded-2xl p-4 space-y-3" aria-label={`Confirmação do pedido ${order.id}`}>
+    {order.scheduledTo && <p className="flex items-start gap-2 font-bold text-sm"><Calendar size={18} className="shrink-0" aria-hidden="true" />Agendado: {new Date(order.scheduledTo).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</p>}
+    <p className="text-sm">{order.acknowledgedAt ? 'Confirmado pela loja. Aguardando o momento de preparar.' : 'Confirme que recebeu o pedido. Isso encerra a campainha, sem iniciar o preparo ou confirmar o pagamento.'}</p>
+    {!order.acknowledgedAt && <button type="button" disabled={syncing} onClick={()=>acknowledgeOrder(order.id)} className="checkout-action w-full rounded-xl px-4 py-3 text-sm font-bold disabled:opacity-50">{order.scheduledTo ? 'Confirmar agendamento' : 'Confirmar recebimento'}</button>}
+  </section>;
+  const beginPreparation = (order: any) => {
+    if (order.scheduledTo && shopDate(new Date(order.scheduledTo)) > shopDate()) {
+      setConfirmModal({isOpen:true,title:'Pedido agendado',message:'Este pedido é para outro dia. Confirme o agendamento para parar a campainha. Deseja mesmo começar o preparo agora?',onConfirm:()=>{setConfirmModal(null);void updateStatusAPI(order.id,'preparando');}});
+    } else void updateStatusAPI(order.id,'preparando');
+  };
   const cashReceipt = (order: any, isCash: boolean, isVerified: boolean) => isCash && !isVerified && !['concluido','cancelado','recusado'].includes(order.status) && <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 space-y-2">
     <p className="text-sm font-bold">Dinheiro na entrega</p>
     <p className="text-xs text-zinc-400">Pode preparar e sair para entrega. Confirme somente quando receber o dinheiro.</p>
@@ -730,10 +754,10 @@ export default function AdminPage() {
     });
   };
 
-  const pendingOrders = orders.filter(order => order.status === 'pendente').length;
+  const pendingOrders = orders.filter(needsOrderAttention).length;
   const visibleOrders = orders
-    .filter(order => filter === 'novos' ? order.status === 'pendente' : filter === 'ativos' ? !['concluido', 'cancelado', 'pix_recusado'].includes(order.status) : true)
-    .sort((a, b) => Number(b.status === 'pendente') - Number(a.status === 'pendente') || new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    .filter(order => filter === 'novos' ? needsOrderAttention(order) : filter === 'ativos' ? !['concluido', 'cancelado', 'pix_recusado'].includes(order.status) : true)
+    .sort((a, b) => Number(needsOrderAttention(b)) - Number(needsOrderAttention(a)) || new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('order');
     if (id && isAuthenticated && orders.length) document.getElementById('order-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -802,6 +826,7 @@ export default function AdminPage() {
     return (
       <div className="kds-page min-h-screen text-white p-4 font-sans overflow-hidden flex flex-col">
         {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
+        {confirmModal && <ConfirmModal {...confirmModal} onCancel={()=>setConfirmModal(null)} />}
         
         <header className="flex flex-wrap justify-between items-center gap-4 mb-8 shrink-0 min-w-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -834,7 +859,10 @@ export default function AdminPage() {
             ) : (
               kdsOrders.map(o => {
                 const createdAt = new Date(o.timing?.createdAt || o.date || Date.now());
-                const diffMin = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+                const waitingScheduled = o.status === 'pendente' && o.acknowledgedAt && o.scheduledTo;
+                const start = waitingScheduled ? new Date(o.scheduledTo) : createdAt;
+                const scheduledAhead = !!waitingScheduled && start.getTime() > Date.now();
+                const diffMin = Math.max(0,Math.floor((Date.now() - start.getTime()) / 60000));
                 
                 let urgencyColor = 'border-white/10 bg-zinc-900/50';
                 let timerColor = 'text-zinc-500';
@@ -856,18 +884,18 @@ export default function AdminPage() {
                   const isVerified = o.payment?.paid === true;
 
                 return (
-                  <div key={o.id} className={`w-[85vw] [380px] h-full flex flex-col rounded-[2rem] [2.5rem] border-2 ${urgencyColor} transition-all duration-500 animate-in slide-in-from-right-8`}>
+                  <div key={o.id} className={`w-[min(85vw,24rem)] shrink-0 h-full flex flex-col rounded-[2rem] border-2 ${urgencyColor} transition-all duration-500 animate-in slide-in-from-right-8`}>
                     <div className="p-4  border-b border-white/5 flex justify-between items-start shrink-0">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-[10px] font-black text-vovoh-red uppercase tracking-widest mb-1">#{String(o.id).slice(-4)}</p>
                         <h3 className="text-xl  font-black truncate max-w-[150px] [200px]">{o.customer?.name}</h3>
                       </div>
-                      <div className="text-right">
-                        <div className={`flex items-center gap-2 font-black text-lg  ${timerColor}`}>
+                      <div className="text-right shrink-0">
+                        <div className={`flex items-center gap-2 font-black ${scheduledAhead ? 'text-sm' : 'text-lg'} ${timerColor}`}>
                           <Clock size={18} />
-                          {diffMin}'
+                          {scheduledAhead ? 'Agendado' : `${diffMin} min`}
                         </div>
-                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mt-1">Desde o pedido</p>
+                        <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mt-1">{waitingScheduled ? 'Aguardando preparo' : 'Desde o pedido'}</p>
                       </div>
                     </div>
 
@@ -899,6 +927,7 @@ export default function AdminPage() {
 
                     <div className="p-4  pt-0 shrink-0 space-y-4">
                       {cashReceipt(o, isCash, isVerified)}
+                      {receipt(o)}
                       {/* PIX VERIFICATION IN KDS */}
                       {o.status !== 'concluido' && o.status !== 'entrega' && o.status !== 'cancelado' && !isVerified && isPix && (
                         <div className="p-3 rounded-2xl border bg-amber-500/10 border-amber-500/30 animate-pulse">
@@ -920,7 +949,7 @@ export default function AdminPage() {
                       <div className="bg-black/40 rounded-2xl  p-3  flex justify-between items-center border border-white/5">
                          <div>
                             <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Status</p>
-                            <p className="text-[10px] font-black text-vovoh-red uppercase tracking-widest">{o.status}</p>
+                            <p className="text-[10px] font-black text-vovoh-red uppercase tracking-widest">{o.status === 'pendente' && o.acknowledgedAt ? 'Confirmado' : o.status}</p>
                          </div>
                          <div className="text-right">
                             <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Pagamento</p>
@@ -934,7 +963,8 @@ export default function AdminPage() {
                             showMsg(isCash ? 'Confirme o dinheiro recebido antes de finalizar.' : 'Vovó, confere o Pix primeiro!', 'error');
                             return;
                           }
-                          updateStatusAPI(o.id, nextStatus);
+                          if (nextStatus === 'preparando') beginPreparation(o);
+                          else void updateStatusAPI(o.id, nextStatus);
                         }}
                         className={`w-full py-4  rounded-[1.2rem] [1.5rem] font-black text-xs  uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center justify-center gap-3 ${isPix && !isVerified ? 'bg-zinc-800 text-zinc-600 opacity-50' : 'bg-vovoh-red text-white shadow-red-900/20 hover:scale-[1.02] active:scale-95'}`}
                       >
@@ -989,26 +1019,9 @@ export default function AdminPage() {
         </div>
       )}
 
-      {pendingOrderIds && (
-        <div className="mb-8 bg-amber-500/20 border border-amber-500/50 p-4 rounded-2xl text-amber-200 text-sm flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="mt-0.5"><Bell size={18} className="animate-pulse" /></div>
-            <div>
-              <p className="font-bold mb-1">Novo Pedido na Cozinha!</p>
-              <p className="opacity-90">{isAlarmMuted ? 'Som silenciado.' : soundPlaying ? 'Campainha tocando agora.' : soundEnabled ? 'Campainha habilitada enquanto o painel estiver aberto.' : 'Som ainda não liberado neste navegador.'}</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => setIsAlarmMuted(!isAlarmMuted)}
-            className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/40 rounded-xl font-bold transition-all"
-          >
-            {isAlarmMuted ? 'Ativar som' : 'Silenciar'}
-          </button>
-        </div>
-      )}
-
       <div className="max-w-7xl mx-auto space-y-12">
-        <header className="sticky top-0 bg-vovoh-dark/95 backdrop-blur-md z-40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6 py-4 pb-4 border-b border-white/5">
+        <header className="admin-header relative lg:sticky top-0 bg-vovoh-dark/95 backdrop-blur-md z-40 flex flex-col gap-4 py-4 border-b border-white/5">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-4 items-center w-full min-w-0">
           <div className="flex items-center gap-4 w-full md:w-auto">
             <div className="w-12 h-12 md:w-14 md:h-14 bg-vovoh-red rounded-2xl flex items-center justify-center shadow-2xl rotate-3 shrink-0">
               <ChefHat className="text-white w-6 h-6 md:w-7 md:h-7" />
@@ -1024,7 +1037,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div className="header-actions flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
             <ThemeSwitcher />
             {/* Quick manual refresh and web store view */}
             <div className="flex items-center gap-2">
@@ -1057,6 +1070,7 @@ export default function AdminPage() {
             >
               <ChefHat size={14} /> {isKDS ? 'Sair do KDS' : 'Modo KDS'}
             </button>
+          </div>
           </div>
 
           {/* Desktop Navigation Tabs */}
@@ -1141,8 +1155,12 @@ export default function AdminPage() {
             <section className="bg-zinc-900 p-5 rounded-2xl space-y-4 border border-white/10" aria-label="Recebimento de pedidos">
               <div><h2 className="text-xl font-bold">{pendingOrders ? pendingOrders + ' pedido(s) aguardando você' : 'Nenhum pedido novo'}</h2>
                 <p className="text-sm text-zinc-400 mt-1">{lastUpdated ? 'Última atualização: ' + lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Buscando pedidos...'}</p></div>
+              {pendingOrderIds && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 text-amber-700 p-3 text-sm">
+                <p className="flex items-center gap-2 min-w-0"><Bell size={18} className="shrink-0" aria-hidden="true" />{isAlarmMuted ? 'Som silenciado.' : soundPlaying ? 'Campainha tocando.' : soundEnabled ? 'Campainha habilitada.' : 'Som ainda não liberado.'}</p>
+                <button type="button" onClick={()=>setIsAlarmMuted(!isAlarmMuted)} className="min-h-10 px-3 rounded-lg border border-current font-bold">{isAlarmMuted ? 'Ativar som' : 'Silenciar'}</button>
+              </div>}
               {ordersError && <p role="alert" className="text-amber-300">{ordersError}</p>}
-              <details className="space-y-2 border-t border-white/10 pt-3" open={pushState !== 'registered'}>
+              <details className="space-y-2 border-t border-white/10 pt-3">
                 <summary className="font-bold cursor-pointer min-h-10">Avisos no celular</summary>
                 <p className="text-sm text-zinc-400">O som da campainha funciona com o painel aberto. Para receber avisos com ele fechado, cadastre este aparelho e confira o teste com a tela bloqueada.</p>
                 <p className="text-sm" role="status">{pushState === 'registered' ? 'Cadastro confirmado pelo servidor. Confira o teste no celular.' : notifPerm === 'denied' ? 'Notificações bloqueadas no navegador.' : 'Os avisos ainda precisam ser ativados neste aparelho.'}</p>
@@ -1160,7 +1178,7 @@ export default function AdminPage() {
                {filter === 'todos' && historyCursor && <button disabled={loadingHistory} onClick={() => loadHistory(true)} className="px-4 py-2 text-xs text-zinc-300">{loadingHistory ? 'Carregando...' : 'Carregar anteriores'}</button>}
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 sm:gap-6">
               {visibleOrders.length === 0 ? (
                  <div className="col-span-full py-32 text-center text-zinc-800 space-y-4">
                    <Bell size={64} className="mx-auto" />
@@ -1174,7 +1192,7 @@ export default function AdminPage() {
                   const isVerified = o.payment?.paid === true;
 
                   return (
-                    <div key={o.id} id={'order-' + o.id} className="bg-zinc-900/80 backdrop-blur-xl border border-white/5 p-4 sm:p-8 rounded-[2rem] sm:rounded-[3rem] space-y-4 sm:space-y-6 relative overflow-hidden group">
+                    <div key={o.id} id={'order-' + o.id} className="min-w-0 bg-zinc-900/80 backdrop-blur-xl border border-white/5 p-4 sm:p-6 rounded-[2rem] space-y-4 sm:space-y-6 relative overflow-hidden group">
                       {syncing && <div className="absolute inset-0 bg-black/40 z-20 flex items-center justify-center backdrop-blur-sm"><RefreshCw className="animate-spin text-vovoh-red" size={32} /></div>}
                       <div className="flex justify-between items-start gap-4">
                         <div className="min-w-0">
@@ -1199,7 +1217,7 @@ export default function AdminPage() {
                           </div>
                         </div>
                         <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shrink-0 ${o.status === 'concluido' ? 'bg-green-500/20 text-green-500' : o.status === 'cancelado' ? 'bg-red-500/20 text-red-500' : 'bg-vovoh-red/20 text-vovoh-red'}`}>
-                          {o.status === 'cancelado' && o.refusalReason ? 'RECUSADO' : o.status}
+                          {o.status === 'cancelado' && o.refusalReason ? 'RECUSADO' : o.status === 'pendente' && o.acknowledgedAt ? 'Confirmado' : o.status}
                         </div>
                       </div>
                       
@@ -1227,6 +1245,7 @@ export default function AdminPage() {
                       </div>
 
                       {cashReceipt(o, isCash, isVerified)}
+                      {receipt(o)}
                       {/* CAIXA DE ALERTA DE PAGAMENTO */}
                       {o.status !== 'concluido' && o.status !== 'entrega' && o.status !== 'cancelado' && !isVerified && isPix && (
                         <div className="p-3.5 sm:p-4 rounded-2xl border bg-amber-500/10 border-amber-500/30 space-y-3">
@@ -1328,24 +1347,9 @@ export default function AdminPage() {
                                   <button
                                     onClick={() => {
                                       // Flow check rules
-                                      if (flow.nextStatus === 'preparando' && o.scheduledTo) {
-                                        const scheduledDate = new Date(o.scheduledTo);
-                                        const now = new Date();
-                                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                                        const scheduled = new Date(scheduledDate.getFullYear(), scheduledDate.getMonth(), scheduledDate.getDate());
-                                        
-                                        if (scheduled > today) {
-                                          setConfirmModal({
-                                            isOpen: true,
-                                            title: " Pedido Agendado",
-                                            message: `Vovó, este pedido é para ${scheduledDate.toLocaleDateString('pt-BR')} às ${scheduledDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.\n\nTem certeza que quer começar a preparar hoje?`,
-                                            onConfirm: () => {
-                                              setConfirmModal(null);
-                                              updateStatusAPI(o.id, 'preparando');
-                                            }
-                                          });
-                                          return;
-                                        }
+                                      if (flow.nextStatus === 'preparando') {
+                                        beginPreparation(o);
+                                        return;
                                       }
 
                                       if (flow.nextStatus === 'forno' && isPix && !isVerified) {

@@ -10,9 +10,12 @@ import { formatWhatsApp } from '../src/utils/phone-input';
 import { PhoneInput } from './PhoneInput';
 import {shopDate,validateSchedule} from '../src/utils/order-schedule';
 import {storeAvailability} from '../src/utils/store-hours';
+import {useModalFocus} from '../src/hooks/use-modal-focus';
 import { addressParts, emptyCustomer, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef,isOpen,onClose);
   const [configStatus, setConfigStatus] = useState<'loading'|'ready'|'error'>('loading');
   const [configRetry, setConfigRetry] = useState(0);
   useEffect(() => {
@@ -84,6 +87,10 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   }, [isOpen]);
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const deliveryResultRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    if (isOpen && feeCalculated) deliveryResultRef.current?.scrollIntoView({block:'nearest',behavior:'auto'});
+  },[feeCalculated,isOpen]);
 
 
 
@@ -285,10 +292,10 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
   };
 
   return (
-    <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
+    <div className="checkout-overlay fixed inset-0 z-[400] flex flex-col justify-end md:items-end overscroll-none">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Sua sacola" tabIndex={-1} className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
@@ -302,7 +309,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
           <button aria-label="Fechar sacola" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-colors"><X size={20}/></button>
         </header>
 
-        <div ref={scrollRef} className="flex-grow overflow-y-auto min-h-0 p-4 sm:p-6 space-y-8 bg-[#F9F9F9] no-scrollbar pb-32 ">
+        <div ref={scrollRef} className="checkout-scroll flex-grow overflow-y-auto overscroll-contain touch-pan-y min-h-0 p-4 sm:p-6 space-y-8 bg-[#F9F9F9] no-scrollbar pb-32">
           {configStatus !== 'ready' && (
             <div role={configStatus === 'error' ? 'alert' : 'status'} className="p-4 rounded-2xl border border-gray-200 bg-white text-sm text-gray-700">
               {configStatus === 'loading' ? <span className="flex items-center gap-2"><Loader2 size={18} className="animate-spin shrink-0" /> Conferindo as opções da loja...</span> : <>
@@ -379,7 +386,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                             placeholder="Ex: PROMO10"
                             className="flex-1 min-w-0 p-4 bg-white rounded-xl border border-gray-200 font-bold text-xs uppercase outline-none focus:border-vovoh-red transition-all"
                           />
-                          <button onClick={handleApplyCoupon} className="px-6 bg-vovoh-dark text-white font-black rounded-xl text-[10px] uppercase tracking-widest active:scale-95 transition-all">Aplicar</button>
+                          <button onClick={handleApplyCoupon} className="checkout-action px-5 font-bold rounded-xl text-sm active:scale-95 transition-all">Aplicar</button>
                        </div>
                        {couponError && <p className="text-[9px] font-bold text-vovoh-red px-1">{couponError}</p>}
                        {appliedCoupon && (
@@ -494,29 +501,38 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                   <input type="text" placeholder="Cidade" className="p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm w-full" value={city} onChange={e => { setCity(e.target.value); setFeeCalculated(false); setAddressError(''); }} />
                 </div>
                 
-                <button onClick={calculateDeliveryFee} disabled={calculatingFee || !street || !number || !city} className="w-full py-4 bg-vovoh-dark text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50">
+                <button onClick={calculateDeliveryFee} disabled={calculatingFee || !street || !number || !city} className="checkout-action w-full py-4 rounded-2xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50">
                   {calculatingFee ? 'Calculando...' : 'Calcular Frete'}
                 </button>
 
                 {addressError && <p className="text-[10px] font-bold text-vovoh-red px-1">{addressError}</p>}
+                {feeCalculated && (
+                  <div ref={deliveryResultRef} role="status" aria-live="polite" className="delivery-result p-4 rounded-2xl flex items-center gap-3">
+                    <CheckCircle2 size={24} className="shrink-0" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm">Taxa de Entrega: {deliveryFee === 0 ? 'Grátis!' : `R$ ${deliveryFee.toFixed(2)}`}</p>
+                      <p className="text-xs mt-1">Frete calculado · distância de {deliveryDistance.toFixed(1)} km</p>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 space-y-4">
                   {!immediateAvailable && <p className="text-sm text-gray-600">A loja está fechada agora. Escolha uma entrega agendada dentro do expediente.</p>}
-                  <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
+                  <div className="grid grid-cols-2 gap-3">
                     <button 
                       onClick={() => setIsScheduled(false)}
                       disabled={!immediateAvailable}
                       aria-pressed={!isScheduled}
-                      className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed ${!isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      className="delivery-choice min-w-0 px-2 py-3 rounded-xl text-sm font-bold flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Entrega Agora
+                      <Bike size={20} aria-hidden="true" /> Entrega Agora
                     </button>
                     <button 
                       onClick={() => setIsScheduled(true)}
                       aria-pressed={isScheduled}
-                      className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      className="delivery-choice min-w-0 px-2 py-3 rounded-xl text-sm font-bold flex flex-col items-center justify-center gap-2"
                     >
-                      Agendar Entrega
+                      <Clock size={20} aria-hidden="true" /> Agendar Entrega
                     </button>
                   </div>
 
@@ -548,15 +564,6 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                   {isScheduled && <p className="text-xs text-gray-500">Escolha um dia e horário do expediente da loja. Usamos o horário de Brasília.</p>}
                 </div>
 
-                {feeCalculated && (
-                  <div className="bg-green-50 p-4 rounded-2xl border border-green-100 flex justify-between items-center">
-                    <div>
-                      <p className="text-[10px] font-black text-green-600 uppercase tracking-widest">Distância: {deliveryDistance.toFixed(1)}km</p>
-                      <p className="text-xs font-bold text-green-700">Taxa de Entrega: {deliveryFee === 0 ? 'Grátis!' : `R$ ${deliveryFee.toFixed(2)}`}</p>
-                    </div>
-                    <CheckCircle2 size={24} className="text-green-500" />
-                  </div>
-                )}
               </div>
               
               <div className="flex gap-3 pt-4">
@@ -667,6 +674,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 };
 
 export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCancelOrder, onReceiveOrder, onReorder, onRetryPayment, onRefresh, dynamicConfigs }: any) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef,isOpen,onClose);
   const [activatingNotices, setActivatingNotices] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -728,7 +737,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
     <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Rastreio" tabIndex={-1} className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
@@ -764,7 +773,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
           </div>
         </header>
 
-        <div className="flex-grow overflow-y-auto min-h-0 p-4 sm:p-6 space-y-8 bg-[#F5F5F7] no-scrollbar pb-32 ">
+        <div className="flex-grow overflow-y-auto overscroll-contain touch-pan-y min-h-0 p-4 sm:p-6 space-y-8 bg-[#F5F5F7] no-scrollbar pb-32">
             
             {noticeMessage && <p role="status" className="p-4 rounded-2xl bg-white border border-gray-200 text-sm text-gray-700">{noticeMessage}</p>}
             {!selectedOrder ? (
@@ -826,7 +835,8 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
                 </div>
 
                 <div className="relative space-y-8 px-2  py-4">
-                  {selectedOrder.status === 'pendente' && (
+                  {selectedOrder.status === 'pendente' && selectedOrder.acknowledgedAt && <div role="status" className="delivery-result p-4 rounded-2xl text-sm font-bold">A loja confirmou seu pedido. {selectedOrder.scheduledTo ? 'O preparo será iniciado para o horário agendado.' : 'Aguardando o início do preparo.'}</div>}
+                  {selectedOrder.status === 'pendente' && !selectedOrder.acknowledgedAt && (
                     <div className="bg-amber-50 p-5 rounded-[2rem] border border-amber-100 space-y-3 animate-in fade-in slide-in-from-top-4 shadow-sm">
                       <div className="flex items-center gap-2 text-amber-600">
                         <AlertTriangle size={18} className="animate-pulse" />

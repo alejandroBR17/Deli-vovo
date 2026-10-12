@@ -31,6 +31,10 @@ test('indexed status lookup, bounded history and complete financial totals use r
     assert.equal(finance.count,125); assert.equal(finance.totalRevenue,1250);
     assert.equal(finance.pixRevenue,1250); assert.equal(finance.recent.length,20);
     assert.deepEqual(await database.statuses(['old-active','missing']),{ 'old-active': 'pendente' });
+    assert.deepEqual(await database.statuses(['old-active'],true),{'old-active':{status:'pendente',acknowledgedAt:null}});
+    await database.collection('orders').doc('old-active').update({acknowledgedAt:'2026-10-12T15:00:00.000Z'});
+    assert.deepEqual(await database.statuses(['old-active','missing'],true),{'old-active':{status:'pendente',acknowledgedAt:'2026-10-12T15:00:00.000Z'}});
+    assert.equal((await database.panelOrders()).find(order=>order.id==='old-active')?.acknowledgedAt,'2026-10-12T15:00:00.000Z');
     const plan = await database.rows('EXPLAIN QUERY PLAN SELECT id,json_extract(payload,\'$.status\') FROM orders WHERE id IN (?)',['old-active']);
     assert.ok(plan.some(row => /SEARCH.*INDEX/i.test(String(row.detail))));
     await assert.rejects(database.collection('orders').doc('old-active').create({ status: 'cancelado' }));

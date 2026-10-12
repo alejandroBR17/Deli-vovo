@@ -159,3 +159,14 @@ html[data-theme="dark"] :is([class~="hover:bg-amber-50"],[class~="hover:bg-vovoh
 html[data-theme="dark"] [class~="hover:text-vovoh-gold"]:hover { color: var(--app-gold); }
 html[data-theme="dark"] :is([class~="hover:text-vovoh-red"],[class~="hover:text-red-500"]):hover { color: var(--app-brand); }
 html[data-theme="light"] [data-surface="admin"] [class~="hover:bg-zinc-700"]:hover { background-color: var(--app-muted-surface); }
+
+.checkout-action { background: #d61f1f; color: #fff; border: 1px solid #b52323; min-height: 44px; }
+.checkout-action:hover:not(:disabled) { background: #b52323; }
+.checkout-action:focus-visible, .delivery-choice:focus-visible { outline: 2px solid var(--app-brand); outline-offset: 3px; }
+.delivery-choice { background: var(--app-surface); color: var(--app-ink); border: 2px solid var(--app-border); min-height: 76px; }
+.delivery-choice[aria-pressed="true"] { background: var(--app-warm); color: var(--app-brand); border-color: var(--app-brand); box-shadow: 0 3px 10px var(--app-glow); }
+.delivery-result { background: #e8f7ec; color: #166534; border: 1px solid #92caa0; }
+html[data-theme="dark"] .delivery-result { background: #20372b; color: #a6ebbb; border-color: #448b58; }
+.checkout-scroll { overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+.order-receipt { background: var(--app-muted-surface); color: var(--app-ink); border: 1px solid var(--app-border); }
+.admin-header .header-actions > button, .admin-header .header-actions > div:not(.theme-switcher) > button { min-height: 44px; border: 1px solid var(--app-border); }

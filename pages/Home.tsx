@@ -400,13 +400,19 @@ export default function Home() {
 
     try {
       const ids = activeOrders.map(o => o.id).join(',');
-      const res = await fetch(`${GAS_API_URL}/orders/batch/status?ids=${ids}&t=${Date.now()}`);
+      const res = await fetch(`${GAS_API_URL}/orders/batch/status?ids=${ids}&details=1&t=${Date.now()}`);
       if (!res.ok) return false;
       const statuses = await res.json();
 
       let hasChanges = false;
       const updatedOrders = currentOrders.map(order => {
-        const newStatus = statuses[order.id];
+        const detail = statuses[order.id];
+        const newStatus = typeof detail === 'string' ? detail : detail?.status;
+        const acknowledgedAt = typeof detail === 'object' ? detail?.acknowledgedAt || undefined : order.acknowledgedAt;
+        if (newStatus === order.status && acknowledgedAt !== order.acknowledgedAt) {
+          hasChanges = true;
+          return {...order,acknowledgedAt};
+        }
         if (newStatus && newStatus !== order.status) {
           hasChanges = true;
 
@@ -433,7 +439,7 @@ export default function Home() {
              setToast({ message: `Pedido #${order.id.slice(-4)} atualizado: ${newStatus.toUpperCase()}`, type: 'info' });
           }
 
-          return { ...order, status: newStatus };
+          return { ...order, status: newStatus, acknowledgedAt };
         }
         return order;
       });

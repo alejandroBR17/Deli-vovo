@@ -56,10 +56,10 @@ export class Database {
       args: [userId, authType, sessionId, start, end, userId, authType],
     });
   }
-  async statuses(ids: string[]) {
+  async statuses(ids: string[], details = false) {
     if (!ids.length) return {};
-    const rows = await this.rows(`SELECT id, ${field('status')} AS status FROM orders WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
-    return Object.fromEntries(rows.map(row => [String(row.id), String(row.status)]));
+    const rows = await this.rows(`SELECT id, ${field('status')} AS status${details ? ", json_extract(payload,'$.acknowledgedAt') AS acknowledgedAt" : ''} FROM orders WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+    return Object.fromEntries(rows.map(row => [String(row.id), details ? {status:String(row.status),acknowledgedAt:row.acknowledgedAt || null} : String(row.status)]));
   }
   async panelOrders() {
     // Keep every active order; limit only terminal history. Both branches use indexes.

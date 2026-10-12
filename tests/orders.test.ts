@@ -232,6 +232,29 @@ test('API rejects invalid schedules without writes and stores valid schedules wi
  const saved=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((entry:any)=>entry.id===candidate.id);assert.equal(saved.scheduledTo,'2099-01-01T15:00:00-03:00');
 });
 
+test('receipt confirmation is admin-only, persistent and independent of scheduled preparation/payment',async()=>{
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ const candidate={...order,id:randomUUID(),scheduledTo:'2099-01-01T15:00',acknowledgedAt:'spoofed'};
+ assert.equal((await request('/orders',candidate,{'X-Order-Request':randomUUID()})).status,200);
+ const stored=async()=>JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((entry:any)=>entry.id===candidate.id);
+ const before=await stored();assert.equal(before.acknowledgedAt,undefined);
+ const endpoint='/orders/'+candidate.id+'/acknowledge';
+ assert.equal((await request(endpoint,{}, {'X-Vovo-Admin':'1'})).status,401);
+ assert.equal((await request(endpoint,{}, {Cookie:customerCookie,'X-Vovo-Admin':'1'})).status,401);
+ assert.equal((await request(endpoint,{}, {Cookie:adminCookie})).status,403);
+ assert.equal((await request('/orders/missing/acknowledge',{},headers)).status,404);
+ const response=await request(endpoint,{},headers);assert.equal(response.status,200);
+ const {acknowledgedAt}=await response.json();assert.ok(Number.isFinite(Date.parse(acknowledgedAt)));
+ assert.deepEqual(await stored(),{...before,acknowledgedAt});
+ const repeated=await request(endpoint,{},headers);assert.equal(repeated.status,200);assert.equal((await repeated.json()).acknowledgedAt,acknowledgedAt);
+ const panel=await (await request('/orders',undefined,{Cookie:adminCookie})).json();assert.equal(panel.find((entry:any)=>entry.id===candidate.id).acknowledgedAt,acknowledgedAt);
+ assert.deepEqual(await (await request('/orders/batch/status?ids='+candidate.id)).json(),{[candidate.id]:'pendente'});
+ assert.deepEqual(await (await request('/orders/batch/status?ids='+candidate.id+'&details=1')).json(),{[candidate.id]:{status:'pendente',acknowledgedAt}});
+ const {needsOrderAttention}=await import('../src/utils/order-attention');assert.equal(needsOrderAttention(before),true);assert.equal(needsOrderAttention(await stored()),false);
+ assert.equal((await request('/orders/'+candidate.id+'/status',{status:'cancelado'},headers,'PATCH')).status,200);
+ assert.equal((await request(endpoint,{},headers)).status,409);
+});
+
 test('immediate orders stop at closing, retries remain idempotent and future slots still work',async()=>{
  const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
  await request('/configs/batch',{updates:{opening_start:'10:00',opening_end:'12:01',working_days:'[0,1,2,3,4,5,6]'}},headers);

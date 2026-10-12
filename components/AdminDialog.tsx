@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
@@ -8,11 +8,6 @@ export function AdminDialog({ title, onClose, children, footer, fullScreen = fal
   const ref = useRef<HTMLDivElement>(null);
   const titleId = React.useId();
   useModalFocus(ref, true, onClose);
-  useEffect(() => {
-    const old = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = old; };
-  }, []);
   return createPortal(
     <div data-surface="admin" className={`admin-dialog fixed inset-0 z-[600] flex items-center justify-center text-white ${fullScreen ? 'p-0 sm:p-4' : 'p-2 sm:p-4'}`}>
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />

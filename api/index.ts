@@ -106,6 +106,7 @@ export interface Order {
   id: string;
   date?: string;
   scheduledTo?: string;
+  acknowledgedAt?: string;
   refusalReason?: string;
   customer: { name: string; phone: string; address: string };
   total: number;
@@ -637,6 +638,7 @@ const OrderRepo = {
             date: data.date,
             submissionKeyHash: data.submissionKeyHash || '',
             scheduledTo: data.scheduledTo || undefined,
+            acknowledgedAt: data.acknowledgedAt || undefined,
             refusalReason: data.refusalReason || undefined,
             customer: data.customer || { name: '', phone: '', address: '' },
             total: Number(data.total) || 0,
@@ -677,6 +679,7 @@ const OrderRepo = {
             date: data.date,
             submissionKeyHash: data.submissionKeyHash || '',
             scheduledTo: data.scheduledTo || undefined,
+            acknowledgedAt: data.acknowledgedAt || undefined,
             refusalReason: data.refusalReason || undefined,
             customer: data.customer || { name: '', phone: '', address: '' },
             total: Number(data.total) || 0,
@@ -757,6 +760,7 @@ const OrderRepo = {
       ...order,
       date: order.date || new Date().toISOString(),
       status: 'pendente',
+      acknowledgedAt: undefined,
       archived: false
     };
 
@@ -1368,11 +1372,12 @@ app.get('/orders/batch/status', rateLimit({ windowMs: 60000, limit: 60, legacyHe
     if (!ids.length) return res.json({});
     
     if (ids.length > 50) return res.status(400).json({ error: 'Consulte no máximo 50 pedidos.' });
-    if (db) return res.json(await db.statuses(ids));
+    const details = req.query.details === '1';
+    if (db) return res.json(await db.statuses(ids,details));
     const orders = await OrderRepo.getAll();
-    const statuses: Record<string, string> = {};
+    const statuses: Record<string, unknown> = {};
     orders.forEach((o: any) => {
-      if (ids.includes(o.id)) statuses[o.id] = o.status;
+      if (ids.includes(o.id)) statuses[o.id] = details ? {status:o.status,acknowledgedAt:o.acknowledgedAt || null} : o.status;
     });
     res.json(statuses);
   } catch (e) {
@@ -1473,6 +1478,20 @@ app.put('/orders/:id', requireAdminWrite, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
+});
+
+app.post('/orders/:id/acknowledge', requireAdminWrite, async (req, res) => {
+  try {
+    const current = await OrderRepo.getById(String(req.params.id));
+    if (!current) return res.status(404).json({error:'Pedido não encontrado.'});
+    if (current.status !== 'pendente' || current.archived) return res.status(409).json({error:'Este pedido não está aguardando confirmação.'});
+    if (current.acknowledgedAt) return res.json({success:true,acknowledgedAt:current.acknowledgedAt});
+    if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) return res.status(503).json({error:'Confirmação indisponível no banco legado.'});
+    const acknowledgedAt = new Date().toISOString();
+    if (db) await updateDoc(doc(db,'orders',current.id),{acknowledgedAt});
+    else await OrderRepo.update({...current,acknowledgedAt});
+    res.json({success:true,acknowledgedAt});
+  } catch { res.status(503).json({error:'Não foi possível confirmar o pedido. Tente novamente.'}); }
 });
 
 app.post('/orders/:id/payment/confirm', requireAdminWrite, async (req, res) => {

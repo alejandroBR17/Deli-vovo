@@ -1,17 +1,22 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { useBodyScrollLock } from './use-body-scroll-lock';
+const dialogs: HTMLElement[] = [];
 
 export function useModalFocus(ref: RefObject<HTMLElement | null>, open: boolean, onClose: () => void) {
+  useBodyScrollLock(open);
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
     const dialog = ref.current;
     if (!open || !dialog) return;
+    dialogs.push(dialog);
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(
       'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]',
     )).filter(element => element.getClientRects().length > 0);
     (focusable()[0] || dialog).focus({ preventScroll: true });
     const handleKey = (event: KeyboardEvent) => {
+      if (dialogs[dialogs.length - 1] !== dialog) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         close.current();
@@ -30,7 +35,10 @@ export function useModalFocus(ref: RefObject<HTMLElement | null>, open: boolean,
     document.addEventListener('keydown', handleKey);
     return () => {
       document.removeEventListener('keydown', handleKey);
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
+      const top = dialogs[dialogs.length - 1] === dialog;
+      const index = dialogs.lastIndexOf(dialog);
+      if (index >= 0) dialogs.splice(index,1);
+      if (top && previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [open, ref]);
 }
