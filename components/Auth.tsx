@@ -9,10 +9,11 @@ interface AuthProps {
   onClose: () => void;
   user: UserType | null;
   setUser: (u: UserType | null) => void;
+  onGuestName?: (name: string) => void;
   showMsg: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps) => {
+export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName }: AuthProps) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [loading, setLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
@@ -54,7 +55,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
     if (localGuest(user)) {
       const updatedUser = { ...user, name: customerName(editData.name), phone: editData.phone };
       try { localStorage.setItem('vovoh_user', JSON.stringify(updatedUser)); } catch {}
-      setUser(updatedUser); setIsEditing(false); showMsg('Dados atualizados neste aparelho.', 'success'); return;
+      setUser(updatedUser); onGuestName?.(updatedUser.name); setIsEditing(false); showMsg('Dados atualizados neste aparelho.', 'success'); return;
     }
     setLoading(true);
     try {
@@ -100,6 +101,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg }: AuthProps
 
       localStorage.setItem('vovoh_user', JSON.stringify(guestUser));
       setUser(guestUser);
+      onGuestName?.(guestUser.name);
       showMsg("Pronto! Continue seu pedido sem criar uma conta.", "success");
       onClose();
 

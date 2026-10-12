@@ -970,6 +970,7 @@ export default function Home() {
         onClose={() => setIsAuthOpen(false)}
         user={user}
         setUser={setUser}
+        onGuestName={name => setCustomer(prev => ({...prev, name}))}
         showMsg={(msg, type) => setToast({ message: msg, type })}
       />
 
