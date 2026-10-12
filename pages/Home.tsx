@@ -1,4 +1,5 @@
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
+import { AppInstallButton } from '../components/AppInstall';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Bell, BellOff, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
@@ -695,7 +696,7 @@ export default function Home() {
 
   const toggleNotifications = async () => {
     if (typeof Notification === 'undefined' || !('Notification' in window)) {
-      setToast({ message: "Seu navegador não suporta notificações.", type: 'error' });
+      setToast({ message: "No iPhone, instale pela tela inicial e abra pelo ícone para ativar os avisos.", type: 'error' });
       return;
     }
 
@@ -811,6 +812,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
+            <AppInstallButton compact />
             <ThemeSwitcher />
             <button
               onClick={toggleNotifications}

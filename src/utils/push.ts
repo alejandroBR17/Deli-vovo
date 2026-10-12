@@ -5,7 +5,7 @@ function urlBase64ToUint8Array(value: string) {
   return Uint8Array.from(raw, character => character.charCodeAt(0));
 }
 async function readyRegistration() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Use um navegador com notificações, como o Chrome no Android.');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('No iPhone, instale pela opção Adicionar à Tela de Início e abra pelo ícone (iOS 16.4 ou superior). No Android, use o Chrome.');
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, reject) => {

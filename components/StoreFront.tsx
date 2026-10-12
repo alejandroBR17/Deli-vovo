@@ -4,6 +4,7 @@ import { useModalFocus } from '../src/hooks/use-modal-focus';
 import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin, ShoppingBag, ClipboardList, BookOpen, CreditCard, Minus } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL, WHATSAPP_NUMBER } from '../constants/index';
 import { GrandmaLoader } from './UI';
+import { AppInstallButton } from './AppInstall';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const money = (value: number) => currencyFormatter.format(value);
@@ -385,6 +386,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         <div className="max-w-7xl mx-auto px-4 md:px-6 grid lg:grid-cols-[0.8fr_1.2fr] gap-6 md:gap-10">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-vovoh-red">Central de ajuda</p><h2 className="font-sans text-2xl md:text-3xl font-bold text-vovoh-dark mt-2">Precisa de uma mão?</h2><p className="text-sm text-gray-600 leading-relaxed mt-3">Confira as dúvidas ou fale com a loja antes de finalizar.</p>
             <div className="mt-5 grid grid-cols-2 lg:grid-cols-1 gap-2">
+              <div className="col-span-2 lg:col-span-1"><AppInstallButton /></div>
               <a href="#menu" className="help-action min-h-14 rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ShoppingBag size={20} className="text-vovoh-red" aria-hidden="true" />Escolher meus produtos</a>
               <button type="button" onClick={onTrackOrders} className="help-action min-h-14 text-left rounded-2xl px-4 py-3 border border-gray-200 flex items-center gap-3 text-sm font-semibold text-vovoh-dark hover:border-vovoh-red"><ClipboardList size={20} className="text-vovoh-red" aria-hidden="true" />Acompanhar meu pedido</button>
               <a href={'https://wa.me/'+contactNumber} target="_blank" rel="noopener noreferrer" className="help-action help-contact col-span-2 lg:col-span-1 min-h-14 rounded-2xl px-4 py-3 bg-[#FFF5E9] border border-orange-100 flex items-center gap-3 text-sm font-semibold text-vovoh-dark"><MessageSquare size={20} className="text-vovoh-red" aria-hidden="true" />Falar com a loja pelo WhatsApp</a>

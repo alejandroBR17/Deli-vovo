@@ -756,7 +756,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
               setActivatingNotices(true); setNoticeMessage('');
               try {
                 if (!orders.some((order: any) => order.userId) || (selectedOrder && !selectedOrder.userId)) throw new Error('Avisos automáticos exigem um pedido feito com conta. Para este pedido, use Atualizar rastreio.');
-                if (typeof Notification === 'undefined') throw new Error('Seu navegador não suporta avisos. Use Atualizar rastreio.');
+                if (typeof Notification === 'undefined') throw new Error('No iPhone, adicione à Tela de Início e abra pelo ícone (iOS 16.4 ou superior). Você também pode usar Atualizar rastreio.');
                 const permission = await Notification.requestPermission();
                 if (permission !== 'granted') throw new Error('Avisos não permitidos. Libere as notificações nas configurações do navegador para ativar.');
                 await subscribeToPush(selectedOrder?.userId, 'customer');

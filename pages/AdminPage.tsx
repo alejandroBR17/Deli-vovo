@@ -1,4 +1,5 @@
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
+import { AppInstallButton } from '../components/AppInstall';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChefHat, Bell, ArrowLeft, RefreshCw, Plus, Edit2, Trash2, Save, X, Upload, Loader2, AlertTriangle, CheckCircle2, ChevronDown, DollarSign, TrendingUp, Wallet, CreditCard, Calendar, PieChart, MessageCircle, Clock, MapPin, ArrowRight, ShoppingBag, Settings, Utensils, ClipboardList, Tag, Menu, MoreHorizontal, Flame, Bike, PackageCheck, Eye } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
@@ -185,7 +186,7 @@ export default function AdminPage() {
   const requestNotification = async () => {
     setPushState('registering'); setPushError('');
     try {
-      if (!('Notification' in window)) throw new Error('Use um navegador com notificações, como o Chrome no Android.');
+      if (!('Notification' in window)) throw new Error('No iPhone, adicione à Tela de Início e abra pelo ícone (iOS 16.4 ou superior). No Android, use o Chrome.');
       const permission = await Notification.requestPermission();
       setNotifPerm(permission);
       if (permission !== 'granted') throw new Error('Permita as notificações nas configurações do navegador e tente novamente.');
@@ -794,7 +795,7 @@ export default function AdminPage() {
     return (
       <div className="admin-page min-h-screen bg-vovoh-dark flex items-center justify-center p-6 relative">
         {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
-        <div className="absolute top-4 right-4"><ThemeSwitcher /></div>
+        <div className="absolute top-4 right-4 flex gap-2"><AppInstallButton compact /><ThemeSwitcher /></div>
         <form onSubmit={handleLogin} className="bg-zinc-900 border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
           <div className="w-20 h-20 bg-vovoh-red text-white rounded-[2rem] flex items-center justify-center shadow-2xl shadow-red-900/50 mx-auto rotate-3">
             <ChefHat size={40} />
@@ -844,6 +845,7 @@ export default function AdminPage() {
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{kdsOrders.length} Pedidos Ativos</span>
             </div>
+            <AppInstallButton compact />
             <ThemeSwitcher />
             <button onClick={() => setIsKDS(false)} className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border border-white/10">Sair do KDS</button>
           </div>
@@ -1038,6 +1040,7 @@ export default function AdminPage() {
           </div>
 
           <div className="header-actions flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
+            <AppInstallButton compact />
             <ThemeSwitcher />
             {/* Quick manual refresh and web store view */}
             <div className="flex items-center gap-2">
