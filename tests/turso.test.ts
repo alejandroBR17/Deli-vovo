@@ -7,6 +7,28 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Database, migrate } from '../server/database';
 import { separateImage } from '../server/media';
+import { RevisionCache } from '../server/revision-cache';
+
+test('catalog revisions refresh empty/changed/deleted products across instances without rescanning unchanged catalogs',async()=>{
+ const client=createClient({url:':memory:'});const database=new Database(client);
+ try {
+  await migrate(client);let loadsA=0,loadsB=0;
+  const load=async()=> (await database.collection('products').get()).docs.map(doc=>doc.data());
+  const a=new RevisionCache(()=>database.productRevision(),()=>{loadsA++;return load()});
+  const b=new RevisionCache(()=>database.productRevision(),()=>{loadsB++;return load()});
+  assert.deepEqual(await a.read(),[]);assert.deepEqual(await b.read(),[]);
+  await database.collection('products').doc('local').create({name:'Local SQLite fixture',price:5});
+  assert.equal((await a.read())[0].price,5);assert.equal((await b.read())[0].price,5);
+  await a.read();await b.read();assert.equal(loadsA,2);assert.equal(loadsB,2);
+  await database.collection('products').doc('local').update({price:6});
+  assert.equal((await a.read())[0].price,6);assert.equal((await b.read())[0].price,6);
+  const revision=await database.productRevision();
+  await database.collection('products').doc('local').update({price:6});assert.equal(await database.productRevision(),revision);
+  await a.read();await b.read();assert.equal(loadsA,3);assert.equal(loadsB,3);
+  await database.collection('products').doc('local').delete();assert.deepEqual(await a.read(),[]);assert.deepEqual(await b.read(),[]);
+  const final=await database.productRevision();await migrate(client);assert.equal(await database.productRevision(),final);
+ } finally {client.close();}
+});
 
 test('indexed status lookup, bounded history and complete financial totals use real SQLite', async () => {
   const client = createClient({ url: ':memory:' });

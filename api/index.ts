@@ -219,7 +219,7 @@ let cache: {
   products: { data: null, lastFetch: 0 }
 };
 
-const CACHE_TTL = 300000; // 5 minutos
+const CACHE_TTL = 300000; // Local/legacy catalogs; Turso uses a shared revision.
 
 // --- Repositórios ---
 
@@ -461,13 +461,7 @@ const PresenceRepo = {
 };
 
 // Produtos
-const ProductRepo = {
-  getAll: async (): Promise<Product[]> => {
-    const now = Date.now();
-    if (cache.products.data && (now - cache.products.lastFetch < CACHE_TTL)) {
-      return cache.products.data;
-    }
-
+const loadProducts = async (): Promise<Product[]> => {
     let products: Product[] = [];
     if (!db && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
       try {
@@ -503,7 +497,16 @@ const ProductRepo = {
     }
 
     products = products.map(product => ({ ...product, ...productOptions(product) }));
-    cache.products = { data: products, lastFetch: now };
+    return products;
+};
+const productCache = db ? new RevisionCache(()=>db.productRevision(),loadProducts) : null;
+const ProductRepo = {
+  getAll: async (): Promise<Product[]> => {
+    if (productCache) return productCache.read();
+    const now = Date.now();
+    if (cache.products.data && now - cache.products.lastFetch < CACHE_TTL) return cache.products.data;
+    const products = await loadProducts();
+    cache.products = {data:products,lastFetch:now};
     return products;
   },
   add: async (product: Product) => {

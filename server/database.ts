@@ -16,7 +16,7 @@ const snapshot = (id: string, payload?: string) => ({ id, exists: payload !== un
 // Schemas are applied explicitly by db:migrate, never when a function starts.
 export async function migrate(client: Client) {
   await client.batch(tables.map(name => `CREATE TABLE IF NOT EXISTS ${name} (id TEXT PRIMARY KEY, payload TEXT NOT NULL CHECK(json_valid(payload)))`), 'write');
-  // Triggers update the revision in the same transaction as the configuration,
+  // Triggers update revisions in the same transaction as configurations/products,
   // including writes from another instance and batch saves that later roll back.
   await client.batch([
     'CREATE TABLE IF NOT EXISTS cache_revisions (id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0)',
@@ -24,6 +24,10 @@ export async function migrate(client: Client) {
     "CREATE TRIGGER IF NOT EXISTS configs_revision_insert AFTER INSERT ON configs BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='configs'; END",
     "CREATE TRIGGER IF NOT EXISTS configs_revision_update AFTER UPDATE ON configs WHEN OLD.payload IS NOT NEW.payload BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='configs'; END",
     "CREATE TRIGGER IF NOT EXISTS configs_revision_delete AFTER DELETE ON configs BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='configs'; END",
+    "INSERT INTO cache_revisions(id,version) VALUES ('products',0) ON CONFLICT(id) DO NOTHING",
+    "CREATE TRIGGER IF NOT EXISTS products_revision_insert AFTER INSERT ON products BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='products'; END",
+    "CREATE TRIGGER IF NOT EXISTS products_revision_update AFTER UPDATE ON products WHEN OLD.payload IS NOT NEW.payload BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='products'; END",
+    "CREATE TRIGGER IF NOT EXISTS products_revision_delete AFTER DELETE ON products BEGIN UPDATE cache_revisions SET version=version+1 WHERE id='products'; END",
   ], 'write');
   const indexes: [Table, string[]][] = [
     ['orders', ['userId', 'date']], ['orders', ['status', 'date']], ['orders', ['date']],
@@ -43,6 +47,12 @@ export class Database {
     const rows = await this.rows("SELECT version FROM cache_revisions WHERE id='configs'");
     const revision = Number(rows[0]?.version);
     if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Execute a migração das configurações antes de iniciar o servidor.');
+    return revision;
+  }
+  async productRevision() {
+    const rows = await this.rows("SELECT version FROM cache_revisions WHERE id='products'");
+    const revision = Number(rows[0]?.version);
+    if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Execute a migração do catálogo antes de iniciar o servidor.');
     return revision;
   }
   async updateVisitAuth(sessionId: string, userId: string, authType: string, now = new Date()) {
