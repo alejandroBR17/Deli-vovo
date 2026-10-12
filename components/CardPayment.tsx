@@ -39,7 +39,7 @@ export function CardPaymentBox({onComplete,total,customer,checkout}:any) {
   if(config?.provider==='stripe')return <StripePaymentBox {...{onComplete,total,customer,checkout}}/>;
   return <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5 space-y-3">
     <p className="font-bold text-blue-900">Cartão pelo Mercado Pago</p>
-    <p className="text-sm text-blue-800">Você paga na página segura do Mercado Pago e volta para acompanhar o pedido.</p>
+    <p className="text-sm text-blue-800">Pague com cartão na página segura do Mercado Pago e volte para acompanhar o pedido. O Mercado Pago também oferece saldo da conta.</p>
     {config?.mode==='test' && <p role="note" className="text-sm font-semibold text-blue-800">Modo de teste. Nenhuma cobrança real.</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     <button type="button" onClick={start} disabled={!config||busy} className="w-full rounded-xl bg-blue-600 text-white font-bold p-4 flex justify-center items-center gap-2 disabled:opacity-60">

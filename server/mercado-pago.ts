@@ -37,8 +37,8 @@ export class MercadoPago {
       external_reference: expected.orderId, metadata: { checkout: expected.fingerprint },
       back_urls: { success: back, pending: back, failure: back }, auto_return: 'approved',
       notification_url: webhook.href,
-      // Keep existing manual Pix flow. Hosted checkout is exclusively for cards.
-      payment_methods: { excluded_payment_types: ['ticket','bank_transfer','atm','digital_currency','account_money','prepaid_card'].map(id => ({id})) },
+      // MP requires account balance to remain available. Manual Pix stays separate.
+      payment_methods: { excluded_payment_types: ['ticket','bank_transfer','atm','digital_currency','prepaid_card'].map(id => ({id})) },
     });
     if (!preference || typeof preference.id !== 'string' || String(preference.collector_id) !== this.config.sellerId) throw new Error('Recebedor do pagamento não corresponde à loja.');
     const url = new URL(preference.init_point);
@@ -56,9 +56,9 @@ export class MercadoPago {
         payment.live_mode !== (this.config.mode === 'live') || payment.currency_id !== 'BRL' ||
         payment.external_reference !== expected.orderId || payment.metadata?.checkout !== expected.fingerprint ||
         cents(payment.transaction_amount) !== cents(expected.total) ||
-        !['credit_card','debit_card'].includes(payment.payment_type_id)) throw new Error('Pagamento não corresponde ao pedido.');
+        !['credit_card','debit_card','account_money'].includes(payment.payment_type_id)) throw new Error('Pagamento não corresponde ao pedido.');
     if (payment.status !== 'approved' || (payment.transaction_amount_refunded ?? 0) !== 0) return {approved:false};
-    return {approved:true, paymentId:String(payment.id)};
+    return {approved:true, paymentId:String(payment.id),paymentType:String(payment.payment_type_id)};
   }
 }
 

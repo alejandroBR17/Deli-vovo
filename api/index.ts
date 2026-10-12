@@ -1266,6 +1266,7 @@ const mercadoPago = process.env.MERCADO_PAGO_ACCESS_TOKEN && process.env.MERCADO
 const paymentCheckouts = db ? new PaymentCheckoutStore(db.client) : null;
 function paymentOrigin() {
   // Deployment hostname comes from Vercel, never the client-controlled Host header.
+  if(process.env.VERCEL_ENV==='production' && !process.env.MERCADO_PAGO_RETURN_ORIGIN) throw new Error('Configure o domínio público da loja para pagamentos.');
   const origin=process.env.MERCADO_PAGO_RETURN_ORIGIN || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
   const url=new URL(origin); if(url.protocol!=='https:' || url.username || url.password || url.pathname!=='/' || url.search || url.hash) throw new Error('Endereço de pagamento incompleto.');
   return url.origin;
@@ -1325,7 +1326,7 @@ async function reconcileMercadoPago(paymentId:string, expectedOrderId?:string) {
     }
     return {approved:false,status:state};
   }
-  const result=await paymentCheckouts!.finalize(checkout,verified.paymentId);
+  const result=await paymentCheckouts!.finalize(checkout,verified.paymentId,verified.paymentType);
   if(result.created) backgroundNotification(notifyAdmins('Novo pedido',`Pedido #${checkout.orderId.slice(-4)}. Abra o painel para conferir.`,`/?order=${encodeURIComponent(checkout.orderId)}#vovo-secreta`));
   return {approved:true,status:'approved'};
 }
@@ -1346,7 +1347,7 @@ app.post('/payments/mercado-pago/:id/status',rateLimit({windowMs:60000,limit:10,
     const paymentState=req.body.paymentId ? await reconcileMercadoPago(String(req.body.paymentId),id) : null;
     const order=await OrderRepo.getById(id);
     if(!order) return res.json({status:'pending',paymentState:paymentState && paymentState.status,checkoutUrl:checkout.checkoutUrl});
-    if(order.submissionKeyHash!==checkout.requestHash || !order.paymentMethod?.startsWith('Cartão Online Mercado Pago')) return res.status(409).json({error:'Este pedido precisa ser conferido pela loja.'});
+    if(order.submissionKeyHash!==checkout.requestHash || !/^(Cartão|Saldo) Online Mercado Pago/.test(order.paymentMethod||'')) return res.status(409).json({error:'Este pedido precisa ser conferido pela loja.'});
     if(!order.payment?.paid) return res.json({status:'pending',paymentState:'refunded'});
     const {submissionKeyHash: _privateHash,...publicOrder}=order;
     return res.json({status:'approved',order:{...publicOrder,timing:checkout.order.timing,accessToken:orderToken(id)}});

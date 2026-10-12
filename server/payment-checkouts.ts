@@ -26,9 +26,9 @@ export class PaymentCheckoutStore {
   async savePreference(id: string, preference: {checkoutUrl:string;preferenceId:string}) {
     await this.client.execute({sql:"UPDATE payment_checkouts SET payload=json_set(payload,'$.checkoutUrl',?,'$.preferenceId',?) WHERE id=?",args:[preference.checkoutUrl,preference.preferenceId,id]});
   }
-  async finalize(checkout: PaymentCheckout, paymentId: string) {
-    const paidOrder={...checkout.order,date:new Date().toISOString(),paymentMethod:`Cartão Online Mercado Pago (Pago - ID: ${paymentId})`,
-      payment:{method:'cartao_online',paid:true,verifiedAt:new Date().toISOString()},paymentProvider:'mercado_pago',paymentId,
+  async finalize(checkout: PaymentCheckout, paymentId: string,paymentType='credit_card') {
+    const paidOrder={...checkout.order,date:new Date().toISOString(),paymentMethod:`${paymentType==='account_money'?'Saldo':'Cartão'} Online Mercado Pago (Pago - ID: ${paymentId})`,
+      payment:{method:'cartao_online',paid:true,verifiedAt:new Date().toISOString(),providerType:paymentType},paymentProvider:'mercado_pago',paymentId,
       status:'pendente',archived:false};
     const tx=await this.client.transaction('write');
     try {

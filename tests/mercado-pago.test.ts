@@ -8,7 +8,7 @@ const expected = {orderId:'12345678-abcd',fingerprint:'a'.repeat(64),total:6.5};
 const payment = {id:456,collector_id:123,live_mode:false,currency_id:'BRL',external_reference:expected.orderId,
   metadata:{checkout:expected.fingerprint},transaction_amount:6.5,status:'approved',payment_type_id:'credit_card'};
 
-test('preference contains canonical total, reference and card-only hosted return without customer data',async()=>{
+test('preference contains canonical total, reference and hosted return without customer data while keeping mandatory MP balance',async()=>{
   let captured:any;
   const client = new MercadoPago(config,async (url, options)=>{
     assert.equal(url,'https://api.mercadopago.com/checkout/preferences');
@@ -25,6 +25,7 @@ test('preference contains canonical total, reference and card-only hosted return
   assert.equal(captured.back_urls.success,'https://delivery.example/?payment_return=12345678-abcd');
   assert.equal(captured.payer,undefined);
   assert.ok(captured.payment_methods.excluded_payment_types.some((type:any)=>type.id==='bank_transfer'));
+  assert.ok(!captured.payment_methods.excluded_payment_types.some((type:any)=>type.id==='account_money'));
 });
 
 test('untrusted destinations, redirected checkout and wrong collector fail closed',async()=>{
@@ -40,7 +41,8 @@ test('untrusted destinations, redirected checkout and wrong collector fail close
 
 test('only approved matching amount, seller, BRL, order, fingerprint and environment can be paid',()=>{
   const client=new MercadoPago(config);
-  assert.deepEqual(client.verifyPayment(payment,expected),{approved:true,paymentId:'456'});
+  assert.deepEqual(client.verifyPayment(payment,expected),{approved:true,paymentId:'456',paymentType:'credit_card'});
+  assert.deepEqual(client.verifyPayment({...payment,payment_type_id:'account_money'},expected),{approved:true,paymentId:'456',paymentType:'account_money'});
   for(const override of [{collector_id:999},{live_mode:true},{currency_id:'USD'},{transaction_amount:0.1},
     {external_reference:'another-order'},{metadata:{checkout:'b'.repeat(64)}},{payment_type_id:'bank_transfer'},{id:'../users/me'}]) {
     assert.throws(()=>client.verifyPayment({...payment,...override},expected));
