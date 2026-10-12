@@ -100,3 +100,59 @@ html[data-theme="light"] [data-surface="admin"] :is(.bg-black,[class~="bg-black/
 html[data-theme="light"] [data-surface="admin"] :is(.bg-vovoh-red,.bg-vovoh-gold,.bg-green-600,.bg-red-600,.bg-blue-600,.bg-red-500,.bg-green-500,.bg-amber-500,.bg-indigo-600,.bg-orange-500) { --on-surface: #fff; }
 @media (max-width: 639px) { .faq-panel { padding: 16px; } .faq-header h3 { font-size: 21px; } .faq-question { padding: 12px; } .faq-topic { width: 31px; height: 31px; } }
 @media (prefers-reduced-motion: reduce) { .theme-switcher *, .store-hero *, .faq-panel * { transition: none; animation: none; } }
+
+/* Portals carry their own surface scope; native controls and KDS use the same palette. */
+.admin-dialog, .kds-page { background-color: var(--app-bg); color: var(--app-ink); }
+.admin-dialog { background-color: transparent; }
+html[data-theme="dark"] [data-surface="admin"] :is(.bg-vovoh-dark,.bg-zinc-950) { background-color: var(--app-bg); }
+html[data-theme="dark"] [data-surface="admin"] :is(.bg-zinc-900,[class~="bg-zinc-900/50"],[class~="bg-zinc-900/80"],.bg-zinc-800) { background-color: var(--app-surface); }
+html[data-theme="dark"] [data-surface="admin"] .bg-zinc-700 { background-color: var(--app-muted-surface); }
+html[data-theme] :is(input, textarea, select) { accent-color: var(--app-brand); }
+html[data-theme] select option { background-color: var(--app-surface); color: var(--app-ink); }
+.pix-qr { background: #fff; color: #000; }
+.pix-qr svg { display: block; flex-shrink: 0; }
+html[data-theme="dark"] [class~="bg-[#F5F5F7]"] { background-color: var(--app-bg); }
+html[data-theme="dark"] .text-gray-300 { color: var(--app-muted); }
+html[data-theme="dark"] .text-zinc-100 { color: var(--app-ink); }
+html[data-theme="dark"] :is(.border-gray-50,[class~="border-gray-200/50"],.border-amber-100,.border-blue-100,.border-green-100,[class~="border-[#F9F9F9]"]) { border-color: var(--app-border); }
+html[data-theme="dark"] :is(.bg-red-100,[class~="bg-red-500/5"],[class~="bg-red-500/10"],[class~="bg-red-500/20"],[class~="bg-red-600/20"],[class~="bg-vovoh-red/5"],[class~="bg-vovoh-red/10"],[class~="bg-vovoh-red/20"]) { background-color: #42272c; }
+html[data-theme="dark"] :is(.bg-green-100,[class~="bg-green-500/10"],[class~="bg-green-500/20"],[class~="bg-emerald-500/10"]) { background-color: #20372b; }
+html[data-theme="dark"] :is(.bg-blue-100,[class~="bg-blue-50/50"],[class~="bg-blue-500/20"],[class~="bg-purple-500/20"]) { background-color: #24364a; }
+html[data-theme="dark"] :is([class~="bg-amber-50/50"],[class~="bg-amber-500/5"],[class~="bg-amber-500/10"],[class~="bg-amber-500/20"],[class~="bg-vovoh-gold/5"],[class~="bg-vovoh-gold/10"],[class~="bg-vovoh-gold/20"]) { background-color: #413521; }
+html[data-theme="dark"] :is(.text-red-500,.text-red-400,.text-red-300,.text-red-200,[class~="text-red-500/80"]) { color: #ffb3b5; }
+html[data-theme="dark"] :is(.text-green-500,.text-green-400,.text-emerald-400) { color: #a6ebbb; }
+html[data-theme="dark"] :is(.text-blue-500,.text-blue-400,.text-blue-300,.text-blue-200,.text-indigo-400,.text-purple-500) { color: #a9d5ff; }
+html[data-theme="dark"] :is(.text-amber-200,.text-amber-300,.text-amber-400,.text-amber-500,.text-amber-600,[class~="text-amber-500/80"]) { color: #ffdfa2; }
+html[data-theme="dark"] :is([class~="hover:bg-red-50"],[class~="hover:bg-vovoh-red/10"]):hover { background-color: #42272c; }
+html[data-theme="dark"] :is([class~="hover:bg-white/5"],[class~="hover:bg-white/10"]):hover { background-color: var(--app-muted-surface); }
+html[data-theme="light"] [data-surface="admin"] :is([class~="bg-white/20"],[class~="bg-black/15"],[class~="bg-black/20"],[class~="bg-black/40"]) { background-color: var(--app-muted-surface); --on-surface: var(--app-ink); }
+html[data-theme="light"] [data-surface="admin"] :is([class~="border-white/15"],[class~="border-white/20"],[class~="border-white/30"],.border-zinc-950) { border-color: var(--app-border); }
+html[data-theme="light"] [data-surface="admin"] .text-zinc-100 { color: var(--app-ink); }
+html[data-theme="light"] [data-surface="admin"] :is(.text-red-200,.text-red-300,.text-red-400,.text-red-500,[class~="text-red-500/80"]) { color: #b52332; }
+html[data-theme="light"] [data-surface="admin"] :is(.text-green-400,.text-green-500,.text-emerald-400) { color: #1c7040; }
+html[data-theme="light"] [data-surface="admin"] :is(.text-blue-200,.text-blue-300,.text-blue-400,.text-blue-500,.text-indigo-400) { color: #235eab; }
+html[data-theme="light"] [data-surface="admin"] :is(.text-amber-200,.text-amber-300,.text-amber-600,[class~="text-amber-500/80"],.text-vovoh-gold) { color: #955307; }
+html[data-theme="light"] [data-surface="admin"] :is([class~="hover:bg-white/5"],[class~="hover:bg-white/10"]):hover { background-color: var(--app-muted-surface); }
+html[data-theme="light"] [data-surface="admin"] [class~="hover:text-white"]:hover { color: var(--on-surface); }
+/* Filled actions retain their own foreground, independently of panel text. */
+html[data-theme] :is(.bg-vovoh-red,.bg-red-500,.bg-red-600,.bg-blue-500,.bg-blue-600,.bg-green-500,.bg-green-600,.bg-indigo-600,.bg-orange-500) { color: #fff; --on-surface: #fff; }
+html[data-theme] .bg-vovoh-gold { color: #251a10; --on-surface: #251a10; }
+html[data-theme] .bg-vovoh-gold.text-white { color: #251a10; }
+html[data-theme] :is(.bg-green-500,.bg-green-600) { background-color: #15803d; }
+html[data-theme] .bg-blue-500 { background-color: #2563eb; }
+html[data-theme] .bg-red-500 { background-color: #c62828; }
+html[data-theme="light"] [data-surface="admin"] .bg-vovoh-gold { --on-surface: #251a10; }
+html[data-theme] :is([class~="hover:bg-vovoh-red"],[class~="hover:bg-red-600"]):hover { color: #fff; --on-surface: #fff; }
+html[data-theme] [class~="hover:bg-vovoh-gold"]:hover { color: #251a10; --on-surface: #251a10; }
+html[data-theme="dark"] :is([class*="shadow-gray-200"],[class*="shadow-red-100"],[class*="shadow-red-200"],[class*="shadow-amber-100"],[class*="shadow-amber-200"],[class*="shadow-blue-200"],[class*="shadow-green-200"]) { --tw-shadow-color: rgba(0,0,0,.32); }
+html[data-theme] [class~="bg-[#25D366]"] { background-color: #128c46; color: #fff; }
+html[data-theme="light"] [class~="text-[#25D366]"] { color: #147d42; }
+html[data-theme] .from-vovoh-gold.text-white { color: #251a10; }
+html[data-theme] .bg-sky-500 { background-color: #0369a1; color: #fff; --on-surface: #fff; }
+html[data-theme] :is([class~="hover:bg-green-500"],[class~="hover:bg-green-600"]):hover { background-color: #15803d; color: #fff; --on-surface: #fff; }
+html[data-theme] [class~="hover:bg-[#25D366]"]:hover { background-color: #128c46; color: #fff; }
+html[data-theme="dark"] :is([class~="hover:text-vovoh-dark"],[class~="hover:text-gray-600"]):hover { color: var(--app-ink); }
+html[data-theme="dark"] :is([class~="hover:bg-amber-50"],[class~="hover:bg-vovoh-red/20"]):hover { background-color: var(--app-warm); }
+html[data-theme="dark"] [class~="hover:text-vovoh-gold"]:hover { color: var(--app-gold); }
+html[data-theme="dark"] :is([class~="hover:text-vovoh-red"],[class~="hover:text-red-500"]):hover { color: var(--app-brand); }
+html[data-theme="light"] [data-surface="admin"] [class~="hover:bg-zinc-700"]:hover { background-color: var(--app-muted-surface); }

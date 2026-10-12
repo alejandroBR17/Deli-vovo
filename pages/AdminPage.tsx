@@ -800,21 +800,21 @@ export default function AdminPage() {
     const kdsOrders = orders.filter(o => o.status !== 'concluido' && o.status !== 'cancelado' && o.status !== 'pix_recusado');
     
     return (
-      <div className="min-h-screen bg-black text-white p-4  font-sans overflow-hidden flex flex-col">
+      <div className="kds-page min-h-screen text-white p-4 font-sans overflow-hidden flex flex-col">
         {toast && <Toast {...toast} notification={toast} onClose={() => setToast(null)} />}
         
-        <header className="flex justify-between items-center mb-8 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-500 text-black rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20 rotate-3">
+        <header className="flex flex-wrap justify-between items-center gap-4 mb-8 shrink-0 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-12 h-12 shrink-0 bg-amber-500 text-black rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20 rotate-3">
               <ChefHat size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tighter uppercase">Cozinha da Vovó <span className="text-amber-500">KDS</span></h1>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tighter uppercase">Cozinha da Vovó <span className="text-amber-500">KDS</span></h1>
               <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Monitor de Produção em Tempo Real</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
             <div className="bg-zinc-900 px-4 py-2 rounded-xl border border-white/5 flex items-center gap-3">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{kdsOrders.length} Pedidos Ativos</span>
@@ -825,11 +825,11 @@ export default function AdminPage() {
         </header>
 
         <main className="flex-grow overflow-x-auto no-scrollbar pb-8">
-          <div className="flex gap-6 h-full min-w-max">
+          <div className={`flex gap-6 h-full ${kdsOrders.length ? 'min-w-max' : 'min-w-0'}`}>
             {kdsOrders.length === 0 ? (
               <div className="w-full flex flex-col items-center justify-center text-zinc-800 space-y-6 opacity-50">
                 <ChefHat size={120} />
-                <p className="text-3xl font-black uppercase tracking-[0.3em]">Cozinha Limpa, Vovó!</p>
+                <p className="text-xl sm:text-3xl font-black uppercase tracking-widest text-center break-words">Cozinha Limpa, Vovó!</p>
               </div>
             ) : (
               kdsOrders.map(o => {
@@ -948,9 +948,9 @@ export default function AdminPage() {
           </div>
         </main>
         
-        <footer className="shrink-0 py-4 border-t border-white/5 flex justify-between items-center text-zinc-600">
+        <footer className="shrink-0 py-4 border-t border-white/5 flex flex-wrap gap-3 justify-between items-center text-zinc-500">
            <p className="text-[10px] font-black uppercase tracking-widest">Delícias da Vovó Grazy • Sistema de Cozinha</p>
-           <div className="flex items-center gap-6">
+           <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
                 <span className="text-[10px] font-black uppercase tracking-widest">Atenção (15m+)</span>
@@ -1901,23 +1901,23 @@ export default function AdminPage() {
                               <stop offset="95%" stopColor="#D61F1F" stopOpacity={0}/>
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--app-border)" vertical={false} />
                           <XAxis 
                             dataKey="date" 
-                            stroke="#ffffff40" 
+                            stroke="var(--app-muted)"
                             fontSize={10} 
                             tickLine={false} 
                             axisLine={false}
                           />
                           <YAxis 
-                            stroke="#ffffff40" 
+                            stroke="var(--app-muted)"
                             fontSize={10} 
                             tickLine={false} 
                             axisLine={false}
                           />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: '#18181b', border: '1px solid #ffffff10', borderRadius: '1rem' }}
-                            itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                            contentStyle={{ backgroundColor: 'var(--app-surface)', color: 'var(--app-ink)', border: '1px solid var(--app-border)', borderRadius: '1rem' }}
+                            itemStyle={{ color: 'var(--app-ink)', fontWeight: 'bold' }}
                           />
                           <Area 
                             type="monotone" 

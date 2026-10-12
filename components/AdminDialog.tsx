@@ -14,7 +14,7 @@ export function AdminDialog({ title, onClose, children, footer, fullScreen = fal
     return () => { document.body.style.overflow = old; };
   }, []);
   return createPortal(
-    <div className={`admin-dialog fixed inset-0 z-[600] flex items-center justify-center text-white ${fullScreen ? 'p-0 sm:p-4' : 'p-2 sm:p-4'}`}>
+    <div data-surface="admin" className={`admin-dialog fixed inset-0 z-[600] flex items-center justify-center text-white ${fullScreen ? 'p-0 sm:p-4' : 'p-2 sm:p-4'}`}>
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`relative flex flex-col w-full min-w-0 bg-zinc-900 border border-white/10 shadow-2xl overflow-hidden ${fullScreen ? 'h-[100dvh] sm:h-auto sm:max-h-[90dvh] sm:max-w-lg sm:rounded-2xl' : 'max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] rounded-2xl'}`}>
         <header className="flex items-center justify-between gap-3 p-4 sm:p-5 border-b border-white/10 shrink-0">

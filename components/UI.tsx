@@ -278,7 +278,7 @@ export const PixBox = ({ onComplete, pixKey, total }: { onComplete: () => void, 
 
   return (
     <div className="bg-white rounded-[2.5rem] p-8 border-2 border-vovoh-gold/10 shadow-xl space-y-6 text-center animate-in zoom-in-95">
-      <div className="w-48 h-48 bg-white mx-auto rounded-3xl flex items-center justify-center border-2 border-dashed border-vovoh-gold/20 p-4">
+      <div className="pix-qr w-48 h-48 mx-auto rounded-3xl flex items-center justify-center border-2 border-dashed border-vovoh-gold/20 p-4">
         <QRCodeSVG value={pixPayload} size={160} level="M" includeMargin={true} />
       </div>
       <div>
