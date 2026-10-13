@@ -4,10 +4,10 @@ export const validEmail=(value:string)=>value.length<=254 && /^[^\s@]+@[^\s@]+\.
 export const normalizePhone=(value:string)=>value.replace(/\D/g,'');
 export const validPhone=(value:string)=>/^(?:[1-9]\d\d{8,9}|55[1-9]\d\d{8,9})$/.test(value);
 export function passwordIssue(password:string) {
- if(password.length<15)return 'Use pelo menos 15 caracteres. Uma frase é mais fácil de lembrar.';
+ if(password.length<8)return 'Use pelo menos 8 caracteres. Uma frase é mais fácil de lembrar.';
  if(password.length>128)return 'Use no máximo 128 caracteres.';
  if(!password.trim())return 'A senha não pode conter apenas espaços.';
- if(/^(.)\1+$/u.test(password)||['123456789012345','1234567890123456','passwordpassword','qwertyuiopasdfgh'].includes(password.toLowerCase()))return 'Evite repetições ou sequências comuns. Prefira uma frase só sua.';
+ if(/^(.)\1+$/u.test(password)||['12345678','123456789','password','senha123','qwerty123','123456789012345','1234567890123456','passwordpassword','qwertyuiopasdfgh'].includes(password.toLowerCase()))return 'Evite repetições ou sequências comuns. Prefira uma frase só sua.';
  return '';
 }
 export function registrationErrors(data:{name:string;email:string;phone:string;password:string;passwordConfirmation:string}) {

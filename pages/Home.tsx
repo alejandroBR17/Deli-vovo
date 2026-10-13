@@ -30,7 +30,7 @@ export default function Home() {
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(window.location.hash==='#entrar');
   const authForCheckout=useRef(false);
   const openCheckoutAuth=()=>{authForCheckout.current=true;setIsCartOpen(false);setIsAuthOpen(true);};
   const ensureCheckoutIdentity=async()=>{

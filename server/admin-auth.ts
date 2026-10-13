@@ -124,8 +124,8 @@ export function hasOrderAccess(req: Request) {
   return hasAdminSession(req) || (typeof token === 'string' && (process.env.ADMIN_SESSION_SECRET?.length || 0) >= 32 && equal(token, orderToken(String(req.params.id))));
 }
 
-export function setCustomerSession(res: Response, id: string) {
-  const value = Buffer.from(JSON.stringify({ id, expires: Date.now() + lifetime * 1000 })).toString('base64url');
+export function setCustomerSession(res: Response, id: string, version='') {
+  const value = Buffer.from(JSON.stringify({ id, version,expires: Date.now() + lifetime * 1000 })).toString('base64url');
   res.cookie('vovo_customer_session', `${value}.${sign(value)}`, {
     httpOnly: true, sameSite: 'strict', secure: !!process.env.VERCEL || process.env.NODE_ENV === 'production',
     path: '/', maxAge: lifetime * 1000,
@@ -141,6 +141,10 @@ export function customerId(req: Request) {
   if (!signature || extra || !equal(signature, sign(value))) return null;
   try { const data = JSON.parse(Buffer.from(value, 'base64url').toString()); return data.expires > Date.now() && typeof data.id === 'string' ? data.id : null; }
   catch { return null; }
+}
+export function customerSessionMatches(req:Request,user:{id:string;authVersion?:string}) {
+ if(customerId(req)!==user.id)return false;
+ try {const raw=(req.headers.cookie||'').split(';').map(part=>part.trim()).find(part=>part.startsWith('vovo_customer_session='))!.slice('vovo_customer_session='.length);const data=JSON.parse(Buffer.from(raw.split('.')[0],'base64url').toString());return (data.version||'')===(user.authVersion||'');}catch{return false;}
 }
 
 export function requireCustomer(req: Request, res: Response, next: NextFunction) {

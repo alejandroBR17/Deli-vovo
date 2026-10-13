@@ -33,7 +33,7 @@ test('empty Turso authenticates new customers without falling back to local file
   assert.equal((await patch(result.user.id)).status,200);
   const {hashPassword}=await import('../server/admin-auth');const legacy=JSON.parse(String((await client.execute({sql:'SELECT payload FROM users WHERE id=?',args:[result.user.id]})).rows[0].payload));legacy.password=await hashPassword('old8pass');await client.execute({sql:'UPDATE users SET payload=? WHERE id=?',args:[JSON.stringify(legacy),result.user.id]});assert.equal((await post('/auth/login',{email:body.email,password:'old8pass'})).status,200);
   assert.equal((await patch(randomUUID())).status,401);
-  await client.execute({sql:'DELETE FROM users WHERE id=?',args:[result.user.id]});assert.equal((await patch(result.user.id)).status,404);
+  await client.execute({sql:'DELETE FROM users WHERE id=?',args:[result.user.id]});assert.equal((await patch(result.user.id)).status,401);
   assert.equal((await post('/auth/guest',{name:'Local',phone:''})).status,400);
   const guest=await post('/auth/guest',{name:'Convidado Local',phone:'(41) 99999-9999'});assert.equal(guest.status,200);const guestUser=(await guest.json()).user;assert.match(guestUser.id,/^CONV-/);assert.equal(guestUser.password,undefined);
   const guestCookie=guest.headers.get('set-cookie')!.split(';')[0];const resumed=await fetch(base+'/auth/session',{headers:{cookie:guestCookie}});assert.equal(resumed.status,200);assert.equal((await resumed.json()).user.id,guestUser.id);

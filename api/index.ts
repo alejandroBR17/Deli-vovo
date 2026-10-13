@@ -1,6 +1,9 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name.js';
 import {LEGAL_VERSION,legalReceipt,currentLegalReceipt} from '../src/utils/legal.js';
 import {registrationErrors,normalizeEmail,validEmail,normalizePhone,validPhone} from '../src/utils/customer-auth.js';
+import {passwordIssue} from '../src/utils/customer-auth.js';
+import {PasswordRecovery} from '../server/password-recovery.js';
+import {passwordEmailReady,sendPasswordRecovery} from '../server/password-email.js';
 import {RevisionCache} from '../server/revision-cache.js';
 import { adminCredentialStore } from '../server/admin-credentials.js';
 import { MercadoPago, validMercadoPagoSignature } from '../server/mercado-pago.js';
@@ -24,7 +27,7 @@ import { separateImage } from '../server/media.js';
 import { configuredDatabase, Database, Query, DocumentReference } from '../server/database.js';
 import { waitUntil } from '@vercel/functions';
 import { rateLimit } from 'express-rate-limit';
-import { hasAdminSession, setCustomerSession, requireCustomer, customerId, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin, configureAdminCredentials, prepareAdminCredential, changeAdminPassword } from '../server/admin-auth.js';
+import { hasAdminSession, setCustomerSession, requireCustomer, customerId, customerSessionMatches, hashPassword, verifyPassword, orderToken, hasOrderAccess, requireAdmin, requireAdminWrite, loginAdmin, logoutAdmin, configureAdminCredentials, prepareAdminCredential, changeAdminPassword } from '../server/admin-auth.js';
 
 dotenv.config();
 
@@ -133,6 +136,7 @@ export interface User {
   phone?: string;
   address?: string;
   cart?: string;
+  authVersion?:string;
   legalAcceptance?: ReturnType<typeof legalReceipt>;
 }
 
@@ -1220,6 +1224,14 @@ app.post('/admin/password', requireAdminWrite, rateLimit({windowMs:15*60*1000,li
 app.get('/admin/session', requireAdmin, (_req, res) => res.json({ authenticated: true }));
 app.post('/admin/logout', requireAdminWrite, logoutAdmin);
 app.use('/admin', requireAdminWrite);
+const verifiedCustomers=new WeakMap<express.Request,User>();
+app.use(async(req,res,next)=>{
+  const id=customerId(req);
+  const privateRoute=/^\/(auth\/(session|sync|legal-acceptance|change-password)|users\/|orders(?:\/|$))/.test(req.path)||req.path==='/create-payment-intent'||req.path==='/payments/mercado-pago/checkout';
+  if(!id||!privateRoute)return next();
+  try {const user=await UserRepo.getById(id);if(user&&customerSessionMatches(req,user))verifiedCustomers.set(req,user);else req.headers.cookie=(req.headers.cookie||'').split(';').filter(part=>!part.trim().startsWith('vovo_customer_session=')).join(';');next();}
+  catch{return res.status(503).json({error:'Não foi possível conferir seu acesso. Tente novamente.'});}
+});
 
 // --- Rotas de Push ---
 app.get('/push/public-key', async (_req, res) => {
@@ -1274,7 +1286,7 @@ app.get('/payments/config',(_req,res)=>{
 const paymentStartLimiter=rateLimit({windowMs:15*60*1000,limit:12,standardHeaders:'draft-7',legacyHeaders:false});
 async function acceptNewOrder(req:express.Request,res:express.Response) {
   const id=customerId(req);
-  const user=id?await UserRepo.getById(id):null;
+  const user=id?(verifiedCustomers.get(req)||await UserRepo.getById(id)):null;
   if(!id || !user){res.status(401).json({error:'Entre com sua conta ou identifique-se como convidado antes de pedir.'});return null;}
   const previous=currentLegalReceipt(user.legalAcceptance,id);if(previous)return previous;
   try {return legalReceipt(req.body.legalAcceptance,id);}
@@ -1666,7 +1678,7 @@ const publicUser = (user: User) => { const { password, ...profile } = user; retu
 app.get('/auth/session',async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const id=customerId(req);if(!id)return res.status(401).json({error:'Identifique-se para continuar.'});
-  try {const user=await UserRepo.getById(id);if(!user)return res.status(401).json({error:'Identifique-se novamente.'});return res.json({success:true,user:publicUser(user),legalVersion:LEGAL_VERSION});}
+  try {const user=verifiedCustomers.get(req)||await UserRepo.getById(id);if(!user)return res.status(401).json({error:'Identifique-se novamente.'});return res.json({success:true,user:publicUser(user),legalVersion:LEGAL_VERSION});}
   catch {return res.status(503).json({error:'Não foi possível conferir seu acesso. Tente novamente.'});}
 });
 app.use('/auth',(req,res,next)=>{
@@ -1677,6 +1689,34 @@ app.use('/auth',(req,res,next)=>{
   next();
 });
 app.use('/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, legacyHeaders: false }));
+app.get('/auth/recovery-options',(_req,res)=>{res.setHeader('Cache-Control','no-store');res.json({emailRecovery:!!db&&passwordEmailReady()});});
+app.post('/auth/forgot-password',rateLimit({windowMs:15*60*1000,limit:5,legacyHeaders:false}),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const email=typeof req.body.email==='string'?normalizeEmail(req.body.email):'';
+  if(!validEmail(email))return res.status(400).json({error:'Confira o e-mail da sua conta.'});
+  if(!db||!passwordEmailReady())return res.status(503).json({error:'A recuperação por e-mail ainda não está disponível. Tente mais tarde.'});
+  const task=(async()=>{const user=await UserRepo.findByEmail(email);if(!user?.password||user.id.startsWith('CONV-'))return;const token=await new PasswordRecovery(db.client).issue({id:user.id,password:user.password});if(token)await sendPasswordRecovery(email,token);})().catch(()=>console.error('Falha no processamento de recuperação de senha.'));
+  if(isVercel)waitUntil(task);else void task;
+  return res.json({success:true,message:'Solicitação recebida. Se houver uma conta com esse e-mail, enviaremos um link. Confira também a pasta de spam.'});
+});
+app.post('/auth/reset-password',rateLimit({windowMs:15*60*1000,limit:6,legacyHeaders:false}),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const {token,password,passwordConfirmation}=req.body;
+  if(typeof token!=='string'||typeof password!=='string'||typeof passwordConfirmation!=='string')return res.status(400).json({error:'Confira o link e a nova senha.'});
+  const issue=passwordIssue(password);if(issue||password!==passwordConfirmation)return res.status(400).json({error:issue||'As senhas precisam coincidir.'});
+  if(!db)return res.status(503).json({error:'A recuperação ainda não está disponível.'});
+  try {if(!await new PasswordRecovery(db.client).reset(token,password))return res.status(400).json({error:'Este link expirou ou já foi usado. Solicite outro link.'});res.clearCookie('vovo_customer_session',{path:'/'});return res.json({success:true});}catch{return res.status(503).json({error:'Não foi possível salvar a senha. Tente novamente.'});}
+});
+app.post('/auth/change-password',rateLimit({windowMs:15*60*1000,limit:5,legacyHeaders:false}),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=verifiedCustomers.get(req),{currentPassword,password,passwordConfirmation}=req.body;
+  if(!user||!customerId(req))return res.status(401).json({error:'Entre novamente para alterar sua senha.'});
+  if(!user.password||user.id.startsWith('CONV-'))return res.status(400).json({error:'Convidados não têm senha para alterar.'});
+  if(typeof currentPassword!=='string'||currentPassword.length>128||typeof password!=='string'||typeof passwordConfirmation!=='string')return res.status(400).json({error:'Preencha as senhas para continuar.'});
+  const issue=passwordIssue(password);if(issue||password!==passwordConfirmation)return res.status(400).json({error:issue||'As senhas precisam coincidir.'});
+  if(!db)return res.status(503).json({error:'A troca de senha ainda não está disponível.'});
+  try {if(!await verifyPassword(currentPassword,user.password))return res.status(400).json({error:'Confira sua senha atual.'});const version=await new PasswordRecovery(db.client).change({id:user.id,password:user.password},password);if(!version)return res.status(409).json({error:'Sua conta mudou. Entre novamente e tente outra vez.'});setCustomerSession(res,user.id,version);return res.json({success:true});}catch{return res.status(503).json({error:'Não foi possível alterar a senha. Tente novamente.'});}
+});
 app.post('/auth/guest',async(req,res)=>{
   try {
     const name=customerName(req.body.name),phone=typeof req.body.phone==='string'?req.body.phone.replace(/\D/g,''):'';
@@ -1685,13 +1725,13 @@ app.post('/auth/guest',async(req,res)=>{
     const currentId=customerId(req);const previous=currentId?.startsWith('CONV-')?await UserRepo.getById(currentId):null;
     const user={...(previous||{}),id:previous?.id||'CONV-'+uuidv4(),name,phone,email:'',password:'',address:previous?.address||'',cart:previous?.cart||'[]'};
     if(previous)await UserRepo.update(user);else await UserRepo.create(user);
-    setCustomerSession(res,user.id);res.setHeader('Cache-Control','no-store');return res.json({success:true,user:publicUser(user)});
+    setCustomerSession(res,user.id,user.authVersion);res.setHeader('Cache-Control','no-store');return res.json({success:true,user:publicUser(user)});
   } catch {return res.status(503).json({error:'Não foi possível registrar seu acesso de convidado. Tente novamente.'});}
 });
 app.post('/auth/legal-acceptance',async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   try {
-    const id=customerId(req),user=id?await UserRepo.getById(id):null;
+    const id=customerId(req),user=id?(verifiedCustomers.get(req)||await UserRepo.getById(id)):null;
     if(!id||!user)return res.status(401).json({error:'Identifique-se antes de aceitar os documentos.'});
     const previous=currentLegalReceipt(user.legalAcceptance,id);
     let receipt=previous;
@@ -1730,7 +1770,7 @@ app.post('/auth/register', async (req, res) => {
     const existing = await UserRepo.findByEmail(email);
     if (existing) return res.status(400).json({ error: 'Este e-mail já tem uma conta. Use a opção Entrar.',fieldErrors:{email:'Este e-mail já está cadastrado.'} });
 
-    const user = { 
+    const user:User = {
       id: uuidv4(), 
       name, 
       email: email.toLowerCase(), 
@@ -1749,7 +1789,7 @@ app.post('/auth/register', async (req, res) => {
       });
     }
     if (!user.password?.startsWith('scrypt:')) { user.password = await hashPassword(password); await UserRepo.update(user); }
-    setCustomerSession(res, user.id);
+    setCustomerSession(res, user.id,user.authVersion);
     res.json({ success: true, user: publicUser(user) });
   } catch (e: any) {
     res.status(500).json({ error: String(e) });
@@ -1783,7 +1823,7 @@ app.post('/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
     }
     if (!user.password.startsWith('scrypt:')) { user.password = await hashPassword(password); await UserRepo.update(user); }
-    setCustomerSession(res, user.id);
+    setCustomerSession(res, user.id,user.authVersion);
     res.json({ success: true, user: publicUser(user) });
   } catch (e: any) {
     res.status(500).json({ error: String(e) });
@@ -1820,7 +1860,7 @@ app.post('/auth/sync', async (req, res) => {
       }
     }
     
-    setCustomerSession(res, user.id);
+    setCustomerSession(res, user.id,user.authVersion);
     res.json({ success: true, user: publicUser(user) });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -1829,7 +1869,7 @@ app.post('/auth/sync', async (req, res) => {
 
 app.patch('/users/:id', requireCustomer, async (req, res) => {
   try {
-    const current = await UserRepo.getById(String(req.params.id));
+    const cached=verifiedCustomers.get(req);const current=cached?.id===String(req.params.id)?cached:await UserRepo.getById(String(req.params.id));
     if (!current) return res.status(404).json({ error: 'Conta não encontrada.' });
     const { name, phone, address, cart } = req.body;
     if(name!=null&&(typeof name!=='string'||!validCustomerName(customerName(name))||customerName(name).length>100))return res.status(400).json({error:'Confira seu nome.'});
