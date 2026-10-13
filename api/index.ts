@@ -5,7 +5,7 @@ import { adminCredentialStore } from '../server/admin-credentials.js';
 import { MercadoPago, validMercadoPagoSignature } from '../server/mercado-pago.js';
 import { PaymentCheckoutStore, hasPaymentCheckoutAccess, paymentRequestHash } from '../server/payment-checkouts.js';
 import { deliveryToken, locateDeliveryAddress, priceOrder, checkoutFingerprint } from '../server/checkout.js';
-import {validateSchedule} from '../src/utils/order-schedule.js';
+import {validateSchedule,shopDate} from '../src/utils/order-schedule.js';
 import {storeAvailability} from '../src/utils/store-hours.js';
 import { internalStoreFields, quoteDelivery } from '../server/delivery.js';
 import { validateStoreConfig } from '../server/store-config.js';
@@ -307,11 +307,11 @@ const VisitRepo = {
 
     const id = uuidv4();
     const timestamp = new Date().toISOString();
-    const today = timestamp.split('T')[0];
+    const today = shopDate();
     
     if (db) {
       try {
-        const hasVisitedToday = (await db.rows("SELECT 1 FROM visits WHERE json_extract(payload,'$.sessionId')=? AND json_extract(payload,'$.timestamp')>=? AND json_extract(payload,'$.timestamp')<? LIMIT 1", [visit.sessionId || '', today + 'T00:00:00.000Z', new Date(Date.parse(today) + 86400000).toISOString()])).length > 0;
+        const hasVisitedToday = (await db.rows("SELECT 1 FROM visits WHERE COALESCE(json_extract(payload,'$.userAgent'),'')!='PWA_INSTALL_EVENT' AND json_extract(payload,'$.sessionId')=? AND json_extract(payload,'$.timestamp')>=? AND json_extract(payload,'$.timestamp')<? LIMIT 1", [visit.sessionId || '', today + 'T03:00:00.000Z', new Date(Date.parse(today+'T03:00:00.000Z') + 86400000).toISOString()])).length > 0;
 
         if (hasVisitedToday) return;
 
@@ -332,7 +332,7 @@ const VisitRepo = {
     const visits = await fs.readJson(FILES.visits).catch(() => []);
     
     const hasVisitedToday = visits.some((v: any) => 
-      (v.sessionId === visit.sessionId || (visit.userId && visit.userId !== 'anonymous' && v.userId === visit.userId)) &&
+      v.userAgent !== 'PWA_INSTALL_EVENT' && (v.sessionId === visit.sessionId || (visit.userId && visit.userId !== 'anonymous' && v.userId === visit.userId)) &&
       v.timestamp.startsWith(today)
     );
     
@@ -381,7 +381,7 @@ const VisitRepo = {
   getStats: async () => {
     const visits = await VisitRepo.getAll();
     const now = new Date();
-    const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    const oneMonthAgo = new Date(shopDate(now).slice(0,7)+'-01T03:00:00.000Z');
     
     const actualVisits = visits.filter((v: Visit) => v.userAgent !== 'PWA_INSTALL_EVENT' && !VisitRepo.isBot(v.userAgent || ''));
     const installEvents = visits.filter((v: Visit) => v.userAgent === 'PWA_INSTALL_EVENT');
@@ -397,8 +397,8 @@ const VisitRepo = {
     return {
       total: actualVisits.length,
       pwa: actualVisits.filter((v: Visit) => v.isPwa).length,
-      installs: installEvents.length,
-      month: actualVisits.filter((v: Visit) => new Date(v.timestamp) > oneMonthAgo).length,
+      installs: new Set(visits.filter(v=>v.isPwa||v.userAgent==='PWA_INSTALL_EVENT').map(v=>v.sessionId||v.id)).size,
+      month: actualVisits.filter((v: Visit) => new Date(v.timestamp) >= oneMonthAgo).length,
       authStats
     };
   }
@@ -429,7 +429,7 @@ const PresenceRepo = {
     await fs.writeJson(FILES.presence, presences);
   },
   cleanup: async () => {
-    const timeout = 60000; // 1 minuto
+    const timeout = 180000; // Últimos 3 minutos
     if (db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'presence'));
@@ -1892,6 +1892,18 @@ app.post('/configs/batch', requireAdminWrite, async (req,res) => {
 });
 
 // --- Presença, Estatísticas e Visitas ---
+app.post('/visits/install',rateLimit({windowMs:15*60*1000,limit:10,legacyHeaders:false}),async(req,res)=>{
+  const sessionId=req.body.sessionId;
+  if(typeof sessionId!=='string'||!/^session-[a-zA-Z0-9-]{6,64}$/.test(sessionId))return res.status(400).json({error:'Identificador de navegador inválido.'});
+  if(VisitRepo.isBot(req.headers['user-agent']||''))return res.json({success:true});
+  try {
+    const id='install-'+createHash('sha256').update(sessionId).digest('hex');
+    const visit={id,sessionId,userId:customerId(req)||'anonymous',isPwa:true,userAgent:'PWA_INSTALL_EVENT',timestamp:new Date().toISOString(),authType:'none'};
+    if(db)await db.client.execute({sql:'INSERT INTO visits(id,payload) VALUES (?,?) ON CONFLICT(id) DO NOTHING',args:[id,JSON.stringify(visit)]});
+    else {requireLocalStorage();const visits=await fs.readJson(FILES.visits).catch(()=>[]);if(!visits.some((v:Visit)=>v.id===id)){visits.push(visit);await fs.writeJson(FILES.visits,visits);}}
+    statsCache=undefined;return res.json({success:true});
+  }catch{return res.status(503).json({error:'Não foi possível registrar a instalação.'});}
+});
 app.post('/visits', async (req, res) => {
   try {
     const { userId, isPwa, sessionId, authType } = req.body;
@@ -1931,6 +1943,7 @@ app.post('/presence', async (req, res) => {
 let statsCache: { value: any; expires: number } | undefined;
 let statsRequest: Promise<any> | undefined;
 app.get('/admin/stats', async (req, res) => {
+  res.setHeader('Cache-Control','no-store');
   try {
     if (db) {
       if (statsCache && statsCache.expires > Date.now()) return res.json(statsCache.value);
@@ -1938,7 +1951,7 @@ app.get('/admin/stats', async (req, res) => {
       return res.json(await statsRequest);
     }
     const visitStats = await VisitRepo.getStats();
-    const onlineUsers = await PresenceRepo.getAll();
+    const onlineUsers = (await PresenceRepo.getAll()).filter(p=>Date.parse(p.lastSeen)>=Date.now()-180000);
     const totalUsers = await UserRepo.getAll();
     const orders = await OrderRepo.getAll();
     const allVisits = await VisitRepo.getAll();
@@ -1946,14 +1959,14 @@ app.get('/admin/stats', async (req, res) => {
     const last7Days = [...Array(7)].map((_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      return d.toISOString().split('T')[0];
+      return shopDate(d);
     }).reverse();
 
     const visitHistory = last7Days.map(date => ({
       date: date.split('-').slice(1).reverse().join('/'),
       count: allVisits.filter(v => {
         const ts = v.timestamp;
-        return ts && ts.startsWith(date);
+        return ts && shopDate(new Date(ts))===date && v.userAgent!=='PWA_INSTALL_EVENT';
       }).length
     }));
 

@@ -79,7 +79,7 @@ test('visit authentication only updates the current day and skips unchanged rows
       ['old', 'same-browser', '2026-10-09T12:00:00.000Z'],
       ['today', 'same-browser', '2026-10-10T12:00:00.000Z'],
       ['other', 'other-browser', '2026-10-10T12:00:00.000Z'],
-      ['tomorrow', 'same-browser', '2026-10-11T00:00:00.000Z'],
+      ['tomorrow', 'same-browser', '2026-10-11T03:00:00.000Z'],
     ]) await database.collection('visits').doc(id).create({ sessionId, timestamp, userId: 'anonymous', authType: 'none' });
     const now = new Date('2026-10-10T23:00:00.000Z');
     assert.equal((await database.updateVisitAuth('same-browser','customer','registered',now)).rowsAffected,1);
@@ -111,6 +111,15 @@ test('API stores orders durably, isolates images from catalog responses and prot
     const login=await request('/admin/login',{password:'test-only'},{'X-Vovo-Admin':'1'});
     const cookie=login.headers.get('set-cookie')!.split(';')[0];
     const headers={Cookie:cookie,'X-Vovo-Admin':'1'};
+    assert.equal((await request('/visits/install',{sessionId:''})).status,400);
+    assert.equal((await request('/visits/install',{sessionId:'session-local-install'})).status,200);
+    assert.equal((await request('/visits/install',{sessionId:'session-local-install'})).status,200);
+    assert.equal((await database.rows("SELECT id FROM visits WHERE json_extract(payload,'$.userAgent')='PWA_INSTALL_EVENT'")).length,1);
+    assert.equal((await database.stats()).visits.installs,1);
+    assert.equal((await database.stats()).visits.total,0);
+    assert.equal((await request('/visits',{sessionId:'session-local-install',isPwa:true})).status,200);
+    assert.equal((await database.stats()).visits.total,1);
+    assert.equal((await database.stats()).visits.installs,1);
     assert.equal((await (await request('/configs')).json()).cash_enabled,undefined);
     // Simulate another server writing: the API's local cache is not invalidated.
     await database.collection('configs').doc('cash_enabled').set({value:'true'});

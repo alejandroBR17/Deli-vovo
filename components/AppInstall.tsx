@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { createPortal } from 'react-dom';
 import { Download, Smartphone, Share, Monitor, Check, X } from 'lucide-react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
+import {reportAppInstallation} from '../src/utils/install-tracking';
 
 interface InstallPrompt extends Event {
   prompt(): Promise<void>;
@@ -24,13 +25,15 @@ export function AppInstallProvider({ children }: { children: React.ReactNode }) 
   useModalFocus(ref, visible, () => setVisible(false));
   useEffect(() => {
     const media = window.matchMedia('(display-mode: standalone)');
-    const change = () => setStandalone(isStandalone());
+    const change = () => {setStandalone(isStandalone());if(isStandalone())void reportAppInstallation();};
     const available = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); };
-    const installed = () => { setPrompt(null); setMessage('Instalado! Abra pelo ícone na tela inicial ou na lista de aplicativos.'); change(); };
+    const installed = () => { setPrompt(null); setMessage('Instalado! Abra pelo ícone na tela inicial ou na lista de aplicativos.');void reportAppInstallation(); change(); };
+    const online=()=>{if(isStandalone())void reportAppInstallation();};
+    online();window.addEventListener('online',online);
     window.addEventListener('beforeinstallprompt', available);
     window.addEventListener('appinstalled', installed);
     media.addEventListener('change', change);
-    return () => { window.removeEventListener('beforeinstallprompt', available); window.removeEventListener('appinstalled', installed); media.removeEventListener('change', change); };
+    return () => {window.removeEventListener('online',online); window.removeEventListener('beforeinstallprompt', available); window.removeEventListener('appinstalled', installed); media.removeEventListener('change', change); };
   }, []);
   const install = async () => {
     if (!prompt || busy) return;

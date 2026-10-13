@@ -1,3 +1,4 @@
+import {shopDate} from '../src/utils/order-schedule.js';
 import { createClient, type Client, type InValue } from '@libsql/client';
 
 export const tables = ['products', 'orders', 'users', 'configs', 'push_subscriptions', 'visits', 'presence', 'media'] as const;
@@ -58,7 +59,7 @@ export class Database {
     return revision;
   }
   async updateVisitAuth(sessionId: string, userId: string, authType: string, now = new Date()) {
-    const start = now.toISOString().slice(0, 10) + 'T00:00:00.000Z';
+    const start = shopDate(now) + 'T03:00:00.000Z';
     const end = new Date(Date.parse(start) + 86400000).toISOString();
     // One indexed update of today's visit; old visits and unchanged rows stay untouched.
     return this.client.execute({
@@ -107,26 +108,26 @@ export class Database {
     return { count: Number(values.count), totalRevenue: Number(values.totalRevenue), pixRevenue: Number(values.pixRevenue), cardRevenue: Number(values.cardRevenue),
       recent: results[1].rows.map(row => ({ ...JSON.parse(String(row.payload)), id: String(row.id) })) };
   }
-  async stats() {
-    const since = new Date(Date.now() - 30 * 86400000).toISOString();
-    const week = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+  async stats(now = new Date()) {
+    const since = shopDate(now).slice(0,7)+'-01T03:00:00.000Z';
+    const week = shopDate(new Date(now.getTime()-6*86400000))+'T03:00:00.000Z';
     const results = await this.client.batch([
       { sql: `SELECT count(*) AS total, COALESCE(sum(CASE WHEN json_extract(payload,'$.isPwa')=1 THEN 1 ELSE 0 END),0) AS pwa,
         COALESCE(sum(CASE WHEN ${field('timestamp')}>=? THEN 1 ELSE 0 END),0) AS month FROM visits WHERE COALESCE(json_extract(payload,'$.userAgent'),'')!='PWA_INSTALL_EVENT'`, args: [since] },
-      `SELECT count(*) AS installs FROM visits WHERE json_extract(payload,'$.userAgent')='PWA_INSTALL_EVENT'`,
+      `SELECT count(DISTINCT COALESCE(NULLIF(json_extract(payload,'$.sessionId'),''),id)) AS installs FROM visits WHERE json_extract(payload,'$.userAgent')='PWA_INSTALL_EVENT' OR json_extract(payload,'$.isPwa')=1`,
       `SELECT COALESCE(json_extract(payload,'$.authType'),'none') AS authType,count(*) AS count FROM visits WHERE COALESCE(json_extract(payload,'$.userAgent'),'')!='PWA_INSTALL_EVENT' GROUP BY authType`,
-      { sql: `SELECT substr(${field('timestamp')},1,10) AS day,count(*) AS count FROM visits WHERE ${field('timestamp')}>=? AND COALESCE(json_extract(payload,'$.userAgent'),'')!='PWA_INSTALL_EVENT' GROUP BY day`, args: [week] },
+      { sql: `SELECT date(${field('timestamp')},'-3 hours') AS day,count(*) AS count FROM visits WHERE ${field('timestamp')}>=? AND COALESCE(json_extract(payload,'$.userAgent'),'')!='PWA_INSTALL_EVENT' GROUP BY day`, args: [week] },
       `SELECT count(*) AS count FROM users`,
       `SELECT count(*) AS count, COALESCE(sum(CASE WHEN ${field('status')}='concluido' THEN json_extract(payload,'$.total') ELSE 0 END),0) AS revenue FROM orders`,
-      { sql: `SELECT payload FROM presence WHERE ${field('lastSeen')}>=? LIMIT 100`, args: [new Date(Date.now() - 60000).toISOString()] },
+      { sql: `SELECT payload FROM presence WHERE ${field('lastSeen')}>=? LIMIT 100`, args: [new Date(now.getTime() - 180000).toISOString()] },
     ], 'read');
     const authStats = { none: 0, guest: 0, registered: 0 };
     for (const row of results[2].rows) if (String(row.authType) in authStats) authStats[row.authType as keyof typeof authStats] = Number(row.count);
     const history = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(Date.now() - (6 - index) * 86400000).toISOString().slice(0, 10);
+      const date = shopDate(new Date(now.getTime() - (6 - index) * 86400000));
       return { date: date.slice(5).split('-').reverse().join('/'), count: Number(results[3].rows.find(row => row.day === date)?.count || 0) };
     });
-    return { visits: { ...results[0].rows[0], installs: Number(results[1].rows[0].installs), authStats }, history,
+    return { visits: { total:Number(results[0].rows[0].total),pwa:Number(results[0].rows[0].pwa),month:Number(results[0].rows[0].month), installs: Number(results[1].rows[0].installs), authStats }, history,
       online: results[6].rows.map(row => JSON.parse(String(row.payload))), totalUsers: Number(results[4].rows[0].count),
       totalOrders: Number(results[5].rows[0].count), revenue: Number(results[5].rows[0].revenue) };
   }

@@ -52,6 +52,7 @@ export default function AdminPage() {
   const [refusalModal, setRefusalModal] = useState<{isOpen: boolean, orderId: string | null}>({isOpen: false, orderId: null});
   const [refusalReason, setRefusalReason] = useState("");
   const [stats, setStats] = useState<any>(null);
+  const [statsError,setStatsError]=useState('');
   
   const [isCatMenuOpen, setIsCatMenuOpen] = useState(false);
 
@@ -177,10 +178,10 @@ export default function AdminPage() {
       const res = await adminFetch(`/admin/stats`);
       if (res.ok) {
         const data = await res.json();
-        setStats(data);
-      } else return false;
+        setStats(data);setStatsError('');
+      } else {setStatsError('Não foi possível atualizar. Os dados anteriores podem estar desatualizados.');return false;}
     } catch (e) {
-      console.error("Erro ao buscar estatísticas:", e);
+      setStatsError('Não foi possível atualizar. Confira a conexão e tente novamente.');
       return false;
     }
   };
@@ -1831,71 +1832,73 @@ export default function AdminPage() {
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-vovoh-red text-white rounded-xl flex items-center justify-center shadow-lg"><PieChart size={20} /></div>
-                  <h3 className="text-2xl font-black">Estatísticas em Tempo Real</h3>
+                  <div className="min-w-0"><h3 className="text-2xl font-black">Estatísticas da loja</h3><p className="text-xs text-zinc-400 mt-2">Visitas: um acesso por navegador/dia. Instalações: navegadores com instalação confirmada ou acesso pelo app, sem contar reinstalações. Não detecta desinstalações. Atualização automática a cada 5 minutos; dados podem ter até 1 minuto de cache.</p></div>
                 </div>
-                <button onClick={fetchStats} className="p-3 bg-white/5 rounded-xl text-zinc-400 hover:text-white transition-all">
+                <button aria-label="Atualizar estatísticas" onClick={fetchStats} className="p-3 bg-white/5 rounded-xl text-zinc-400 hover:text-white transition-all">
                   <RefreshCw size={20} className={syncing ? 'animate-spin' : ''} />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1  gap-6">
+              {statsError&&<p role="alert" className="rounded-xl border border-red-400/30 p-4 text-sm text-red-400">{statsError}</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Online Agora</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Ativos nos últimos 3 minutos</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-emerald-400">{stats?.online?.length || 0}</span>
-                    <span className="text-xs font-bold text-zinc-500 mb-1">pessoas</span>
+                    <span className="text-4xl font-black text-emerald-400">{stats ? stats?.online?.length || 0 : '—'}</span>
+                    <span className="text-xs font-bold text-zinc-500 mb-1">navegadores</span>
                   </div>
                 </div>
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Visitas Totais</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-white">{stats?.visits?.total || 0}</span>
-                    <span className="text-xs font-bold text-zinc-500 mb-1">cliques</span>
+                    <span className="text-4xl font-black text-white">{stats ? stats?.visits?.total || 0 : '—'}</span>
+                    <span className="text-xs font-bold text-zinc-500 mb-1">visitas</span>
                   </div>
                 </div>
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Este Mês</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-vovoh-gold">{stats?.visits?.month || 0}</span>
-                    <span className="text-xs font-bold text-zinc-500 mb-1">novos</span>
+                    <span className="text-4xl font-black text-vovoh-gold">{stats ? stats?.visits?.month || 0 : '—'}</span>
+                    <span className="text-xs font-bold text-zinc-500 mb-1">visitas</span>
                   </div>
                 </div>
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Acessos via App</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-vovoh-red">{stats?.visits?.pwa || 0}</span>
+                    <span className="text-4xl font-black text-vovoh-red">{stats ? stats?.visits?.pwa || 0 : '—'}</span>
                     <span className="text-xs font-bold text-zinc-500 mb-1">visitas</span>
                   </div>
                 </div>
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Apps Instalados</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Instalações identificadas</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-blue-400">{stats?.visits?.installs || 0}</span>
+                    <span className="text-4xl font-black text-blue-400">{stats ? stats?.visits?.installs || 0 : '—'}</span>
                     <span className="text-xs font-bold text-zinc-500 mb-1">instalações</span>
                   </div>
                 </div>
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Sem Login</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-zinc-400">{stats?.visits?.authStats?.none || 0}</span>
+                    <span className="text-4xl font-black text-zinc-400">{stats ? stats?.visits?.authStats?.none || 0 : '—'}</span>
                     <span className="text-xs font-bold text-zinc-500 mb-1">visitas</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1  gap-6">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Login como Convidado</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Visitas como convidado</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-indigo-400">{stats?.visits?.authStats?.guest || 0}</span>
-                    <span className="text-xs font-bold text-zinc-500 mb-1">usuários</span>
+                    <span className="text-4xl font-black text-indigo-400">{stats ? stats?.visits?.authStats?.guest || 0 : '—'}</span>
+                    <span className="text-xs font-bold text-zinc-500 mb-1">visitas</span>
                   </div>
                 </div>
                 <div className="bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Login Completo (Google/Email)</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Visitas com conta</p>
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-emerald-400">{stats?.visits?.authStats?.registered || 0}</span>
-                    <span className="text-xs font-bold text-zinc-500 mb-1">usuários</span>
+                    <span className="text-4xl font-black text-emerald-400">{stats ? stats?.visits?.authStats?.registered || 0 : '—'}</span>
+                    <span className="text-xs font-bold text-zinc-500 mb-1">visitas</span>
                   </div>
                 </div>
               </div>
@@ -1951,7 +1954,7 @@ export default function AdminPage() {
 
                 <div className="bg-zinc-900/50 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <h4 className="font-black text-lg">Online Agora</h4>
+                    <h4 className="font-black text-lg">Ativos nos últimos 3 minutos</h4>
                     <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-black uppercase tracking-widest">
                       <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
                       Ao Vivo
@@ -2016,16 +2019,16 @@ export default function AdminPage() {
                   <h4 className="font-black text-lg">Resumo Geral</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Total de Clientes</p>
-                      <p className="text-2xl font-black text-white">{stats?.totalUsers || 0}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Perfis de clientes e convidados</p>
+                      <p className="text-2xl font-black text-white">{stats ? stats?.totalUsers || 0 : '—'}</p>
                     </div>
                     <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
                       <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Total de Pedidos</p>
-                      <p className="text-2xl font-black text-white">{stats?.totalOrders || 0}</p>
+                      <p className="text-2xl font-black text-white">{stats ? stats?.totalOrders || 0 : '—'}</p>
                     </div>
                     <div className="p-6 bg-white/5 rounded-3xl border border-white/5 col-span-2">
                       <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Faturamento (Concluídos)</p>
-                      <p className="text-3xl font-black text-emerald-400">R$ {(stats?.revenue || 0).toFixed(2)}</p>
+                      <p className="text-3xl font-black text-emerald-400">{stats ? 'R$ '+(stats.revenue||0).toFixed(2) : '—'}</p>
                     </div>
                   </div>
                 </div>

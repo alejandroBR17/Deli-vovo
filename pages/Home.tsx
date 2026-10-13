@@ -11,6 +11,7 @@ import { StoreFront } from '../components/StoreFront';
 import { Checkout, TrackingModal } from '../components/Checkout';
 import { AuthModal } from '../components/Auth';
 import {LEGAL_VERSION} from '../src/utils/legal';
+import {shopDate} from '../src/utils/order-schedule';
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import { QuickReorder } from '../components/QuickReorder';
 import { storeAvailability, openingTime } from '../src/utils/store-hours';
@@ -74,6 +75,9 @@ export default function Home() {
     return id;
   };
   const sessionIdRef = useRef(getSessionId());
+  const presenceState=useRef({id:sessionIdRef.current,userId:'anonymous',userName:'Visitante',isShopping:false});
+  presenceState.current={id:sessionIdRef.current,userId:user?.id||'anonymous',userName:user?.name||'Visitante',isShopping:cart.length>0};
+  useEffect(()=>startVisiblePolling(async()=>{const response=await fetch('/api/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(presenceState.current),signal:AbortSignal.timeout(10000)});return response.ok;},60000,false),[]);
 
   const configRequest = useRef<Promise<any> | null>(null);
   const fetchConfigs = useCallback(() => {
@@ -109,7 +113,7 @@ export default function Home() {
     if (bots.some(bot => ua.includes(bot))) return;
 
     // Verifica se já contabilizou visita hoje para não inflar números
-    const today = new Date().toISOString().split('T')[0];
+    const today = shopDate();
     if (localStorage.getItem('vovoh_last_visit_date') === today) return;
 
     const isPwa = window.matchMedia('(display-mode: standalone)').matches;
@@ -339,23 +343,8 @@ export default function Home() {
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
       setDeferredPrompt(null);
-      setToast({ message: "Que alegria ter você pertinho! App instalado.", type: 'success' });
-
-      if (localStorage.getItem('vovoh_app_installed')) return;
-
-      // Track install
-      try {
-        await fetch(`${GAS_API_URL}/visits`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user?.id || 'anonymous',
-            isPwa: true,
-            userAgent: 'PWA_INSTALL_EVENT'
-          })
-        });
-        localStorage.setItem('vovoh_app_installed', 'true');
-      } catch (e) {}
+      setToast({ message: "Instalação solicitada. Abra pelo ícone quando terminar.", type: 'success' });
+      // AppInstallProvider records the confirmed appinstalled event.
     }
   };
 
