@@ -1182,14 +1182,6 @@ async function notifyAdmins(title: string, body: string, url: string = '/#vovo-s
   }
 }
 
-async function notifyUser(userId: string, title: string, body: string, url: string = '/') {
-  const subscriptions = await PushSubscriptionRepo.getAll();
-  const userSubs = subscriptions.filter(s => s.userId === userId);
-  for (const sub of userSubs) {
-    await sendPushNotification(sub, { title, body, url });
-  }
-}
-
 // Inicializa Web Push
 let pushReady: Promise<void> | undefined;
 function ensureWebPush() {
@@ -1235,8 +1227,8 @@ app.get('/push/public-key', async (_req, res) => {
 app.post('/push/subscribe', async (req, res) => {
   try {
     const { subscription, role } = req.body;
-    const userId = customerId(req);
-    if (role !== 'admin' && !userId) return res.status(401).json({ error: 'Entre na sua conta para ativar os avisos.' });
+    if (role !== 'admin') return res.status(403).json({ error: 'Os avisos de pedidos são exclusivos do painel da Vovó.' });
+    if (!hasAdminSession(req) || req.headers['x-vovo-admin'] !== '1') return res.status(401).json({ error: 'Entre no painel para ativar os alertas.' });
     if (!subscription?.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
       return res.status(400).json({ error: 'Cadastro de notificações inválido.' });
     }
@@ -1248,13 +1240,8 @@ app.post('/push/subscribe', async (req, res) => {
     if (endpoint.protocol !== 'https:' || endpoint.port || endpoint.username || endpoint.password || !trustedHost) {
       return res.status(400).json({ error: 'Serviço de notificações não reconhecido.' });
     }
-    if (role === 'admin' && (!hasAdminSession(req) || req.headers['x-vovo-admin'] !== '1')) {
-      return res.status(401).json({ error: 'Entre no painel para ativar os alertas.' });
-    }
-    const existing = (await PushSubscriptionRepo.getAll()).find(sub => sub.endpoint === subscription.endpoint);
-    if (existing?.role === 'admin' && role !== 'admin') return res.status(409).json({ error: 'Este navegador está cadastrado para receber pedidos da loja.' });
     await ensureWebPush();
-    await PushSubscriptionRepo.add({ endpoint: subscription.endpoint, keys: subscription.keys, userId: role === 'admin' ? 'admin-user' : userId, role: role === 'admin' ? 'admin' : 'customer' });
+    await PushSubscriptionRepo.add({ endpoint: subscription.endpoint, keys: subscription.keys, userId: 'admin-user', role: 'admin' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -1630,21 +1617,6 @@ app.patch('/orders/:id/status', async (req, res) => {
     }
     await OrderRepo.updateStatus(String(req.params.id), status);
     
-    // Notifica Cliente
-    const order = await OrderRepo.getById(String(req.params.id));
-    if (order && order.userId) {
-      const statusMap: Record<string, string> = {
-        'pendente': 'Recebido',
-        'preparando': 'Em Preparo',
-        'saiu_entrega': 'Saiu para Entrega',
-        'concluido': 'Entregue',
-        'cancelado': 'Cancelado',
-        'recusado': 'Recusado'
-      };
-      const text = statusMap[status] || status;
-      backgroundNotification(notifyUser(order.userId, `Atualização do Pedido #${order.id.slice(-4)} `, `Seu pedido está agora: ${text.toUpperCase()}`));
-    }
-
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: String(e) });
@@ -1966,8 +1938,8 @@ app.post('/admin/broadcast-push', async (req, res) => {
   try {
     const { title, body } = req.body;
     const subscriptions = await PushSubscriptionRepo.getAll();
-    for (const sub of subscriptions) {
-      await sendPushNotification(sub, { title, body, url: '/' });
+    for (const sub of subscriptions.filter(subscription => subscription.role === 'admin')) {
+      await sendPushNotification(sub, { title, body, url: '/#vovo-secreta' });
     }
     res.json({ success: true });
   } catch (e) {

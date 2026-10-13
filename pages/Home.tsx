@@ -3,7 +3,7 @@ import { AppInstallButton } from '../components/AppInstall';
 import {CardPaymentReturn} from '../components/CardPayment';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Bell, BellOff, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
+import { ChefHat, ShoppingCart, ClipboardList, Store, Star, User, X, Instagram, Facebook, MessageSquare, Clock, AlertCircle, ArrowRight, Utensils, RefreshCw, Plus } from 'lucide-react';
 import { STORE_NAME, GAS_API_URL, PIX_KEY, WHATSAPP_NUMBER, STORE_ADDRESS, OPENING_HOURS, PLACEHOLDER_IMG } from '../constants/index';
 import { Product, CartItem, Order, User as UserType } from '../types/index';
 import { Toast } from '../components/UI';
@@ -16,7 +16,7 @@ import { storeAvailability, openingTime } from '../src/utils/store-hours';
 import { customerName, validCustomerName, localGuest } from '../src/utils/customer-name';
 import { CustomerDetails, lastCustomer, rememberCustomer } from '../src/utils/saved-checkout';
 
-const LOGO = "https://i.ibb.co/Rkt5c0zk/Del-cias-Da-Vov.png";
+const LOGO = "/store-logo.webp";
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -45,7 +45,6 @@ export default function Home() {
   const productsPollingRef = useRef<any>(null);
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isClosed, setIsClosed] = useState(false);
   const [isForceClosed, setIsForceClosed] = useState(false);
   const [isMaintenance, setIsMaintenance] = useState(false);
@@ -142,12 +141,6 @@ export default function Home() {
   useEffect(() => {
     trackVisit();
 
-    // Permission requests belong to the explicit "Ativar avisos" action.
-    if (typeof Notification !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'granted') {
-        setNotificationsEnabled(true);
-      }
-    }
   }, [user]);
 
   useEffect(() => {
@@ -240,8 +233,6 @@ export default function Home() {
   }, [dynamicConfigs]);
 
   useEffect(() => {
-    const savedNotify = localStorage.getItem('vovoh_notifications');
-    if (savedNotify === 'true') setNotificationsEnabled(true);
     const savedUser = localStorage.getItem('vovoh_user');
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
@@ -417,21 +408,6 @@ export default function Home() {
         }
         if (newStatus && newStatus !== order.status) {
           hasChanges = true;
-
-          if (notificationsEnabled) {
-            try {
-              const audio = new Audio('https://www.soundjay.com/button/sounds/button-3.mp3');
-              audio.play().catch(() => {});
-              if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-
-              if (Notification.permission === 'granted') {
-                new Notification("Delícias da Vovó", {
-                  body: `Pedido #${order.id.slice(-4)}: ${newStatus.toUpperCase()}`,
-                  icon: PLACEHOLDER_IMG
-                });
-              }
-            } catch(e) {}
-          }
 
           if (newStatus === 'concluido') {
              const fid = parseInt(localStorage.getItem('vovoh_fidelidade') || '0');
@@ -695,28 +671,6 @@ export default function Home() {
     } finally { submittingOrder.current = false; }
   };
 
-  const toggleNotifications = async () => {
-    if (typeof Notification === 'undefined' || !('Notification' in window)) {
-      setToast({ message: "No iPhone, instale pela tela inicial e abra pelo ícone para ativar os avisos.", type: 'error' });
-      return;
-    }
-
-    if (!notificationsEnabled) {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        setNotificationsEnabled(true);
-        localStorage.setItem('vovoh_notifications', 'true');
-        setToast({ message: "Avisos com o site aberto ativados.", type: 'success' });
-      } else {
-        setToast({ message: "Permita os avisos nas configurações do navegador.", type: 'error' });
-      }
-    } else {
-      setNotificationsEnabled(false);
-      localStorage.setItem('vovoh_notifications', 'false');
-      setToast({ message: "Notificações desativadas.", type: 'info' });
-    }
-  };
-
   const cartTotal = cart.reduce((acc, item) => {
     const itemPrice = Number(item.price) + (item.variation ? Number(item.variation.price) : 0) + (item.additionals || []).reduce((sum, additional) => sum + Number(additional.price), 0);
     return acc + (itemPrice * item.quantity);
@@ -822,14 +776,7 @@ export default function Home() {
           <div className="flex items-center gap-2 md:gap-3">
             <AppInstallButton compact />
             <ThemeSwitcher />
-            <button
-              onClick={toggleNotifications}
-              className={`min-w-11 min-h-11 flex items-center justify-center rounded-full transition-all border ${notificationsEnabled ? 'bg-vovoh-red/10 border-vovoh-red/20 text-vovoh-red' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-50'}`}
-              aria-label={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
-              title={notificationsEnabled ? "Desativar notificações" : "Ativar notificações"}
-            >
-              {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
-            </button>
+
 
             {/* Desktop User Profile Button */}
             <button

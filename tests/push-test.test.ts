@@ -11,7 +11,7 @@ test('admin delayed test acknowledges scheduling before delivery, requires sessi
   process.env.ADMIN_PASSWORD=randomUUID();process.env.ADMIN_SESSION_SECRET=randomUUID()+randomUUID();
   const vapid=webpush.generateVAPIDKeys();process.env.VAPID_PUBLIC_KEY=vapid.publicKey;process.env.VAPID_PRIVATE_KEY=vapid.privateKey;
   const endpoint='https://fcm.googleapis.com/fcm/send/local-test';
-  await fs.writeFile(path.join(process.env.TEST_DATA_DIR,'push_subscriptions.json'),JSON.stringify([{endpoint,role:'admin',userId:'admin-user',keys:{p256dh:'local',auth:'local'}}]));
+  await fs.writeFile(path.join(process.env.TEST_DATA_DIR,'push_subscriptions.json'),JSON.stringify([{endpoint,role:'admin',userId:'admin-user',keys:{p256dh:'local',auth:'local'}},{endpoint:endpoint+'-customer',role:'customer',userId:'local-customer',keys:{p256dh:'local',auth:'local'}}]));
   const {default:app}=await import('../api/index');const server=app.listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+((server.address() as any).port)+'/api',sent: any[]=[];
   const original=webpush.sendNotification;
@@ -20,6 +20,10 @@ test('admin delayed test acknowledges scheduling before delivery, requires sessi
   try {
     assert.equal((await request('/admin/test-push',{endpoint,delaySeconds:10})).status,401);
     const login=await request('/admin/login',{password:process.env.ADMIN_PASSWORD});assert.equal(login.status,200);const cookie=login.headers.get('set-cookie')!.split(';')[0];
+    assert.equal((await request('/push/subscribe',{role:'customer',subscription:{endpoint,keys:{p256dh:'local',auth:'local'}}},cookie)).status,403);
+    assert.equal((await request('/push/subscribe',{role:'admin',subscription:{endpoint,keys:{p256dh:'local',auth:'local'}}})).status,401);
+    assert.equal((await request('/admin/broadcast-push',{title:'Local test',body:'Local only'},cookie)).status,200);
+    assert.equal(sent.length,1);assert.equal(sent[0].subscription.endpoint,endpoint);sent.length=0;
     assert.equal((await request('/admin/test-push',{endpoint:'missing',delaySeconds:10},cookie)).status,404);
     assert.equal((await request('/admin/test-push',{endpoint,delaySeconds:600},cookie)).status,400);
     assert.equal((await request('/admin/test-push',{endpoint},cookie)).status,200);assert.equal(sent.length,1);

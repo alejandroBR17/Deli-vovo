@@ -1,11 +1,10 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name';
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
-import { Banknote, Bell } from 'lucide-react';
+import { Banknote } from 'lucide-react';
 import { PixBox } from './UI';
 import {CardPaymentBox} from './CardPayment';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
-import { subscribeToPush } from '../src/utils/push';
 import { lookupCep, formatCep } from '../src/utils/cep';
 import { SavedCheckoutDetails } from './SavedCheckoutDetails';
 import { PhoneInput } from './PhoneInput';
@@ -665,8 +664,6 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCancelOrder, onReceiveOrder, onReorder, onRetryPayment, onRefresh, dynamicConfigs }: any) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocus(dialogRef,isOpen,onClose);
-  const [activatingNotices, setActivatingNotices] = useState(false);
-  const [noticeMessage, setNoticeMessage] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -741,20 +738,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="button" aria-label="Ativar avisos do pedido" title="Ativar avisos do pedido" disabled={activatingNotices} onClick={async () => {
-              setActivatingNotices(true); setNoticeMessage('');
-              try {
-                if (!orders.some((order: any) => order.userId) || (selectedOrder && !selectedOrder.userId)) throw new Error('Avisos automáticos exigem um pedido feito com conta. Para este pedido, use Atualizar rastreio.');
-                if (typeof Notification === 'undefined') throw new Error('No iPhone, adicione à Tela de Início e abra pelo ícone (iOS 16.4 ou superior). Você também pode usar Atualizar rastreio.');
-                const permission = await Notification.requestPermission();
-                if (permission !== 'granted') throw new Error('Avisos não permitidos. Libere as notificações nas configurações do navegador para ativar.');
-                await subscribeToPush(selectedOrder?.userId, 'customer');
-                setNoticeMessage('Avisos cadastrados neste aparelho.');
-              } catch (error) { setNoticeMessage(error instanceof Error ? error.message : 'Não foi possível ativar os avisos.'); }
-              finally {setActivatingNotices(false);}
-            }} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:scale-90 disabled:opacity-50">
-              {activatingNotices ? <Loader2 size={20} className="animate-spin" /> : <Bell size={20} />}
-            </button>
+
             <button aria-label="Atualizar rastreio" title="Atualizar rastreio" onClick={onRefresh} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:rotate-180 duration-500">
               <RefreshCw size={20} />
             </button>
@@ -764,7 +748,6 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
 
         <div className="flex-grow overflow-y-auto overscroll-contain touch-pan-y min-h-0 p-4 sm:p-6 space-y-8 bg-[#F5F5F7] no-scrollbar pb-32">
             
-            {noticeMessage && <p role="status" className="p-4 rounded-2xl bg-white border border-gray-200 text-sm text-gray-700">{noticeMessage}</p>}
             {!selectedOrder ? (
               <div className="space-y-4">
                 <h3 className="text-lg font-black text-vovoh-dark px-2">Seus Pedidos Ativos</h3>

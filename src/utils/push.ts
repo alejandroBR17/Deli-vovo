@@ -10,7 +10,8 @@ async function readyRegistration() {
   return ensureServiceWorker();
 }
 export async function getPushSubscription() { return (await readyRegistration()).pushManager.getSubscription(); }
-export async function subscribeToPush(userId?: string, role: 'admin' | 'customer' = 'customer') {
+export async function subscribeToPush(userId?: string, role: 'admin' | 'customer' = 'admin') {
+  if(role !== 'admin') throw new Error('Os avisos de pedidos são exclusivos do painel da Vovó.');
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') throw new Error('Permita as notificações no navegador primeiro.');
   const registration = await readyRegistration();
   const response = await fetch(`${GAS_API_URL}/push/public-key`);

@@ -95,7 +95,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
             <div className="flex items-center gap-4">
               <div className="relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-vovoh-red/5 flex items-center justify-center">
                 <ChefHat size={32} className="text-vovoh-red" aria-hidden="true" />
-                {!logoFailed && <img src={logo} width={80} height={80} alt="Logo Delícias da Vovó" onError={() => setLogoFailed(true)} className="absolute inset-0 w-full h-full object-contain" />}
+                {!logoFailed && <img src={logo} width={80} height={80} fetchPriority="high" decoding="async" alt="Logo Delícias da Vovó" onError={() => setLogoFailed(true)} className="absolute inset-0 w-full h-full object-contain" />}
                 <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-vovoh-gold text-vovoh-dark px-2 py-1 rounded-full text-[10px] font-bold shadow-sm">Artesanal</span>
               </div>
               <div className="min-w-0"><p className="text-xs md:text-sm font-semibold text-vovoh-red mb-1">Da cozinha da vovó para você</p><h1 className="font-sans text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-vovoh-dark leading-tight">{String(dynamicConfigs?.store_name || dynamicConfigs?.shop_name || STORE_NAME).replace(/<[^>]*>/g, ' ').trim()}</h1></div>

@@ -1,5 +1,13 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Imagem leve e avisos exclusivos da Vovó — 12/10/2026
+
+Usuário apontou lentidão da imagem Artesanal e solicitou notificações/som de pedidos somente para a Vovó. Origem era PNG externo i.ibb.co, 1080×1080 e 2.135.664 bytes, exibido com 64–80 px. Mesma imagem otimizada como WebP local 160×160 (9.730 bytes, redução de aproximadamente 99,5%), suficiente para 80 px em tela de densidade 2×, carregada com prioridade alta; sem servidor de imagem externo. Original transitório removido, sem publicar o PNG de 2 MB.
+
+Clientes continuam com rastreio/toasts na tela, mas sem áudio, vibração, notificações do sistema ou botões que pedem ativação. Retirado cadastro de push do rastreio e ajustado guia de instalação. API de inscrição recusa role customer (403) e exige sessão/cabeçalho administrativos para admin (401 sem sessão). Novos pedidos já eram enviados apenas a admin; removidos envios de mudança de status a clientes e restringido broadcast a inscrições admin, inclusive ignorando cadastros customer antigos. Campainha local da cozinha preservada e protegida pela autenticação do painel.
+
+Validação: build/TypeScript; 15 testes de pedidos e um teste de push passaram. Push usa dois destinatários locais (admin/customer), garante broadcast só admin, rejeição de inscrição customer e admin sem sessão, e teste imediato/retardado continua chegando só ao admin. Navegador local confirma logo carregada (160 px), atualização real de status simulada pela API sem Audio/Notification mesmo com preferência antiga ligada, e ausência dos botões de avisos para cliente. Nenhuma cobrança ou pedido fictício em produção. Catálogo/configurações e zero pedidos atuais de produção foram preservados privadamente antes da implantação.
+
 ## Produção autorizada e publicada — 12/10/2026
 
 O responsável autorizou finalizar para uso da família e esclareceu a sequência: configurar pagamentos reais primeiro, depois publicar em produção. Credencial real Mercado Pago novamente conferida pelo cliente do servidor via GET /users/me: conta normal, recebedor 354858187, sem criar preferência/cobrança. Configuradas variáveis exclusivamente Production (token real, vendedor, modo live, domínio de retorno fixo https://delivovo.vercel.app, assinatura e ativação), senha inicial/sessão/push; Stripe antigo desativado somente para builds novos de produção. Preview permanece em modo test. Credenciais não entram no Git.
