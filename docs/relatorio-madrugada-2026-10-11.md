@@ -1,5 +1,11 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Ativação de recuperação por Gmail — 13/10/2026
+
+Responsável criou senha de aplicativo Google e salvou no arquivo privado autorizado. Login SMTP real verificado com TLS na porta 465, sem envio de mensagem; valores não exibidos nem versionados. Seis variáveis AUTH configuradas somente no projeto delivovo/Production; senha sensitive, demais encrypted. Preview permanece sem chave Gmail. Política agora informa Google/Gmail, destinatário e conteúdo/link temporário para recuperação; versão dos documentos aumentada para 2026-10-13.2, exigindo novo aceite antes do próximo pedido. Nenhuma alteração de cadastro, catálogo, pedidos, taxas ou pagamentos.
+
+Quatro testes de integração/suites de senha, recuperação, envio e Turso passaram; TypeScript/build passou com aviso anterior de bundle. Snapshot privado pré-publicação preserva configurações reais, catálogo zero e pedidos zero. Autenticação SMTP comprovada não garante recebimento na caixa postal; teste do link com conta legítima ainda depende do responsável. Sem contas fictícias remotas, cobranças ou e-mails a terceiros. Publicação e conferência online registradas após conclusão abaixo.
+
 ## Senha de 8 caracteres, validação ao pausar e recuperação — 13/10/2026
 
 Usuário questionou mínimo de 15 (preferência por experiência comum de 8) e pediu erros antes de clicar em cadastrar, Esqueci minha senha e troca. Mínimo ajustado para 8, máximo 128, confirmação mantida; frases/espaços permitidos sem composição obrigatória, com aviso de senhas comuns e repetidas. Inputs não truncam silenciosamente no limite de 128; API recusa valores excessivos. Validação após 650ms sem digitar e ao sair do campo, para senha/confirmação no cadastro e ferramentas de senha; timer cancelado ao fechar/trocar tela, sem chamadas ao banco por digitação. Erros do servidor focam campo pertinente.

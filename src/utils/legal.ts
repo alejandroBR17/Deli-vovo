@@ -1,4 +1,4 @@
-export const LEGAL_VERSION='2026-10-13.1';
+export const LEGAL_VERSION='2026-10-13.2';
 export function currentLegalReceipt(value:any,userId:string) {
  return value?.termsVersion===LEGAL_VERSION && value?.privacyVersion===LEGAL_VERSION && value?.userId===userId && Number.isFinite(Date.parse(value?.acceptedAt)) ? value : null;
 }
