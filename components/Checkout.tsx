@@ -8,7 +8,7 @@ import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { lookupCep, formatCep } from '../src/utils/cep';
 import { SavedCheckoutDetails } from './SavedCheckoutDetails';
 import { PhoneInput } from './PhoneInput';
-import {LEGAL_VERSION,guestNotice} from '../src/utils/legal';
+import {LEGAL_VERSION,guestNotice,currentLegalReceipt} from '../src/utils/legal';
 import {localGuest} from '../src/utils/customer-name';
 import {shopDate,validateSchedule} from '../src/utils/order-schedule';
 import {storeAvailability} from '../src/utils/store-hours';
@@ -17,8 +17,12 @@ import { addressParts, readSavedCustomers, rememberCustomer, SavedCustomer, Cust
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, ensureIdentity, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
   const [legalAccepted,setLegalAccepted]=useState(false);
+  const [savedAcceptance,setSavedAcceptance]=useState<any>(null);
+  const [savingAcceptance,setSavingAcceptance]=useState(false);
+  const rememberedAcceptance=currentLegalReceipt(user?.legalAcceptance,user?.id)||currentLegalReceipt(savedAcceptance,user?.id);
+  const hasLegalAcceptance=!!rememberedAcceptance||legalAccepted;
   useEffect(()=>{if(isOpen)setLegalAccepted(false);},[isOpen,user?.id]);
-  const legalAcceptance={accepted:legalAccepted,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION};
+  const legalAcceptance={accepted:hasLegalAcceptance,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION};
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocus(dialogRef,isOpen,onClose);
   const [configStatus, setConfigStatus] = useState<'loading'|'ready'|'error'>('loading');
@@ -278,7 +282,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     if (submitLock.current) return false;
     submitLock.current = true; setSubmitting(true);
     try {
-    if(!user || !legalAccepted){showMsg('Identifique-se e aceite os documentos antes de pedir.','error');setStep('details');return false;}
+    if(!user || !hasLegalAcceptance){showMsg('Identifique-se e aceite os documentos antes de pedir.','error');setStep('details');return false;}
     if (!validCustomerName(customer.name)) { showMsg('Informe seu nome antes de enviar o pedido.', 'error'); setStep('details'); return false; }
     let scheduledTo = undefined;
     if (isScheduled) {
@@ -562,7 +566,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
               
               {localGuest(user) && <p role="note" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{guestNotice}</p>}
               {!user && <button type="button" onClick={openAuth} className="w-full min-h-12 rounded-2xl border border-vovoh-red p-4 font-bold text-vovoh-red">Entrar ou continuar como convidado</button>}
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2"><label className="flex gap-3 items-start text-sm leading-relaxed"><input type="checkbox" checked={legalAccepted} onChange={e=>setLegalAccepted(e.target.checked)} className="mt-1 w-5 h-5 shrink-0 accent-vovoh-red"/><span>Li e aceito os Termos de Uso e estou ciente da Política de Privacidade.</span></label><div className="flex flex-wrap gap-4 text-sm font-bold text-vovoh-red"><a href="/#termos" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Termos (nova aba)</a><a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Privacidade (nova aba)</a></div><p className="text-xs text-gray-500">Seus dados serão usados para atender o pedido. Isto não autoriza publicidade.</p></div>
+              <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-paper)] text-[var(--app-ink)] p-4 space-y-2">{rememberedAcceptance?<p role="status" className="flex gap-2 items-center text-sm font-bold"><CheckCircle2 size={18} className="shrink-0 text-green-600"/>Documentos já aceitos. Você só precisa aceitar novamente se houver uma nova versão.</p>:<label className="flex gap-3 items-start text-sm leading-relaxed"><input type="checkbox" checked={legalAccepted} onChange={e=>setLegalAccepted(e.target.checked)} className="mt-1 w-5 h-5 shrink-0 accent-vovoh-red"/><span>Li e aceito os Termos de Uso e estou ciente da Política de Privacidade.</span></label>}<div className="flex flex-wrap gap-4 text-sm font-bold text-vovoh-red"><a href="/#termos" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Termos (nova aba)</a><a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Privacidade (nova aba)</a></div><p className="text-xs text-gray-500">Seus dados serão usados para atender o pedido. Isto não autoriza publicidade.</p></div>
               <div className="flex gap-3 pt-4">
                  <button onClick={() => setStep('cart')} className="px-6 py-5 bg-white border border-gray-200 text-gray-500 font-black rounded-2xl text-sm active:scale-95 transition-all">Voltar</button>
                  <button 
@@ -590,15 +594,21 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                          validateSchedule(`${scheduledDate}T${scheduledTime}:00`,dynamicConfigs);
                        } catch(error) { setAddressError(error instanceof Error ? error.message : 'Confira o agendamento.'); return; }
                      }
-                     if(!legalAccepted){setAddressError('Leia e aceite os Termos de Uso e confirme a ciência da Política de Privacidade.');return;}
+                     if(!hasLegalAcceptance){setAddressError('Leia e aceite os Termos de Uso e confirme a ciência da Política de Privacidade.');return;}
                      if(!await ensureIdentity())return;
+                     if(!rememberedAcceptance){
+                       setSavingAcceptance(true);
+                       try {const response=await fetch('/api/auth/legal-acceptance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({legalAcceptance}),signal:AbortSignal.timeout(10000)});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||'Não foi possível registrar o aceite.');if(!currentLegalReceipt(result.legalAcceptance,user?.id))throw new Error('Confira sua identificação antes de pagar.');setSavedAcceptance(result.legalAcceptance);}
+                       catch(error){setAddressError(error instanceof Error?error.message:'Não foi possível registrar o aceite.');return;}
+                       finally{setSavingAcceptance(false);}
+                     }
                      rememberCustomer(customer);
                      setStep('payment');
                    }} 
-                   disabled={configStatus !== 'ready'}
+                   disabled={configStatus !== 'ready'||savingAcceptance}
                    className="flex-grow py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-200 text-sm active:scale-95 transition-all disabled:opacity-50"
                  >
-                   Ir para Pagamento
+                   {savingAcceptance?'Registrando aceite…':'Ir para Pagamento'}
                  </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name.js';
-import {LEGAL_VERSION,legalReceipt} from '../src/utils/legal.js';
+import {LEGAL_VERSION,legalReceipt,currentLegalReceipt} from '../src/utils/legal.js';
 import {RevisionCache} from '../server/revision-cache.js';
 import { adminCredentialStore } from '../server/admin-credentials.js';
 import { MercadoPago, validMercadoPagoSignature } from '../server/mercado-pago.js';
@@ -132,6 +132,7 @@ export interface User {
   phone?: string;
   address?: string;
   cart?: string;
+  legalAcceptance?: ReturnType<typeof legalReceipt>;
 }
 
 export interface Config {
@@ -1272,7 +1273,9 @@ app.get('/payments/config',(_req,res)=>{
 const paymentStartLimiter=rateLimit({windowMs:15*60*1000,limit:12,standardHeaders:'draft-7',legacyHeaders:false});
 async function acceptNewOrder(req:express.Request,res:express.Response) {
   const id=customerId(req);
-  if(!id || !await UserRepo.getById(id)){res.status(401).json({error:'Entre com sua conta ou identifique-se como convidado antes de pedir.'});return null;}
+  const user=id?await UserRepo.getById(id):null;
+  if(!id || !user){res.status(401).json({error:'Entre com sua conta ou identifique-se como convidado antes de pedir.'});return null;}
+  const previous=currentLegalReceipt(user.legalAcceptance,id);if(previous)return previous;
   try {return legalReceipt(req.body.legalAcceptance,id);}
   catch(error){res.status(400).json({error:error instanceof Error?error.message:'Confira os documentos do pedido.'});return null;}
 }
@@ -1683,6 +1686,17 @@ app.post('/auth/guest',async(req,res)=>{
     if(previous)await UserRepo.update(user);else await UserRepo.create(user);
     setCustomerSession(res,user.id);res.setHeader('Cache-Control','no-store');return res.json({success:true,user:publicUser(user)});
   } catch {return res.status(503).json({error:'Não foi possível registrar seu acesso de convidado. Tente novamente.'});}
+});
+app.post('/auth/legal-acceptance',async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  try {
+    const id=customerId(req),user=id?await UserRepo.getById(id):null;
+    if(!id||!user)return res.status(401).json({error:'Identifique-se antes de aceitar os documentos.'});
+    const previous=currentLegalReceipt(user.legalAcceptance,id);
+    let receipt=previous;
+    if(!receipt){try{receipt=legalReceipt(req.body.legalAcceptance,id);}catch{return res.status(400).json({error:'Leia e aceite a versão atual dos documentos.'});}await UserRepo.update({id,legalAcceptance:receipt});}
+    return res.json({success:true,legalAcceptance:receipt});
+  } catch{return res.status(503).json({error:'Não foi possível registrar o aceite. Tente novamente antes de pagar.'});}
 });
 app.post('/auth/logout', (_req, res) => { res.clearCookie('vovo_customer_session', { path: '/' }); res.json({ success: true }); });
 

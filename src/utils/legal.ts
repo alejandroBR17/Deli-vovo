@@ -1,4 +1,7 @@
 export const LEGAL_VERSION='2026-10-13.1';
+export function currentLegalReceipt(value:any,userId:string) {
+ return value?.termsVersion===LEGAL_VERSION && value?.privacyVersion===LEGAL_VERSION && value?.userId===userId && Number.isFinite(Date.parse(value?.acceptedAt)) ? value : null;
+}
 export const guestNotice='Como convidado, seu acesso fica vinculado a este navegador. Ao apagar os dados, encerrar a sessão ou trocar de aparelho, você pode perder o acesso ao perfil e ao histórico. Os pedidos enviados continuam registrados pela loja. Não há recuperação por senha para convidados.';
 export function legalReceipt(value:unknown,userId:string) {
  const input=value as {accepted?:unknown;termsVersion?:unknown;privacyVersion?:unknown}|null;

@@ -46,6 +46,13 @@ test('empty Turso authenticates new customers without falling back to local file
   for(const [key,value] of Object.entries({opening_start:'00:00',opening_end:'23:59',working_days:'[0,1,2,3,4,5,6]'}))await client.execute({sql:'INSERT INTO configs(id,payload) VALUES (?,?)',args:[key,JSON.stringify({value})]});
   const accepted=await post('/orders',{...candidate,legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION,acceptedAt:'forged',userId:'forged'}},guestCookie);assert.equal(accepted.status,200,await accepted.text());
   const saved=JSON.parse(String((await client.execute('SELECT payload FROM orders')).rows[0].payload));assert.equal(saved.userId,guestUser.id);assert.equal(saved.legalAcceptance.userId,guestUser.id);assert.equal(saved.legalAcceptance.termsVersion,LEGAL_VERSION);assert.ok(!Number.isNaN(Date.parse(saved.legalAcceptance.acceptedAt)));
+  assert.equal((await post('/auth/legal-acceptance',{})).status,401);
+  assert.equal((await post('/auth/legal-acceptance',{},guestCookie)).status,400);
+  const receiptResponse=await post('/auth/legal-acceptance',{legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION,acceptedAt:'forged',userId:'forged'}},guestCookie);assert.equal(receiptResponse.status,200);const receipt=(await receiptResponse.json()).legalAcceptance;assert.equal(receipt.userId,guestUser.id);assert.notEqual(receipt.acceptedAt,'forged');
+  assert.deepEqual((await(await post('/auth/legal-acceptance',{},guestCookie)).json()).legalAcceptance,receipt);
+  const restored=(await(await fetch(base+'/auth/session',{headers:{cookie:guestCookie}})).json()).user;assert.deepEqual(restored.legalAcceptance,receipt);
+  const nextId=randomUUID();assert.equal((await post('/orders',{...candidate,id:nextId},guestCookie)).status,200);assert.deepEqual(JSON.parse(String((await client.execute({sql:'SELECT payload FROM orders WHERE id=?',args:[nextId]})).rows[0].payload)).legalAcceptance,receipt);
+  const oldProfile={...restored,legalAcceptance:{...receipt,termsVersion:'old'}};await client.execute({sql:'UPDATE users SET payload=? WHERE id=?',args:[JSON.stringify(oldProfile),guestUser.id]});assert.equal((await post('/orders',{...candidate,id:randomUUID()},guestCookie)).status,400);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(directory,'users.json'),'utf8')),[]);
  } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));closeDatabase();client.close();assert.equal(path.dirname(directory),os.tmpdir());assert.ok(path.basename(directory).startsWith('vovo-auth-'));await fs.rm(directory,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
 });
