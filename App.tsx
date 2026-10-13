@@ -19,9 +19,9 @@ export default function App() {
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc) metaDesc.setAttribute('content', 'Painel de gestão operacional, KDS de cozinha, pedidos e financeiro da Delícias da Vovó Grazy.');
       } else {
-        document.title = "Delícias da Vovó Grazy  | Salgados, Empanadas & Doces";
+        document.title = "Delícias da Vovó Grazy  | Salgados & Doces";
         const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) metaDesc.setAttribute('content', 'O melhor tempero da cidade! Salgados fritos na hora, empanadas autênticas e Massa com tempero de Mãe.');
+        if (metaDesc) metaDesc.setAttribute('content', 'O melhor tempero da cidade! Salgados fritos na hora e massa com tempero de Mãe.');
       }
     };
     

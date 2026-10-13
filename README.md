@@ -27,7 +27,7 @@ O **Delícias da Vovó Grazy** foi concebido para resolver os gargalos reais de 
 ## 📱 Funcionalidades
 
 ### 🛍️ Área do Cliente (App Mobile & Web)
-- **Catálogo Inteligente:** Filtros por categoria (Fritos, Assados, Empanadas Argentinas, Doces e Bebidas), fotos com zoom e cálculo de porções.
+- **Catálogo Inteligente:** Filtros por categoria (Fritos, Assados, Doces e Bebidas), fotos com zoom e cálculo de porções.
 - **Personalização de Pedidos:** Seleção de complementos, molhos e observações para a cozinha.
 - **Cálculo Dinâmico de Entrega:** Integração com base de bairros e CEP para cálculo automático de taxa e tempo estimado.
 - **Agendamento Inteligente:** Possibilidade de pedir para agora ou agendar entrega para datas e horários futuros.

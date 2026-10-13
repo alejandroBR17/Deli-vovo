@@ -747,7 +747,7 @@ export default function Home() {
             <div className="w-10 h-10 bg-vovoh-red rounded-xl flex items-center justify-center text-white shadow-lg rotate-3 group-active:scale-95 transition-transform"><ChefHat size={20} /></div>
             <div>
               <span className="text-lg md:text-xl font-bold text-vovoh-dark tracking-tight leading-none">Vovó Grazy</span>
-              <p className="text-[8px] md:text-[9px] font-black text-vovoh-red uppercase tracking-[0.2em] mt-0.5">Salgados & Empanadas</p>
+              <p className="text-[8px] md:text-[9px] font-black text-vovoh-red uppercase tracking-[0.2em] mt-0.5">Salgados & Doces</p>
             </div>
           </button>
 

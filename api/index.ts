@@ -1695,7 +1695,8 @@ app.post('/auth/forgot-password',rateLimit({windowMs:15*60*1000,limit:5,legacyHe
   const email=typeof req.body.email==='string'?normalizeEmail(req.body.email):'';
   if(!validEmail(email))return res.status(400).json({error:'Confira o e-mail da sua conta.'});
   if(!db||!passwordEmailReady())return res.status(503).json({error:'A recuperação por e-mail ainda não está disponível. Tente mais tarde.'});
-  const task=(async()=>{const user=await UserRepo.findByEmail(email);if(!user?.password||user.id.startsWith('CONV-'))return;const token=await new PasswordRecovery(db.client).issue({id:user.id,password:user.password});if(token)await sendPasswordRecovery(email,token);})().catch(()=>console.error('Falha no processamento de recuperação de senha.'));
+  const emailTheme=req.body.theme==='dark'?'dark':'light';
+  const task=(async()=>{const user=await UserRepo.findByEmail(email);if(!user?.password||user.id.startsWith('CONV-'))return;const token=await new PasswordRecovery(db.client).issue({id:user.id,password:user.password});if(token)await sendPasswordRecovery(email,token,emailTheme);})().catch(()=>console.error('Falha no processamento de recuperação de senha.'));
   if(isVercel)waitUntil(task);else void task;
   return res.json({success:true,message:'Solicitação recebida. Se houver uma conta com esse e-mail, enviaremos um link. Confira também a pasta de spam.'});
 });

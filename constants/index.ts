@@ -14,7 +14,6 @@ export const PRODUCTS: Product[] = [];
 
 export const CATEGORIES = [
   { id: 'todos', label: 'Todos' },
-  { id: 'argentinos', label: ' Do Vovô' },
   { id: 'combos', label: 'Combos Festa' },
   { id: 'fritos', label: 'Fritos' },
   { id: 'assados', label: 'Assados' },
