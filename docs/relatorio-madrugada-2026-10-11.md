@@ -1,5 +1,13 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## E-mail com identidade visual e revisão de recuperação — 13/10/2026
+
+Usuário confirmou recebimento do e-mail Gmail e redefinição real concluída, mas apontou conteúdo simples. Novo template multipart HTML/texto com cores vermelho/creme, título da loja, botão de redefinição, duração/uso único, aviso para ignorar solicitação alheia, proteção do link e conferência do domínio. HTML usa tabelas/estilos inline para clientes de e-mail, sem imagens externas, fontes remotas, pixels ou scripts; versão texto mantém as instruções. URL usa origem HTTPS configurada, token codificado e escape HTML. Sem novo fornecedor ou mudança de finalidade; versão legal .2 mantida.
+
+Revisão: saber e-mail não permite redefinir sem token enviado à caixa cadastrada; hash-only, expiração 30min, uso único atômico, vínculo ao hash anterior e invalidação das sessões preservados. E-mail inexistente não gera token/envio/conta, e a resposta ao navegador é idêntica. Teste API/SQLite ampliado comprova isso com SMTP simulado e identidade exclusivamente local. Cadastro ainda não confirma posse do e-mail e nome/telefone são autodeclarados; esclarecido ao usuário, sem prometer comprovação de identidade ou invulnerabilidade. Proteção da caixa postal e do link é necessária; confirmação do e-mail no cadastro continua melhoria futura.
+
+Validação: quatro testes/suites de recuperação/template/API passaram, build/TypeScript passou. Template renderizado em 320/390/700 sem overflow, links corretos e zero requisições externas; imagem de 390 revisada. HTML real em Gmail/iOS/Outlook pode variar e precisa da próxima solicitação legítima do usuário; nenhum e-mail extra foi enviado pelo agente. Snapshots privados de configurações/catalogo/pedidos antes da publicação, sem alterações comerciais, cobranças ou contas fictícias remotas. Publicação/conferência registradas abaixo ao concluir.
+
 ## Ativação de recuperação por Gmail — 13/10/2026
 
 Responsável criou senha de aplicativo Google e salvou no arquivo privado autorizado. Login SMTP real verificado com TLS na porta 465, sem envio de mensagem; valores não exibidos nem versionados. Seis variáveis AUTH configuradas somente no projeto delivovo/Production; senha sensitive, demais encrypted. Preview permanece sem chave Gmail. Política agora informa Google/Gmail, destinatário e conteúdo/link temporário para recuperação; versão dos documentos aumentada para 2026-10-13.2, exigindo novo aceite antes do próximo pedido. Nenhuma alteração de cadastro, catálogo, pedidos, taxas ou pagamentos.
