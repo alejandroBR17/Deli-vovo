@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import Home from './pages/Home';
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
 
 
 export default function App() {
@@ -29,10 +30,11 @@ export default function App() {
   }, []);
 
   const isAdmin = currentHash === '#vovo-secreta';
+  const legal = currentHash === '#termos' ? 'terms' : currentHash === '#privacidade' ? 'privacy' : null;
 
   return (
     <div data-surface={isAdmin ? "admin" : "customer"} className="min-h-screen app-shell selection:bg-vovoh-red selection:text-white">
-      {isAdmin ? (
+      {legal ? <Suspense fallback={<p role="status" className="p-6">Abrindo documento...</p>}><LegalPage document={legal}/></Suspense> : isAdmin ? (
         <div className="w-full min-h-screen bg-vovoh-dark text-white">
           <Suspense fallback={<p role="status" className="p-6 text-center">Abrindo o painel...</p>}><AdminPage /></Suspense>
         </div>

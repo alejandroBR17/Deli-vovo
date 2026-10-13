@@ -1,3 +1,4 @@
+import {LEGAL_VERSION} from '../src/utils/legal';
 import { before, after, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
@@ -43,6 +44,7 @@ after(async () => {
   await rm(directory, { recursive: true });
 });
 function request(url: string, body?: any, headers: Record<string, string> = {}, method?: string) {
+  if(url==='/orders' && body!==undefined){body={legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION},...body};headers={Cookie:customerCookie,...headers};}
   return fetch(base + url, { method: method || (body === undefined ? 'GET' : 'POST'),
     headers: { 'Content-Type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
 }

@@ -1,3 +1,4 @@
+import {LEGAL_VERSION} from '../src/utils/legal';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createClient} from '@libsql/client';
@@ -62,6 +63,7 @@ test('API creates no order before approval, verifies signed provider response, r
   const input={id,customer:{name:'Local Customer',phone:'41999999999',address:'Local test pickup address'},type:'retirada',total:6.5,items:[{id:'local-product',quantity:1}]};
   const post=(route:string,body:any,h:any=headers)=>originalFetch(base+route,{method:'POST',headers:h,body:JSON.stringify(body)});
   try {
+    const guest=await post('/auth/guest',{name:input.customer.name,phone:input.customer.phone});assert.equal(guest.status,200);Object.assign(headers,{Cookie:guest.headers.get('set-cookie')!.split(';')[0]});Object.assign(input,{legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION}});
     const start=await post('/payments/mercado-pago/checkout',input);assert.equal(start.status,200,await start.text());
     const retry=await post('/payments/mercado-pago/checkout',input);assert.equal(retry.status,200);assert.equal(preferenceCalls,1);
     assert.equal((await client.execute('SELECT count(*) AS count FROM orders')).rows[0].count,0);

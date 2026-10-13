@@ -1,3 +1,4 @@
+import {LEGAL_VERSION} from '../src/utils/legal';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -62,7 +63,7 @@ test('API and Apps Script preserve customer credentials, order details and dupli
     const seedLogin = await post('/admin/login', { password: process.env.ADMIN_PASSWORD }, { 'X-Vovo-Admin': '1' });
     const seedCookie = seedLogin.headers.get('set-cookie')!.split(';')[0];
     await post('/products', { id: 'test', name: 'Teste', price: 12 }, { Cookie: seedCookie, 'X-Vovo-Admin': '1' });
-    const body = { type: 'retirada', id: randomUUID(), customer: { name: 'Cliente planilha', phone: '41999999999', address: 'Endereço teste' }, total: 12, items: [{ id: 'test', quantity: 1 }], scheduledTo: '2099-01-01T15:00:00-03:00', itemsSummary: '1x Teste' };
+    const body = { legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION}, type: 'retirada', id: randomUUID(), customer: { name: 'Cliente planilha', phone: '41999999999', address: 'Endereço teste' }, total: 12, items: [{ id: 'test', quantity: 1 }], scheduledTo: '2099-01-01T15:00:00-03:00', itemsSummary: '1x Teste' };
     const key = randomUUID();
     const headers = { 'X-Order-Request': key, Cookie: customerCookie };
     const created = await post('/orders', body, headers);

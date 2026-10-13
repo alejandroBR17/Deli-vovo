@@ -1,3 +1,4 @@
+import {LEGAL_VERSION} from '../src/utils/legal';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createClient } from '@libsql/client';
@@ -137,7 +138,8 @@ test('API stores orders durably, isolates images from catalog responses and prot
     await client.execute('DROP TRIGGER fail_config_save');
     const id=randomUUID(); const nonce=randomUUID();
     const body={id,type:'retirada',customer:{name:'Teste',phone:'41999999999',address:'Endereço fictício'},items:[{id:'test-product',quantity:1}],total:10};
-    const receipt=await request('/orders',body,{'X-Order-Request':nonce});
+    const guest=await request('/auth/guest',{name:'Teste Local',phone:'41999999999'});assert.equal(guest.status,200);const guestCookie=guest.headers.get('set-cookie')!.split(';')[0];Object.assign(body,{legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION}});
+    const receipt=await request('/orders',body,{'X-Order-Request':nonce,Cookie:guestCookie});
     assert.equal(receipt.status,200); assert.equal((await receipt.json()).success,true);
     assert.equal((await request('/orders',body,{'X-Order-Request':nonce})).status,200);
     assert.equal((await database.rows('SELECT count(*) AS count FROM orders'))[0].count,1);
@@ -155,7 +157,7 @@ test('API stores orders durably, isolates images from catalog responses and prot
     assert.equal(persisted.status,'entrega');assert.equal(persisted.total,10);assert.equal(persisted.payment.paid,true);assert.ok(persisted.payment.verifiedAt);
     // DB errors must fail, never acknowledge a write to ephemeral filesystem storage.
     await client.execute('DROP TABLE orders');
-    const failure=await request('/orders',{...body,id:randomUUID()},{'X-Order-Request':randomUUID()});
+    const failure=await request('/orders',{...body,id:randomUUID()},{'X-Order-Request':randomUUID(),Cookie:guestCookie});
     assert.equal(failure.status,500);
     await assert.rejects(separateImage(database,'data:image/png;base64,'));
   } finally {

@@ -1,3 +1,4 @@
+import {LegalSettings} from '../components/LegalSettings';
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
 import { AppInstallButton } from '../components/AppInstall';
 import { AdminSecurity } from '../components/AdminSecurity';
@@ -61,7 +62,7 @@ export default function AdminPage() {
   const historyOrders = useRef<any[]>([]);
   const [financePeriod, setFinancePeriod] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [isKDS, setIsKDS] = useState(false);
-  const [configTab, setConfigTab] = useState<'geral' | 'entrega' | 'conteudo' | 'atendimento' | 'endereco' | 'pagamentos' | 'avisos' | 'seguranca'>('geral');
+  const [configTab, setConfigTab] = useState<'geral' | 'entrega' | 'conteudo' | 'atendimento' | 'endereco' | 'pagamentos' | 'avisos' | 'seguranca' | 'documentos'>('geral');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [manualOverrideOrderId, setManualOverrideOrderId] = useState<string | null>(null);
   
@@ -1514,7 +1515,7 @@ export default function AdminPage() {
               </div>
               
               <nav aria-label="Seções das configurações" className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full min-w-0">
-                {([['geral','Loja'],['pagamentos','Pagamentos'],['entrega','Frete'],['atendimento','Atendimento'],['endereco','Endereço'],['conteudo','Conteúdo'],['avisos','Avisos'],['seguranca','Segurança']] as const).map(([id,label]) => <button key={id} type="button" aria-pressed={configTab === id} onClick={() => setConfigTab(id)} className={`min-w-0 py-3 px-2 rounded-xl text-sm font-bold border ${configTab === id ? 'bg-white/10 border-white/30' : 'border-white/10 text-zinc-400'}`}>{label}</button>)}
+                {([['geral','Loja'],['pagamentos','Pagamentos'],['entrega','Frete'],['atendimento','Atendimento'],['endereco','Endereço'],['conteudo','Conteúdo'],['avisos','Avisos'],['seguranca','Segurança'],['documentos','Documentos']] as const).map(([id,label]) => <button key={id} type="button" aria-pressed={configTab === id} onClick={() => setConfigTab(id)} className={`min-w-0 py-3 px-2 rounded-xl text-sm font-bold border ${configTab === id ? 'bg-white/10 border-white/30' : 'border-white/10 text-zinc-400'}`}>{label}</button>)}
               </nav>
             </div>
 
@@ -1610,6 +1611,7 @@ export default function AdminPage() {
 </section>}
 
 {configTab === 'seguranca' && <AdminSecurity />}
+{configTab === 'documentos' && <LegalSettings configs={configs} onChange={setConfigs} onSave={settingsProps.onSave}/>}
 {configTab === 'pagamentos' && <PaymentSettings {...settingsProps} />}
               {configTab === 'entrega' && <DeliverySettings {...settingsProps} />}
               {configTab === 'atendimento' && <HoursSettings {...settingsProps} />}

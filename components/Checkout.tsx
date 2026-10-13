@@ -8,12 +8,17 @@ import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { lookupCep, formatCep } from '../src/utils/cep';
 import { SavedCheckoutDetails } from './SavedCheckoutDetails';
 import { PhoneInput } from './PhoneInput';
+import {LEGAL_VERSION,guestNotice} from '../src/utils/legal';
+import {localGuest} from '../src/utils/customer-name';
 import {shopDate,validateSchedule} from '../src/utils/order-schedule';
 import {storeAvailability} from '../src/utils/store-hours';
 import {useModalFocus} from '../src/hooks/use-modal-focus';
 import { addressParts, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
-export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
+export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, ensureIdentity, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
+  const [legalAccepted,setLegalAccepted]=useState(false);
+  useEffect(()=>{if(isOpen)setLegalAccepted(false);},[isOpen,user?.id]);
+  const legalAcceptance={accepted:legalAccepted,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION};
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocus(dialogRef,isOpen,onClose);
   const [configStatus, setConfigStatus] = useState<'loading'|'ready'|'error'>('loading');
@@ -273,6 +278,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     if (submitLock.current) return false;
     submitLock.current = true; setSubmitting(true);
     try {
+    if(!user || !legalAccepted){showMsg('Identifique-se e aceite os documentos antes de pedir.','error');setStep('details');return false;}
     if (!validCustomerName(customer.name)) { showMsg('Informe seu nome antes de enviar o pedido.', 'error'); setStep('details'); return false; }
     let scheduledTo = undefined;
     if (isScheduled) {
@@ -287,7 +293,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
       showMsg('Confira a forma de pagamento e o valor para troco.', 'error');
       return false;
     }
-    return await onOrder({ ...paymentDetails, ...(method === 'dinheiro' ? { method, changeFor: changeFor === '' ? undefined : Number(changeFor) } : {}), finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, deliveryToken: deliveryProof, scheduledTo });
+    return await onOrder({ ...paymentDetails,legalAcceptance, ...(method === 'dinheiro' ? { method, changeFor: changeFor === '' ? undefined : Number(changeFor) } : {}), finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, deliveryToken: deliveryProof, scheduledTo });
     } finally { submitLock.current = false; setSubmitting(false); }
   };
 
@@ -421,7 +427,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                     </div>
                   </div>
                   
-                  <button disabled={configStatus !== 'ready'} onClick={() => setStep('details')} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 flex items-center justify-center gap-3 text-base active:scale-95 transition-all mt-4 disabled:opacity-50">
+                  <button disabled={configStatus !== 'ready'} onClick={async () => {if(await ensureIdentity())setStep('details');}}  className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 flex items-center justify-center gap-3 text-base active:scale-95 transition-all mt-4 disabled:opacity-50">
                     Continuar Pedido <ArrowRight size={20}/>
                   </button>
                 </>
@@ -434,9 +440,9 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
               
               {!user && (
                  <div className="bg-amber-50 border border-vovoh-gold/20 p-5 rounded-[1.5rem] flex flex-col gap-3">
-                    <p className="text-xs font-bold text-vovoh-dark leading-tight">Já é de casa? Faça login para preencher tudo mais rápido!</p>
+                    <p className="text-xs font-bold text-vovoh-dark leading-tight">Identifique-se para pedir. Use sua conta ou continue como convidado com nome e WhatsApp.</p>
                     <button onClick={openAuth} className="w-full py-3 bg-white text-vovoh-gold font-black border border-vovoh-gold/20 rounded-xl text-xs uppercase tracking-widest shadow-sm flex items-center justify-center gap-2 active:scale-95">
-                      <LogIn size={14} /> Entrar na conta
+                      <LogIn size={14} /> Entrar ou continuar como convidado
                     </button>
                  </div>
               )}
@@ -554,10 +560,13 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 
               </div>
               
+              {localGuest(user) && <p role="note" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{guestNotice}</p>}
+              {!user && <button type="button" onClick={openAuth} className="w-full min-h-12 rounded-2xl border border-vovoh-red p-4 font-bold text-vovoh-red">Entrar ou continuar como convidado</button>}
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2"><label className="flex gap-3 items-start text-sm leading-relaxed"><input type="checkbox" checked={legalAccepted} onChange={e=>setLegalAccepted(e.target.checked)} className="mt-1 w-5 h-5 shrink-0 accent-vovoh-red"/><span>Li e aceito os Termos de Uso e estou ciente da Política de Privacidade.</span></label><div className="flex flex-wrap gap-4 text-sm font-bold text-vovoh-red"><a href="/#termos" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Termos (nova aba)</a><a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Privacidade (nova aba)</a></div><p className="text-xs text-gray-500">Seus dados serão usados para atender o pedido. Isto não autoriza publicidade.</p></div>
               <div className="flex gap-3 pt-4">
                  <button onClick={() => setStep('cart')} className="px-6 py-5 bg-white border border-gray-200 text-gray-500 font-black rounded-2xl text-sm active:scale-95 transition-all">Voltar</button>
                  <button 
-                   onClick={() => {
+                   onClick={async () => {
                      if (!validCustomerName(customer.name)) {
                        setAddressError("Por favor, digite seu nome completo, meu anjo.");
                        return;
@@ -581,6 +590,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                          validateSchedule(`${scheduledDate}T${scheduledTime}:00`,dynamicConfigs);
                        } catch(error) { setAddressError(error instanceof Error ? error.message : 'Confira o agendamento.'); return; }
                      }
+                     if(!legalAccepted){setAddressError('Leia e aceite os Termos de Uso e confirme a ciência da Política de Privacidade.');return;}
+                     if(!await ensureIdentity())return;
                      rememberCustomer(customer);
                      setStep('payment');
                    }} 
@@ -645,13 +656,13 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                  {method === 'pix' ? (
                    <PixBox pixKey={pixKey} total={total} onComplete={handleOrder} />
                  ) : method === 'cartao_online' ? (
-                   <CardPaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer, ...(isScheduled ? {scheduledTo:`${scheduledDate}T${scheduledTime}:00-03:00`} : {}) }} />
+                   <CardPaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ legalAcceptance, items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer, ...(isScheduled ? {scheduledTo:`${scheduledDate}T${scheduledTime}:00-03:00`} : {}) }} />
                  ) : (
                    <button onClick={() => handleOrder()} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
                      Confirmar e Enviar Pedido
                    </button>
                  )}
-                 <button onClick={() => setStep('details')} className="w-full mt-4 text-gray-400 font-black text-[10px] uppercase tracking-widest hover:text-vovoh-dark transition-colors">Voltar para Detalhes</button>
+                 <button onClick={async () => {if(await ensureIdentity())setStep('details');}}  className="w-full mt-4 text-gray-400 font-black text-[10px] uppercase tracking-widest hover:text-vovoh-dark transition-colors">Voltar para Detalhes</button>
               </div>
             </div>
           )}

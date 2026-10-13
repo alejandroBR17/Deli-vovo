@@ -1,4 +1,5 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name.js';
+import {LEGAL_VERSION,legalReceipt} from '../src/utils/legal.js';
 import {RevisionCache} from '../server/revision-cache.js';
 import { adminCredentialStore } from '../server/admin-credentials.js';
 import { MercadoPago, validMercadoPagoSignature } from '../server/mercado-pago.js';
@@ -1269,6 +1270,12 @@ app.get('/payments/config',(_req,res)=>{
   res.json({provider:mercadoPagoReady()?'mercado_pago':'stripe',mode:process.env.MERCADO_PAGO_MODE==='live'?'live':'test'});
 });
 const paymentStartLimiter=rateLimit({windowMs:15*60*1000,limit:12,standardHeaders:'draft-7',legacyHeaders:false});
+async function acceptNewOrder(req:express.Request,res:express.Response) {
+  const id=customerId(req);
+  if(!id || !await UserRepo.getById(id)){res.status(401).json({error:'Entre com sua conta ou identifique-se como convidado antes de pedir.'});return null;}
+  try {return legalReceipt(req.body.legalAcceptance,id);}
+  catch(error){res.status(400).json({error:error instanceof Error?error.message:'Confira os documentos do pedido.'});return null;}
+}
 app.post('/payments/mercado-pago/checkout',paymentStartLimiter,async(req,res)=>{
   if(!mercadoPagoReady()) return res.status(503).json({error:'O cartão ainda está sendo configurado. Use Pix por enquanto.'});
   try {
@@ -1281,6 +1288,7 @@ app.post('/payments/mercado-pago/checkout',paymentStartLimiter,async(req,res)=>{
       return res.json({id:input.id,checkoutUrl:existing.checkoutUrl,mode:process.env.MERCADO_PAGO_MODE});
     }
     if(await OrderRepo.getById(input.id)) return res.status(409).json({error:'Este pedido já foi recebido. Consulte o acompanhamento.'});
+    const acceptance=await acceptNewOrder(req,res);if(!acceptance)return;
     if(!validCustomerName(input.customer?.name) || typeof input.customer?.phone!=='string' || !/^\d{10,13}$/.test(input.customer.phone.replace(/\D/g,'')) ||
        typeof input.customer?.address!=='string' || input.customer.address.length<10 || input.customer.address.length>500) return res.status(400).json({error:'Confira nome, WhatsApp e endereço antes de pagar.'});
     const configs=await ConfigRepo.getAll();
@@ -1290,7 +1298,7 @@ app.post('/payments/mercado-pago/checkout',paymentStartLimiter,async(req,res)=>{
     if(!Number.isFinite(input.total) || Math.abs(input.total-priced.total)>0.009) return res.status(409).json({error:'Os valores mudaram. Reabra a sacola e confira.'});
     const requestHash=paymentRequestHash(key);
     const order={...priced,id:input.id,customer:{name:customerName(input.customer.name),phone:input.customer.phone,address:input.customer.address},
-      type:input.type,userId:customerId(req)||'',scheduledTo,submissionKeyHash:requestHash,
+      type:input.type,userId:acceptance.userId,legalAcceptance:acceptance,scheduledTo,submissionKeyHash:requestHash,
       timing:{createdAt:new Date().toISOString()},itemsSummary:priced.items.map((item:any)=>`${item.quantity}x ${item.name}`).join(', ')};
     const checkout={orderId:input.id,requestHash,order,total:priced.total,fingerprint:checkoutFingerprint(priced,order.customer.address,scheduledTo)};
     if(!await paymentCheckouts!.create(checkout)) return res.status(409).json({error:'Pagamento em preparação. Aguarde antes de tentar novamente.'});
@@ -1350,6 +1358,7 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 
   try {
+    if(!await acceptNewOrder(req,res))return;
     if (!validCustomerName(req.body.customer?.name)) return res.status(400).json({error:'Informe seu nome antes de pagar.'});
     const configs = await ConfigRepo.getAll();
     try { req.body.scheduledTo = validateSchedule(req.body.scheduledTo,configs); }
@@ -1518,6 +1527,8 @@ app.post('/orders', async (req, res) => {
       return res.json({ success: true, id: order.id, accessToken });
     }
     if(paymentCheckouts && await paymentCheckouts.get(order.id)) return res.status(409).json({error:'Este pedido está vinculado ao pagamento por cartão. Consulte o pagamento antes de enviar novamente.'});
+    const acceptance=await acceptNewOrder(req,res);if(!acceptance)return;
+    order.legalAcceptance=acceptance;
     if (isVercel && !db && !process.env.GOOGLE_SHEETS_SCRIPT_URL) throw new Error('Banco indisponível.');
     if (!validCustomerName(order.customer.name)) return res.status(400).json({ error: 'Informe seu nome antes de enviar o pedido.' });
     order.customer.name = customerName(order.customer.name);
@@ -1648,7 +1659,31 @@ app.post('/orders/:id/archive', requireAdminWrite, async (req, res) => {
 });
 
 const publicUser = (user: User) => { const { password, ...profile } = user; return profile; };
+app.get('/auth/session',async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const id=customerId(req);if(!id)return res.status(401).json({error:'Identifique-se para continuar.'});
+  try {const user=await UserRepo.getById(id);if(!user)return res.status(401).json({error:'Identifique-se novamente.'});return res.json({success:true,user:publicUser(user),legalVersion:LEGAL_VERSION});}
+  catch {return res.status(503).json({error:'Não foi possível conferir seu acesso. Tente novamente.'});}
+});
+app.use('/auth',(req,res,next)=>{
+  if(req.method==='GET')return next();
+  const origin=req.headers.origin;
+  if(req.headers['sec-fetch-site']==='cross-site')return res.status(403).json({error:'Use o site da loja para se identificar.'});
+  if(origin){try {const source=new URL(origin);if(!['http:','https:'].includes(source.protocol)||source.host!==(req.headers.host||'').toLowerCase())throw new Error();}catch{return res.status(403).json({error:'Use o site da loja para se identificar.'});}}
+  next();
+});
 app.use('/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, legacyHeaders: false }));
+app.post('/auth/guest',async(req,res)=>{
+  try {
+    const name=customerName(req.body.name),phone=typeof req.body.phone==='string'?req.body.phone.replace(/\D/g,''):'';
+    if(!validCustomerName(name) || name.length>100 || !/^(?:\d{10,11}|55\d{10,11})$/.test(phone))return res.status(400).json({error:'Informe seu nome e WhatsApp com DDD para continuar.'});
+    orderToken('configuration-check');
+    const currentId=customerId(req);const previous=currentId?.startsWith('CONV-')?await UserRepo.getById(currentId):null;
+    const user={...(previous||{}),id:previous?.id||'CONV-'+uuidv4(),name,phone,email:'',password:'',address:previous?.address||'',cart:previous?.cart||'[]'};
+    if(previous)await UserRepo.update(user);else await UserRepo.create(user);
+    setCustomerSession(res,user.id);res.setHeader('Cache-Control','no-store');return res.json({success:true,user:publicUser(user)});
+  } catch {return res.status(503).json({error:'Não foi possível registrar seu acesso de convidado. Tente novamente.'});}
+});
 app.post('/auth/logout', (_req, res) => { res.clearCookie('vovo_customer_session', { path: '/' }); res.json({ success: true }); });
 
 // --- Autenticação via Google Sheets ---

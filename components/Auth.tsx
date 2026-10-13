@@ -4,6 +4,7 @@ import { useModalFocus } from '../src/hooks/use-modal-focus';
 import { customerName, validCustomerName, localGuest } from '../src/utils/customer-name';
 import { User as UserType } from '../types/index';
 import {PhoneInput} from './PhoneInput';
+import {guestNotice} from '../src/utils/legal';
 
 interface AuthProps {
   isOpen: boolean;
@@ -54,11 +55,6 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
       return;
     }
 
-    if (localGuest(user)) {
-      const updatedUser = { ...user, name: customerName(editData.name), phone: editData.phone };
-      try { localStorage.setItem('vovoh_user', JSON.stringify(updatedUser)); } catch {}
-      setUser(updatedUser); onGuestName?.(updatedUser.name, updatedUser.phone); setIsEditing(false); showMsg('Dados atualizados neste aparelho.', 'success'); return;
-    }
     setLoading(true);
     try {
       const res = await fetch(`/api/users/${user.id}`, {
@@ -71,7 +67,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
       if (data.success) {
         const updatedUser = { ...user, ...editData };
         localStorage.setItem('vovoh_user', JSON.stringify(updatedUser));
-        setUser(updatedUser);
+        setUser(updatedUser);if(localGuest(updatedUser))onGuestName?.(updatedUser.name,updatedUser.phone);
         showMsg("Perfil atualizado com sucesso!", "success");
         setIsEditing(false);
       } else {
@@ -87,22 +83,15 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
   const handleGuestLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!validCustomerName(guestName)) { setGuestError('Informe seu nome com pelo menos 3 caracteres.'); return; }
-    if (guestPhone && !/^(?:\d{10,11}|55\d{10,11})$/.test(guestPhone)) { setGuestError('Confira o WhatsApp com DDD.'); return; }
+    if (!/^(?:\d{10,11}|55\d{10,11})$/.test(guestPhone)) { setGuestError('Informe o WhatsApp com DDD.'); return; }
     setGuestError('');
     setGuestLoading(true);
     try {
-      // Cria um usuário visitante local
-      const guestId = "CONV-" + Math.random().toString(36).substr(2, 9).toUpperCase();
-      const guestUser: UserType = {
-        id: guestId,
-        name: customerName(guestName),
-        email: "",
-        phone: guestPhone,
-        address: "",
-        cart: '[]'
-      };
+      const response=await fetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:guestName,phone:guestPhone}),signal:AbortSignal.timeout(15000)});
+      const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||'Não foi possível entrar como convidado.');
+      const guestUser:UserType=result.user;const guestId=guestUser.id;
 
-      localStorage.setItem('vovoh_user', JSON.stringify(guestUser));
+      try {localStorage.setItem('vovoh_user', JSON.stringify(guestUser));} catch {}
       setUser(guestUser);
       onGuestName?.(guestUser.name, guestUser.phone || undefined);
       showMsg("Pronto! Continue seu pedido sem criar uma conta.", "success");
@@ -123,7 +112,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
       }
     } catch (error: any) {
       console.error("Erro no login anônimo:", error);
-      showMsg("Erro ao entrar como convidado.", "error");
+      setGuestError(error instanceof Error ? error.message : 'Não foi possível entrar como convidado.');
     } finally {
       setGuestLoading(false);
     }
@@ -298,8 +287,8 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
                     <div className="bg-vovoh-gold text-white p-6 rounded-[2rem] shadow-lg flex items-center gap-4">
                       <ShieldCheck size={32} className="opacity-80"/>
                       <div>
-                        <h4 className="font-black text-sm">Cliente da Vovó</h4>
-                        <p className="text-[10px] uppercase tracking-widest opacity-80 mt-1">Sua conta está segura</p>
+                        <h4 className="font-black text-sm">{localGuest(user)?'Acesso como convidado':'Cliente da Vovó'}</h4>
+                        <p className="text-[10px] uppercase tracking-widest opacity-80 mt-1">{localGuest(user)?'Vinculado a este navegador, sem senha':'Proteja sua senha e seus dados'}</p>
                       </div>
                     </div>
 
@@ -310,10 +299,10 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
                )}
             </div>
           ) : guestMode ? (
-            <form onSubmit={handleGuestLogin} className="relative space-y-5">
+            <form onSubmit={handleGuestLogin} className="relative space-y-5"><p role="note" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900">{guestNotice}</p><p className="text-xs text-gray-600">Veja como usamos seus dados na <a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline">Política de Privacidade (nova aba)</a>.</p>
               <div><h4 className="font-sans text-xl font-bold text-vovoh-dark">Como podemos te chamar?</h4><p className="text-sm text-gray-600 mt-2">Esse nome identifica você no pedido. Não precisa de e-mail ou senha.</p></div>
               <div><label htmlFor="guest-name" className="block text-sm font-semibold mb-2">Seu nome</label><input id="guest-name" autoFocus autoComplete="name" maxLength={100} value={guestName} onChange={event => {setGuestName(event.target.value);setGuestError('');}} aria-invalid={!!guestError} aria-describedby={guestError ? 'guest-name-error' : undefined} placeholder="Ex: Maria Silva" className="w-full min-h-12 p-3 rounded-xl bg-white border border-gray-300 outline-none focus:ring-2 focus:ring-vovoh-red/30" />{guestError && <p id="guest-name-error" role="alert" className="text-sm text-red-700 mt-2">{guestError}</p>}</div>
-              <div><label htmlFor="guest-phone" className="block text-sm font-semibold mb-2">WhatsApp com DDD</label><PhoneInput id="guest-phone" autoComplete="tel" inputMode="tel" value={guestPhone} onValueChange={phone=>{setGuestPhone(phone);setGuestError('');}} placeholder="(41) 99999-9999" className="w-full min-h-12 p-3 rounded-xl bg-white border border-gray-300 outline-none focus:ring-2 focus:ring-vovoh-red/30"/><p className="text-xs text-gray-500 mt-2">Pode informar agora ou na sacola. Não precisa criar conta para pedir.</p></div>
+              <div><label htmlFor="guest-phone" className="block text-sm font-semibold mb-2">WhatsApp com DDD</label><PhoneInput id="guest-phone" autoComplete="tel" inputMode="tel" value={guestPhone} onValueChange={phone=>{setGuestPhone(phone);setGuestError('');}} placeholder="(41) 99999-9999" className="w-full min-h-12 p-3 rounded-xl bg-white border border-gray-300 outline-none focus:ring-2 focus:ring-vovoh-red/30"/><p className="text-xs text-gray-500 mt-2">Nome e WhatsApp identificam seu pedido. Não precisa de e-mail ou senha.</p></div>
               <button type="submit" disabled={guestLoading} className="w-full min-h-12 rounded-xl bg-vovoh-red text-white font-semibold">{guestLoading ? 'Continuando…' : 'Continuar pedido'}</button>
               <button type="button" onClick={() => setGuestMode(false)} className="w-full min-h-11 text-sm font-semibold text-gray-600">Voltar para entrar na conta</button>
             </form>
@@ -334,7 +323,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
                  </p>
                </div>
 
-               <form onSubmit={handleSubmit} className="space-y-4">
+               <form onSubmit={handleSubmit} className="space-y-4">{mode==='register' && <p className="text-xs text-gray-600">Usamos estes dados para sua conta e pedidos. Consulte a <a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline">Política de Privacidade (nova aba)</a>.</p>}
                   {mode === 'register' && (
                     <div className="relative">
                       <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><User size={18} /></div>

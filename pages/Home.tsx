@@ -10,6 +10,7 @@ import { Toast } from '../components/UI';
 import { StoreFront } from '../components/StoreFront';
 import { Checkout, TrackingModal } from '../components/Checkout';
 import { AuthModal } from '../components/Auth';
+import {LEGAL_VERSION} from '../src/utils/legal';
 import { startVisiblePolling } from '../src/utils/visible-polling';
 import { QuickReorder } from '../components/QuickReorder';
 import { storeAvailability, openingTime } from '../src/utils/store-hours';
@@ -29,6 +30,17 @@ export default function Home() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const authForCheckout=useRef(false);
+  const openCheckoutAuth=()=>{authForCheckout.current=true;setIsCartOpen(false);setIsAuthOpen(true);};
+  const ensureCheckoutIdentity=async()=>{
+    try {
+      const response=await fetch('/api/auth/session',{signal:AbortSignal.timeout(10000)});
+      if(response.status===401){setUser(null);localStorage.removeItem('vovoh_user');openCheckoutAuth();return false;}
+      const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||'Não foi possível conferir sua identificação.');
+      if(result.legalVersion!==LEGAL_VERSION)throw new Error('Os documentos foram atualizados. Recarregue a página e confira antes de pedir.');
+      setUser(result.user);return true;
+    } catch(error){setToast({message:error instanceof Error?error.message:'Não foi possível conferir seu acesso.',type:'error'});return false;}
+  };
 
   const [user, setUser] = useState<UserType | null>(null);
   const [lastSyncedUser, setLastSyncedUser] = useState<string | null>(null);
@@ -259,7 +271,6 @@ export default function Home() {
       setCustomer(prev => ({...prev, name: !validCustomerName(prev.name) || prev.name === oldName ? customerName(user.name) : prev.name}));
       previousGuestName.current = customerName(user.name);
       setLastSyncedUser(user.id);
-      return;
     }
     if (user && user.id !== lastSyncedUser) {
       setCustomer(prev => prev.name ? prev : { name: customerName(user.name), phone: user.phone || '', address: user.address || '' });
@@ -632,7 +643,7 @@ export default function Home() {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Order-Request': pendingSubmissionKey.current ||= crypto.randomUUID() },
       body: JSON.stringify({
         ...newOrder, userId: user ? user.id : '', paymentMethod: paymentDetails,
-        itemsSummary, paymentIntentId: extraDetails?.id, coupon: extraDetails?.coupon, deliveryToken: extraDetails?.deliveryToken,
+        itemsSummary, paymentIntentId: extraDetails?.id, coupon: extraDetails?.coupon, deliveryToken: extraDetails?.deliveryToken,legalAcceptance:extraDetails?.legalAcceptance,
       }),
     });
     const result = await response.json();
@@ -934,7 +945,7 @@ export default function Home() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         user={user}
-        setUser={setUser}
+        setUser={next=>{setUser(next);if(next&&authForCheckout.current){authForCheckout.current=false;setIsCartOpen(true);}}}
         onGuestName={(name,phone) => setCustomer(prev => ({...prev, name, ...(phone !== undefined ? {phone} : {})}))}
         showMsg={(msg, type) => setToast({ message: msg, type })}
       />
@@ -946,7 +957,7 @@ export default function Home() {
         method={method} setMethod={setMethod}
         changeFor={changeFor} setChangeFor={setChangeFor}
         onOrder={createOrder} pixKey={dynamicConfigs?.pix_key || PIX_KEY}
-        user={user} openAuth={() => { setIsCartOpen(false); setIsAuthOpen(true); }}
+        user={user} openAuth={openCheckoutAuth} ensureIdentity={ensureCheckoutIdentity}
         dynamicConfigs={dynamicConfigs}
         onRefreshConfigs={fetchConfigs}
         showMsg={(msg: string, type: any) => setToast({ message: msg, type })}
@@ -984,6 +995,7 @@ export default function Home() {
             <div><p className="text-sm font-semibold mb-2">Explore</p><div className="grid grid-cols-2 sm:grid-cols-1 text-sm text-zinc-300"><a href="#menu" className="min-h-11 flex items-center">Cardápio</a><a href="#nossa-historia" className="min-h-11 flex items-center">Nossa história</a><a href="#ajuda" className="min-h-11 flex items-center">Central de ajuda</a><button onClick={() => setIsAuthOpen(true)} className="min-h-11 text-left">Meu perfil</button></div></div>
             <div><p className="text-sm font-semibold mb-3">Fale com a loja</p><p className="flex gap-2 text-sm text-zinc-300"><Store size={18} className="shrink-0 mt-0.5" aria-hidden="true" /><span>{dynamicConfigs?.store_address || STORE_ADDRESS}</span></p><a href={'https://wa.me/'+storeWhatsApp} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 min-h-11 mt-3 text-sm text-white underline underline-offset-4"><MessageSquare size={18} aria-hidden="true" />Falar pelo WhatsApp</a></div>
           </div>
+          <nav aria-label="Documentos da loja" className="flex flex-wrap gap-4 text-sm"><a href="/#termos" target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center underline">Termos de Uso</a><a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center underline">Política de Privacidade</a></nav>
           <div className="border-t border-white/10 pt-4 flex gap-4 items-center justify-between"><p className="text-xs text-zinc-400">© {new Date().getFullYear()} · {STORE_NAME}</p>
             <button type="button" onClick={() => {window.location.hash='#vovo-secreta';}} className="inline-flex gap-2 items-center min-h-11 text-xs text-zinc-300 hover:text-white" aria-label="Painel da Vovó"><ChefHat size={18} aria-hidden="true" /><span>Painel da Vovó</span></button>
           </div>

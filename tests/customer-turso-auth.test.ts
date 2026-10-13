@@ -6,17 +6,20 @@ import os from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {createClient} from '@libsql/client';
 import {migrate} from '../server/database';
+import {LEGAL_VERSION} from '../src/utils/legal';
 
 test('empty Turso authenticates new customers without falling back to local files',async()=>{
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'vovo-auth-'));
  process.env.NODE_ENV='test';delete process.env.VERCEL;delete process.env.GOOGLE_SHEETS_SCRIPT_URL;
  process.env.TEST_DATA_DIR=directory;process.env.TURSO_DATABASE_URL='file:'+path.join(directory,'auth.sqlite');delete process.env.TURSO_AUTH_TOKEN;
  process.env.ADMIN_SESSION_SECRET=randomUUID()+randomUUID();process.env.ADMIN_PASSWORD=randomUUID();
+ process.env.STRIPE_SECRET_KEY='sk_test_local_fixture_no_network';
  const client=createClient({url:process.env.TURSO_DATABASE_URL});await migrate(client);
  const {default:app,closeDatabase}=await import('../api/index');const server=app.listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
  const base='http://127.0.0.1:'+((server.address() as any).port)+'/api';
- const post=(route:string,data:unknown)=>fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});
+ const post=(route:string,data:unknown,cookie='')=>fetch(base+route,{method:'POST',headers:{'content-type':'application/json',...(cookie?{cookie}:{}),'X-Order-Request':randomUUID()},body:JSON.stringify(data)});
  try {
+  for(const route of ['/auth/guest','/auth/login','/auth/register','/auth/logout'])assert.equal((await fetch(base+route,{method:'POST',headers:{'content-type':'application/json',Origin:'https://other.example.test'},body:'{}'})).status,403);
   const missing=await post('/auth/login',{email:'missing@example.test',password:'local-only-password'});assert.equal(missing.status,401);
   const body={name:'Cliente Local',email:'customer@example.test',password:'local-only-password',phone:'41999999999'};
   const registered=await post('/auth/register',body);assert.equal(registered.status,200);const result=await registered.json();assert.equal(result.success,true);assert.equal(result.user.password,undefined);
@@ -28,6 +31,21 @@ test('empty Turso authenticates new customers without falling back to local file
   assert.equal((await patch(result.user.id)).status,200);
   assert.equal((await patch(randomUUID())).status,401);
   await client.execute({sql:'DELETE FROM users WHERE id=?',args:[result.user.id]});assert.equal((await patch(result.user.id)).status,404);
+  assert.equal((await post('/auth/guest',{name:'Local',phone:''})).status,400);
+  const guest=await post('/auth/guest',{name:'Convidado Local',phone:'(41) 99999-9999'});assert.equal(guest.status,200);const guestUser=(await guest.json()).user;assert.match(guestUser.id,/^CONV-/);assert.equal(guestUser.password,undefined);
+  const guestCookie=guest.headers.get('set-cookie')!.split(';')[0];const resumed=await fetch(base+'/auth/session',{headers:{cookie:guestCookie}});assert.equal(resumed.status,200);assert.equal((await resumed.json()).user.id,guestUser.id);
+  const repeat=await post('/auth/guest',{name:'Convidado Atualizado',phone:'41999999999'},guestCookie);assert.equal((await repeat.json()).user.id,guestUser.id);
+  const otherGuest=await post('/auth/guest',{name:'Convidado Local',phone:'41999999999',id:guestUser.id});assert.equal(otherGuest.status,200);assert.notEqual((await otherGuest.json()).user.id,guestUser.id);
+  const candidate={id:randomUUID(),type:'retirada',customer:{name:'Convidado Local',phone:'41999999999',address:'Local only'},items:[{id:'local-product',quantity:1}],total:10,payment:{method:'pix'},userId:guestUser.id};
+  assert.equal((await post('/orders',candidate)).status,401);
+  assert.equal((await post('/create-payment-intent',candidate)).status,401);
+  assert.equal((await post('/orders',candidate,guestCookie)).status,400);
+  assert.equal((await post('/create-payment-intent',candidate,guestCookie)).status,400);
+  assert.equal((await post('/orders',{...candidate,legalAcceptance:{accepted:true,termsVersion:'old',privacyVersion:'old'}},guestCookie)).status,400);
+  await client.execute({sql:'INSERT INTO products(id,payload) VALUES (?,?)',args:['local-product',JSON.stringify({name:'Local product',price:10,available:true})]});
+  for(const [key,value] of Object.entries({opening_start:'00:00',opening_end:'23:59',working_days:'[0,1,2,3,4,5,6]'}))await client.execute({sql:'INSERT INTO configs(id,payload) VALUES (?,?)',args:[key,JSON.stringify({value})]});
+  const accepted=await post('/orders',{...candidate,legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION,acceptedAt:'forged',userId:'forged'}},guestCookie);assert.equal(accepted.status,200,await accepted.text());
+  const saved=JSON.parse(String((await client.execute('SELECT payload FROM orders')).rows[0].payload));assert.equal(saved.userId,guestUser.id);assert.equal(saved.legalAcceptance.userId,guestUser.id);assert.equal(saved.legalAcceptance.termsVersion,LEGAL_VERSION);assert.ok(!Number.isNaN(Date.parse(saved.legalAcceptance.acceptedAt)));
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(directory,'users.json'),'utf8')),[]);
  } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));closeDatabase();client.close();assert.equal(path.dirname(directory),os.tmpdir());assert.ok(path.basename(directory).startsWith('vovo-auth-'));await fs.rm(directory,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
 });
