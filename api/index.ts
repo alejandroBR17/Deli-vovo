@@ -908,6 +908,7 @@ const UserRepo = {
         if (docSnap.exists) {
           return { id: docSnap.id, ...docSnap.data() } as User;
         }
+        return null;
       } catch (e) {
         console.error("Turso Error getting user by ID:", e);
         throw e;
@@ -933,6 +934,7 @@ const UserRepo = {
           const docSnap = querySnapshot.docs[0];
           return { id: docSnap.id, ...docSnap.data() } as User;
         }
+        return null;
       } catch (e) {
         console.error("Turso Error getting user by email:", e);
         throw e;

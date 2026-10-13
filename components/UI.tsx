@@ -3,13 +3,12 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Heart, Zap, Bell, X, ChefHat, CreditCard, Copy, Check, Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PaymentElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe } from '@stripe/stripe-js/pure';
 import { generatePixPayload } from '../utils/pix';
 import {useModalFocus} from '../src/hooks/use-modal-focus';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 export const stripeTestMode = Boolean(stripeKey?.startsWith('pk_test_'));
-const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }: { isOpen: boolean, title: string, message: string, onConfirm: () => void, onCancel: () => void }) => {
   const dialogRef=useRef<HTMLDivElement>(null);
@@ -106,6 +105,7 @@ export const Toast = ({ message, type, onClose, notification }: { notification?:
 };
 
 export const StripePaymentBox = ({ onComplete, total, customer, checkout }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any, checkout: any }) => {
+  const [stripePromise] = useState(() => stripeKey ? loadStripe(stripeKey) : null);
   const {resolved} = useTheme();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

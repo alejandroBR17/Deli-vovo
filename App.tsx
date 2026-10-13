@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import Home from './pages/Home';
 const AdminPage = lazy(() => import('./pages/AdminPage'));
-import { ChefHat, ShoppingBag, ShieldCheck } from 'lucide-react';
+
 
 export default function App() {
   const [currentHash, setCurrentHash] = useState(window.location.hash);
@@ -32,30 +32,6 @@ export default function App() {
 
   return (
     <div data-surface={isAdmin ? "admin" : "customer"} className="min-h-screen app-shell selection:bg-vovoh-red selection:text-white">
-      {/* Barra de atalho de portfólio no Desktop */}
-      <div className="hidden desktop:flex fixed bottom-4 left-4 z-[200] bg-zinc-900/90 backdrop-blur-md border border-white/10 text-white rounded-full px-4 py-2 shadow-2xl items-center gap-3 text-xs">
-        <span className="flex items-center gap-1.5 font-bold text-zinc-400">
-          <ChefHat size={15} className="text-vovoh-red" />
-          Portfólio:
-        </span>
-        <button
-          onClick={() => { window.location.hash = isAdmin ? '' : '#vovo-secreta'; }}
-          className="px-3 py-1 bg-vovoh-red hover:bg-red-600 text-white font-extrabold rounded-full transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-red-900/30"
-        >
-          {isAdmin ? (
-            <>
-              <ShoppingBag size={13} />
-              Ver Cardápio (Cliente)
-            </>
-          ) : (
-            <>
-              <ShieldCheck size={13} />
-              Ver Painel Admin / KDS
-            </>
-          )}
-        </button>
-      </div>
-
       {isAdmin ? (
         <div className="w-full min-h-screen bg-vovoh-dark text-white">
           <Suspense fallback={<p role="status" className="p-6 text-center">Abrindo o painel...</p>}><AdminPage /></Suspense>

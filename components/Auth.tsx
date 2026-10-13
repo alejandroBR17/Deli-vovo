@@ -3,13 +3,14 @@ import { X, User, Mail, Lock, Phone, LogOut, Loader2, Heart, ShieldCheck } from 
 import { useModalFocus } from '../src/hooks/use-modal-focus';
 import { customerName, validCustomerName, localGuest } from '../src/utils/customer-name';
 import { User as UserType } from '../types/index';
+import {PhoneInput} from './PhoneInput';
 
 interface AuthProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserType | null;
   setUser: (u: UserType | null) => void;
-  onGuestName?: (name: string) => void;
+  onGuestName?: (name: string, phone?: string) => void;
   showMsg: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -19,6 +20,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
   const [guestLoading, setGuestLoading] = useState(false);
   const [guestMode, setGuestMode] = useState(false);
   const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [guestError, setGuestError] = useState('');
   const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '' });
   const [isEditing, setIsEditing] = useState(false);
@@ -55,7 +57,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
     if (localGuest(user)) {
       const updatedUser = { ...user, name: customerName(editData.name), phone: editData.phone };
       try { localStorage.setItem('vovoh_user', JSON.stringify(updatedUser)); } catch {}
-      setUser(updatedUser); onGuestName?.(updatedUser.name); setIsEditing(false); showMsg('Dados atualizados neste aparelho.', 'success'); return;
+      setUser(updatedUser); onGuestName?.(updatedUser.name, updatedUser.phone); setIsEditing(false); showMsg('Dados atualizados neste aparelho.', 'success'); return;
     }
     setLoading(true);
     try {
@@ -85,6 +87,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
   const handleGuestLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!validCustomerName(guestName)) { setGuestError('Informe seu nome com pelo menos 3 caracteres.'); return; }
+    if (guestPhone && !/^(?:\d{10,11}|55\d{10,11})$/.test(guestPhone)) { setGuestError('Confira o WhatsApp com DDD.'); return; }
     setGuestError('');
     setGuestLoading(true);
     try {
@@ -94,14 +97,14 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
         id: guestId,
         name: customerName(guestName),
         email: "",
-        phone: "",
+        phone: guestPhone,
         address: "",
         cart: '[]'
       };
 
       localStorage.setItem('vovoh_user', JSON.stringify(guestUser));
       setUser(guestUser);
-      onGuestName?.(guestUser.name);
+      onGuestName?.(guestUser.name, guestUser.phone || undefined);
       showMsg("Pronto! Continue seu pedido sem criar uma conta.", "success");
       onClose();
 
@@ -310,7 +313,8 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
             <form onSubmit={handleGuestLogin} className="relative space-y-5">
               <div><h4 className="font-sans text-xl font-bold text-vovoh-dark">Como podemos te chamar?</h4><p className="text-sm text-gray-600 mt-2">Esse nome identifica você no pedido. Não precisa de e-mail ou senha.</p></div>
               <div><label htmlFor="guest-name" className="block text-sm font-semibold mb-2">Seu nome</label><input id="guest-name" autoFocus autoComplete="name" maxLength={100} value={guestName} onChange={event => {setGuestName(event.target.value);setGuestError('');}} aria-invalid={!!guestError} aria-describedby={guestError ? 'guest-name-error' : undefined} placeholder="Ex: Maria Silva" className="w-full min-h-12 p-3 rounded-xl bg-white border border-gray-300 outline-none focus:ring-2 focus:ring-vovoh-red/30" />{guestError && <p id="guest-name-error" role="alert" className="text-sm text-red-700 mt-2">{guestError}</p>}</div>
-              <button type="submit" disabled={guestLoading} className="w-full min-h-12 rounded-xl bg-vovoh-red text-white font-semibold">{guestLoading ? 'Continuando…' : 'Continuar com esse nome'}</button>
+              <div><label htmlFor="guest-phone" className="block text-sm font-semibold mb-2">WhatsApp com DDD</label><PhoneInput id="guest-phone" autoComplete="tel" inputMode="tel" value={guestPhone} onValueChange={phone=>{setGuestPhone(phone);setGuestError('');}} placeholder="(41) 99999-9999" className="w-full min-h-12 p-3 rounded-xl bg-white border border-gray-300 outline-none focus:ring-2 focus:ring-vovoh-red/30"/><p className="text-xs text-gray-500 mt-2">Pode informar agora ou na sacola. Não precisa criar conta para pedir.</p></div>
+              <button type="submit" disabled={guestLoading} className="w-full min-h-12 rounded-xl bg-vovoh-red text-white font-semibold">{guestLoading ? 'Continuando…' : 'Continuar pedido'}</button>
               <button type="button" onClick={() => setGuestMode(false)} className="w-full min-h-11 text-sm font-semibold text-gray-600">Voltar para entrar na conta</button>
             </form>
           ) : (
