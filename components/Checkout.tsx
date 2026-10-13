@@ -7,12 +7,12 @@ import {CardPaymentBox} from './CardPayment';
 import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
 import { subscribeToPush } from '../src/utils/push';
 import { lookupCep, formatCep } from '../src/utils/cep';
-import { formatWhatsApp } from '../src/utils/phone-input';
+import { SavedCheckoutDetails } from './SavedCheckoutDetails';
 import { PhoneInput } from './PhoneInput';
 import {shopDate,validateSchedule} from '../src/utils/order-schedule';
 import {storeAvailability} from '../src/utils/store-hours';
 import {useModalFocus} from '../src/hooks/use-modal-focus';
-import { addressParts, emptyCustomer, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
+import { addressParts, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
 export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -443,19 +443,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
               )}
 
               <div className="space-y-4">
-                {savedCustomers.length > 0 && <details className="p-4 rounded-2xl bg-white border border-gray-200 space-y-3">
-                  <summary className="font-bold cursor-pointer">Usar dados salvos</summary>
-                  <p className="text-xs text-gray-500">Salvos somente neste navegador. Escolha um cadastro completo ou troque apenas um dado.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {(['Cadastro completo','Pessoa salva','WhatsApp salvo','Endereço salvo'] as const).map(label => <label className="block min-w-0 text-sm font-bold" key={label}>{label}<select aria-label={label} value="" className="w-full min-w-0 p-3 mt-1 rounded-xl border border-gray-200 bg-white" onChange={event => {
-                      const saved = savedCustomers.find(item => item.id === event.target.value); if (!saved) return;
-                      if (label === 'Cadastro completo') applyCustomer(saved);
-                      else if (label === 'Endereço salvo') applyCustomer({...customer,address:saved.address,deliveryAddress:saved.deliveryAddress});
-                      else setCustomer({...customer,...(label === 'Pessoa salva' ? {name:customerName(saved.name)} : {phone:saved.phone})});
-                    }}><option value="">Escolher</option>{savedCustomers.map(item => <option key={item.id} value={item.id}>{label === 'Endereço salvo' ? item.address : label === 'WhatsApp salvo' ? formatWhatsApp(item.phone) : label === 'Pessoa salva' ? item.name : `${item.name} — ${formatWhatsApp(item.phone)}`}</option>)}</select></label>)}
-                  </div>
-                  <button type="button" onClick={() => applyCustomer({...emptyCustomer})} className="text-vovoh-red font-bold text-sm py-2">Trocar todos os dados</button>
-                </details>}
+                <SavedCheckoutDetails saved={savedCustomers} customer={customer} onApply={applyCustomer}/>
                 <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm"><User size={16} className="text-vovoh-red"/> Nome Completo</label>
                 <input 
                   type="text" 

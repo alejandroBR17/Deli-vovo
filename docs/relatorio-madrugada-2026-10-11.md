@@ -1,5 +1,11 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Dados salvos do checkout — 12/10/2026
+
+Após o usuário confirmar a compra de teste, substituídos os quatro selects nativos de dados salvos por cartões legíveis com nome, WhatsApp e endereço. Uma ação preenche todos os campos e recolhe a lista; opção secundária permite reutilizar só nome, telefone ou endereço sem alterar os demais. Mensagem discreta confirma o que mudou. A ação de preencher para outra pessoa limpa os campos sem apagar os cadastros. Sem configuração prévia, novas consultas ao banco ou alteração na persistência local existente (até oito cadastros, salvos após pedido). Cores usam tokens de claro/escuro, ícones Lucide, foco visível, disclosures acessíveis e botões de toque com ao menos 44 px.
+
+Validação: navegador 320/390/1365 px nos dois temas, preenchimento completo, cada campo parcial, limpeza preservando os dois cadastros locais, sem overflow ou erro JS. Ajuste adicional de quebra dos botões evita rótulo empilhado em telas estreitas. Três testes existentes de persistência passaram. Antes de outra implantação, catálogo e configurações foram preservados privadamente; dois pedidos feitos pelo usuário na prévia anterior foram copiados somente para backup privado, sem gerar/copiar pedidos remotos. A prévia anterior mantém esses pedidos. Produção permanece preservada.
+
 ## Continuação — consulta de cartão após falha de rede — 12/10/2026
 
 Corrigido travamento demonstrável no retorno do Mercado Pago: quando a consulta automática excedia 15 segundos, o AbortSignal impedia retirar o estado de carregamento e deixava o botão permanentemente desativado. Agora a consulta automática e cada consulta manual têm o mesmo limite de 15 segundos, mostram mensagem de demora e liberam a tentativa seguinte. A chave privada do pagamento pendente permanece no aparelho; não há nova cobrança ou consulta automática repetida. Atualizações de tela respeitam a desmontagem do componente.

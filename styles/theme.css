@@ -1,3 +1,28 @@
+.saved-details { min-width:0; border:1px solid var(--app-border); border-radius:22px; padding:16px; background:linear-gradient(135deg,var(--app-warm),var(--app-paper)); color:var(--app-ink); box-shadow:0 5px 18px var(--app-glow); }
+.saved-details-heading { display:flex; gap:12px; align-items:center; width:100%; text-align:left; min-height:48px; }
+.saved-details-heading > svg { flex-shrink:0; transition:transform .2s; }
+.saved-details-icon { padding:10px; border-radius:14px; background:var(--app-surface); color:var(--app-brand); flex-shrink:0; }
+.saved-details-title { flex:1; min-width:0; }
+.saved-details-title strong { display:block; font-size:14px; }
+.saved-details-title small, .saved-details-hint { color:var(--app-muted); font-size:12px; line-height:1.6; }
+.saved-details-hint { margin-top:12px; }
+.saved-details-notice { font-size:13px; color:var(--app-brand); line-height:1.5; }
+.saved-details-notice:empty { display:none; }
+.saved-details-notice:not(:empty) { margin-top:8px; }
+.saved-details-list { display:grid; gap:12px; margin-top:12px; }
+.saved-details-card { min-width:0; border:1px solid var(--app-border); background:var(--app-surface); border-radius:18px; padding:14px; }
+.saved-details-person { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; overflow-wrap:anywhere; }
+.saved-details-person > span { display:flex; gap:4px; align-items:center; font-size:11px; font-weight:700; background:var(--app-warm); color:var(--app-brand); padding:4px 8px; border-radius:20px; }
+.saved-details-card > p { display:flex; gap:8px; font-size:13px; color:var(--app-muted); margin-top:6px; line-height:1.5; }
+.saved-details-card > p > svg { flex-shrink:0; margin-top:3px; color:var(--app-gold); }
+.saved-details-card > p > span { min-width:0; overflow-wrap:anywhere; }
+.saved-details-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.saved-details-actions button { flex:1; min-width:min(100%,145px); }
+.saved-details-actions button, .saved-details-options button, .saved-details-new { display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:10px 12px; border-radius:12px; font-size:12px; font-weight:700; color:var(--app-ink); border:1px solid var(--app-border); background:var(--app-paper); }
+.saved-details-actions .saved-details-use { background:#b72e25; color:white; border-color:#b72e25; flex:1; }
+.saved-details-options:not([hidden]) { display:flex; flex-wrap:wrap; gap:8px; padding-top:12px; }
+.saved-details-new { width:100%; margin-top:12px; background:var(--app-surface); }
+.saved-details button:focus-visible { outline:2px solid var(--app-brand); outline-offset:3px; }
 :root {
   --app-bg: #fff8ee;
   --app-surface: #fffdf9;
