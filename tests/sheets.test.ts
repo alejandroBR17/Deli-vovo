@@ -53,11 +53,11 @@ test('API and Apps Script preserve customer credentials, order details and dupli
   const base = `http://127.0.0.1:${(server.address() as any).port}/api`;
   const post = (route: string, body: any, headers: any = {}) => nativeFetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   try {
-    const registration = await post('/auth/register', { name: 'Cliente planilha', email: 'sheets@example.com', password: 'sheets-test-password' });
+    const registration = await post('/auth/register', { name: 'Cliente planilha', email: 'sheets@example.com', password: 'sheets-test-password',passwordConfirmation:'sheets-test-password' });
     assert.equal(registration.status, 200);
     assert.equal((await registration.json()).user.password, undefined);
     assert.match(sheets.Usuarios.rows[1][3], /^scrypt:/);
-    const login = await post('/auth/login', { email: 'sheets@example.com', password: 'sheets-test-password' });
+    const login = await post('/auth/login', { email: 'sheets@example.com', password: 'sheets-test-password',passwordConfirmation:'sheets-test-password' });
     assert.equal(login.status, 200);
     const customerCookie = login.headers.get('set-cookie')!.split(';')[0];
     const seedLogin = await post('/admin/login', { password: process.env.ADMIN_PASSWORD }, { 'X-Vovo-Admin': '1' });

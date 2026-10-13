@@ -21,14 +21,17 @@ test('empty Turso authenticates new customers without falling back to local file
  try {
   for(const route of ['/auth/guest','/auth/login','/auth/register','/auth/logout'])assert.equal((await fetch(base+route,{method:'POST',headers:{'content-type':'application/json',Origin:'https://other.example.test'},body:'{}'})).status,403);
   const missing=await post('/auth/login',{email:'missing@example.test',password:'local-only-password'});assert.equal(missing.status,401);
-  const body={name:'Cliente Local',email:'customer@example.test',password:'local-only-password',phone:'41999999999'};
+  const body={name:'Cliente Local',email:'customer@example.test',password:'local-only-password',passwordConfirmation:'local-only-password',phone:'41999999999'};
+  for(const invalid of [{...body,passwordConfirmation:undefined},{...body,passwordConfirmation:'different'},{...body,password:'short',passwordConfirmation:'short'},{...body,email:'not-an-email'},{...body,phone:'123'}])assert.equal((await post('/auth/register',invalid)).status,400);
+  assert.equal((await client.execute('SELECT count(*) AS n FROM users')).rows[0].n,0);
   const registered=await post('/auth/register',body);assert.equal(registered.status,200);const result=await registered.json();assert.equal(result.success,true);assert.equal(result.user.password,undefined);
   const rows=await client.execute('SELECT payload FROM users');assert.equal(rows.rows.length,1);assert.match(JSON.parse(String(rows.rows[0].payload)).password,/^scrypt:/);
   assert.equal((await post('/auth/register',body)).status,400);
   assert.equal((await post('/auth/login',{email:body.email,password:'wrong'})).status,401);
-  const login=await post('/auth/login',{email:body.email,password:body.password});assert.equal(login.status,200);assert.equal((await login.json()).user.id,result.user.id);
+  const login=await post('/auth/login',{email:' CUSTOMER@EXAMPLE.TEST ',password:body.password});assert.equal(login.status,200);assert.equal((await login.json()).user.id,result.user.id);
   const cookie=login.headers.get('set-cookie')!.split(';')[0];const patch=(id:string)=>fetch(base+'/users/'+id,{method:'PATCH',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Cliente Atualizado',phone:body.phone})});
   assert.equal((await patch(result.user.id)).status,200);
+  const {hashPassword}=await import('../server/admin-auth');const legacy=JSON.parse(String((await client.execute({sql:'SELECT payload FROM users WHERE id=?',args:[result.user.id]})).rows[0].payload));legacy.password=await hashPassword('old8pass');await client.execute({sql:'UPDATE users SET payload=? WHERE id=?',args:[JSON.stringify(legacy),result.user.id]});assert.equal((await post('/auth/login',{email:body.email,password:'old8pass'})).status,200);
   assert.equal((await patch(randomUUID())).status,401);
   await client.execute({sql:'DELETE FROM users WHERE id=?',args:[result.user.id]});assert.equal((await patch(result.user.id)).status,404);
   assert.equal((await post('/auth/guest',{name:'Local',phone:''})).status,400);

@@ -1,5 +1,6 @@
 import { customerName, validCustomerName } from '../src/utils/customer-name.js';
 import {LEGAL_VERSION,legalReceipt,currentLegalReceipt} from '../src/utils/legal.js';
+import {registrationErrors,normalizeEmail,validEmail,normalizePhone,validPhone} from '../src/utils/customer-auth.js';
 import {RevisionCache} from '../server/revision-cache.js';
 import { adminCredentialStore } from '../server/admin-credentials.js';
 import { MercadoPago, validMercadoPagoSignature } from '../server/mercado-pago.js';
@@ -1703,8 +1704,11 @@ app.post('/auth/logout', (_req, res) => { res.clearCookie('vovo_customer_session
 // --- Autenticação via Google Sheets ---
 app.post('/auth/register', async (req, res) => {
   try {
-    const { name, email, password, phone, address } = req.body;
-    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'Preencha nome, e-mail e uma senha com pelo menos 8 caracteres.' });
+    const {password,address,passwordConfirmation}=req.body;
+    if(typeof req.body.name!=='string'||typeof req.body.email!=='string'||typeof password!=='string'||typeof passwordConfirmation!=='string'||(req.body.phone!=null&&typeof req.body.phone!=='string'))return res.status(400).json({error:'Preencha os dados e confirme sua senha antes de criar a conta.'});
+    const name=customerName(req.body.name),email=normalizeEmail(req.body.email),phone=normalizePhone(req.body.phone||'');
+    const fieldErrors=registrationErrors({name,email,phone,password,passwordConfirmation});
+    if(Object.keys(fieldErrors).length)return res.status(400).json({error:Object.values(fieldErrors)[0],fieldErrors});
     orderToken('configuration-check');
     const storedPassword = await hashPassword(password);
     
@@ -1724,7 +1728,7 @@ app.post('/auth/register', async (req, res) => {
 
     // Fallback local
     const existing = await UserRepo.findByEmail(email);
-    if (existing) return res.status(400).json({ error: 'E-mail já cadastrado.' });
+    if (existing) return res.status(400).json({ error: 'Este e-mail já tem uma conta. Use a opção Entrar.',fieldErrors:{email:'Este e-mail já está cadastrado.'} });
 
     const user = { 
       id: uuidv4(), 
@@ -1754,8 +1758,10 @@ app.post('/auth/register', async (req, res) => {
 
 app.post('/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (typeof email !== 'string' || typeof password !== 'string' || password.length > 128) return res.status(400).json({ error: 'Confira e-mail e senha.' });
+    const {password}=req.body;
+    if(typeof req.body.email!=='string'||typeof password!=='string'||!password||password.length>128)return res.status(400).json({error:'Confira e-mail e senha.'});
+    const email=normalizeEmail(req.body.email);
+    if(!validEmail(email))return res.status(400).json({error:'Confira o formato do e-mail.'});
     orderToken('configuration-check');
 
     // Fallback local
@@ -1826,7 +1832,9 @@ app.patch('/users/:id', requireCustomer, async (req, res) => {
     const current = await UserRepo.getById(String(req.params.id));
     if (!current) return res.status(404).json({ error: 'Conta não encontrada.' });
     const { name, phone, address, cart } = req.body;
-    await UserRepo.update({ ...current, name: name ?? current.name, phone: phone ?? current.phone, address: address ?? current.address, cart: cart ?? current.cart });
+    if(name!=null&&(typeof name!=='string'||!validCustomerName(customerName(name))||customerName(name).length>100))return res.status(400).json({error:'Confira seu nome.'});
+    if(phone!=null&&(typeof phone!=='string'||(phone&&!validPhone(normalizePhone(phone)))))return res.status(400).json({error:'Confira o WhatsApp com DDD.'});
+    await UserRepo.update({ ...current, name: name!=null?customerName(name):current.name, phone: phone!=null?normalizePhone(phone):current.phone, address: address ?? current.address, cart: cart ?? current.cart });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });

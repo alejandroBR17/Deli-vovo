@@ -1,10 +1,12 @@
-import React, { useState, useRef } from 'react';
-import { X, User, Mail, Lock, Phone, LogOut, Loader2, Heart, ShieldCheck } from 'lucide-react';
+import React, { useState, useRef, useEffect, useId } from 'react';
+import { X, User, Mail, Lock, Phone, LogOut, Loader2, Heart, ShieldCheck,Eye,EyeOff,CheckCircle2 } from 'lucide-react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
 import { customerName, validCustomerName, localGuest } from '../src/utils/customer-name';
 import { User as UserType } from '../types/index';
 import {PhoneInput} from './PhoneInput';
+import {formatWhatsApp} from '../src/utils/phone-input';
 import {guestNotice} from '../src/utils/legal';
+import {normalizeEmail,validEmail,normalizePhone,validPhone,registrationErrors,passwordIssue} from '../src/utils/customer-auth';
 
 interface AuthProps {
   isOpen: boolean;
@@ -23,7 +25,15 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestError, setGuestError] = useState('');
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', passwordConfirmation:'',phone: '' });
+  const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
+  const [formError,setFormError]=useState('');
+  const [visiblePassword,setVisiblePassword]=useState(false);
+  const [capsLock,setCapsLock]=useState(false);
+  const formId=useId();
+  useEffect(()=>{if(!isOpen){setFormData(previous=>({...previous,password:'',passwordConfirmation:''}));setVisiblePassword(false);setCapsLock(false);setFieldErrors({});setFormError('');}},[isOpen]);
+  const changeField=(key:keyof typeof formData,value:string)=>{setFormData(previous=>({...previous,[key]:value}));setFieldErrors(previous=>{const next={...previous};delete next[key];return next;});setFormError('');};
+  const switchMode=(next:'login'|'register')=>{setMode(next);setFieldErrors({});setFormError('');setVisiblePassword(false);setFormData(previous=>({...previous,password:'',passwordConfirmation:''}));};
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ name: '', phone: '' });
 
@@ -54,6 +64,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
       showMsg("O nome é obrigatório, meu anjo.", "error");
       return;
     }
+    if(editData.phone&&!validPhone(normalizePhone(editData.phone))){showMsg('Confira o WhatsApp com DDD.','error');return;}
 
     setLoading(true);
     try {
@@ -120,14 +131,14 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email || !formData.password || (mode === 'register' && !formData.name)) {
-      showMsg("Preencha todos os campos obrigatórios, meu anjo.", "error");
-      return;
-    }
+    if(loading)return;
+    const errors=mode==='register'?registrationErrors(formData):{...(!validEmail(normalizeEmail(formData.email))?{email:'Confira seu e-mail. Exemplo: nome@email.com'}:{}),...(!formData.password?{password:'Informe sua senha para entrar.'}:{})};
+    setFieldErrors(errors);setFormError('');
+    if(Object.keys(errors).length){(e.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>(`[name="${Object.keys(errors)[0]}"]`)?.focus();return;}
 
     setLoading(true);
 
-    const email = formData.email.trim().toLowerCase();
+    const email = normalizeEmail(formData.email);
     const password = formData.password;
 
     try {
@@ -136,22 +147,23 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: formData.name,
+            name: customerName(formData.name),
             email,
             password,
-            phone: formData.phone
-          })
+            passwordConfirmation:formData.passwordConfirmation,
+            phone: normalizePhone(formData.phone)
+          }),signal:AbortSignal.timeout(15000)
         });
 
         const data = await res.json();
         if (res.ok && data.success) {
-          localStorage.setItem('vovoh_user', JSON.stringify(data.user));
+          try{localStorage.setItem('vovoh_user', JSON.stringify(data.user));}catch{}
           setUser(data.user);
           showMsg("Bem-vindo à família da Vovó! Que alegria ter você aqui.", "success");
           onClose();
         } else {
-          console.error("Erro no cadastro:", data.error || "Desconhecido", data);
-          showMsg(data.error || "Erro ao criar conta. Tente de novo, querido.", "error");
+          if(data.fieldErrors)setFieldErrors(data.fieldErrors);
+          setFormError(data.error || 'Não foi possível criar a conta. Confira os dados e tente novamente.');
         }
       } else {
         const res = await fetch('/api/auth/login', {
@@ -160,23 +172,21 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
           body: JSON.stringify({
             email,
             password
-          })
+          }),signal:AbortSignal.timeout(15000)
         });
 
         const data = await res.json();
         if (res.ok && data.success) {
-          localStorage.setItem('vovoh_user', JSON.stringify(data.user));
+          try{localStorage.setItem('vovoh_user', JSON.stringify(data.user));}catch{}
           setUser(data.user);
           showMsg(`Bem-vindo de volta, ${data.user.name.split(' ')[0]}!`, "success");
           onClose();
         } else {
-          console.error("Erro no login:", data.error || "Desconhecido", data);
-          showMsg(data.error || "E-mail ou senha incorretos, meu anjo.", "error");
+          setFormError(data.error || 'Confira seu e-mail e senha.');
         }
       }
     } catch (err) {
-      console.error("Erro na Auth:", err);
-      showMsg("Oops! O sinal da cozinha caiu. Tente novamente.", "error");
+      setFormError('Não foi possível conectar. Seus dados continuam aqui para tentar novamente.');
     } finally {
       setLoading(false);
     }
@@ -233,12 +243,12 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
 
                       <div className="relative">
                         <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><Phone size={18} /></div>
-                        <input
-                          type="tel"
+                        <PhoneInput
+                          aria-label="WhatsApp do perfil"
                           placeholder="Seu WhatsApp"
                           className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors"
                           value={editData.phone}
-                          onChange={e => setEditData({...editData, phone: e.target.value})}
+                          onValueChange={phone=>setEditData({...editData,phone})}
                         />
                       </div>
                     </div>
@@ -272,7 +282,7 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
 
                       {user.phone && (
                         <div className="flex items-center gap-2 mt-4 px-4 py-2 bg-gray-50 rounded-full text-xs font-black text-gray-500">
-                          <Phone size={14} /> {user.phone}
+                          <Phone size={14} /> {formatWhatsApp(user.phone)}
                         </div>
                       )}
 
@@ -310,8 +320,8 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
 
                <div className="flex p-1 bg-gray-200/50 rounded-2xl">
-                 <button onClick={() => setMode('login')} className={`flex-1 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all ${mode === 'login' ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400'}`}>Entrar</button>
-                 <button onClick={() => setMode('register')} className={`flex-1 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all ${mode === 'register' ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400'}`}>Criar Conta</button>
+                 <button disabled={loading} onClick={() => switchMode('login')} className={`flex-1 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all ${mode === 'login' ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400'}`}>Entrar</button>
+                 <button disabled={loading} onClick={() => switchMode('register')} className={`flex-1 py-3 font-black text-xs uppercase tracking-widest rounded-xl transition-all ${mode === 'register' ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400'}`}>Criar Conta</button>
                </div>
 
                <div className="text-center py-4">
@@ -319,35 +329,18 @@ export const AuthModal = ({ isOpen, onClose, user, setUser, showMsg, onGuestName
                    {mode === 'login' ? 'Bem-vindo de volta!' : 'Entre para a Família'}
                  </h3>
                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                   {mode === 'login' ? 'A vovó já estava com saudades' : 'Faça seu cadastro rapidinho'}
+                   {mode === 'login' ? 'A vovó já estava com saudades' : 'Crie sua conta com ajuda em cada etapa'}
                  </p>
                </div>
 
-               <form onSubmit={handleSubmit} className="space-y-4">{mode==='register' && <p className="text-xs text-gray-600">Usamos estes dados para sua conta e pedidos. Consulte a <a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline">Política de Privacidade (nova aba)</a>.</p>}
-                  {mode === 'register' && (
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><User size={18} /></div>
-                      <input type="text" placeholder="Como a vovó deve te chamar?" className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                    </div>
-                  )}
-
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><Mail size={18} /></div>
-                    <input type="email" placeholder="Seu melhor e-mail" className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                  </div>
-
-                  {mode === 'register' && (
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><Phone size={18} /></div>
-                      <input type="tel" placeholder="Seu WhatsApp (Opcional)" className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                    </div>
-                  )}
-
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-gray-400"><Lock size={18} /></div>
-                    <input type="password" placeholder="Sua senha secreta" className="w-full p-5 pl-12 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red text-sm transition-colors" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
-                  </div>
-
+               <form onSubmit={handleSubmit} noValidate className="space-y-5">
+                  {mode==='register'&&<div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-paper)] p-4 text-sm text-[var(--app-muted)]">Uma conta permite acessar seus pedidos em outro aparelho. São só os dados abaixo; o endereço fica para o pedido. <a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline text-[var(--app-brand)]">Ver Privacidade (nova aba)</a>.</div>}
+                  {formError&&<p role="alert" className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">{formError}</p>}
+                  {mode==='register'&&<div className="space-y-2"><label htmlFor={formId+'-name'} className="text-sm font-bold">Seu nome</label><input id={formId+'-name'} name="name" type="text" autoComplete="name" maxLength={100} required disabled={loading} placeholder="Como a vovó deve te chamar?" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name?formId+'-name-error':undefined} className="w-full p-4 bg-white rounded-2xl border border-gray-200 outline-none focus:border-vovoh-red text-sm" value={formData.name} onChange={e=>changeField('name',e.target.value)}/>{fieldErrors.name&&<p role="alert" id={formId+'-name-error'} className="text-sm text-red-600">{fieldErrors.name}</p>}</div>}
+                  <div className="space-y-2"><label htmlFor={formId+'-email'} className="text-sm font-bold">E-mail</label><div className="relative"><Mail aria-hidden="true" size={18} className="absolute left-4 top-4 text-gray-400"/><input id={formId+'-email'} name="email" type="email" inputMode="email" autoComplete={mode==='login'?'username':'email'} autoCapitalize="none" autoCorrect="off" spellCheck={false} required maxLength={254} disabled={loading} placeholder="nome@email.com" aria-invalid={!!fieldErrors.email} aria-describedby={formId+'-email-help'+(fieldErrors.email?' '+formId+'-email-error':'')} className="w-full p-4 pl-12 bg-white rounded-2xl border border-gray-200 outline-none focus:border-vovoh-red text-sm" value={formData.email} onChange={e=>changeField('email',e.target.value)} onBlur={()=>{const email=normalizeEmail(formData.email);changeField('email',email);if(email&&!validEmail(email))setFieldErrors(previous=>({...previous,email:'Confira o e-mail. Exemplo: nome@email.com'}));}}/></div><p id={formId+'-email-help'} className="text-xs text-gray-500">{mode==='register'?'Use um e-mail que você acessa. Ele será usado para entrar na conta.':'Use o mesmo e-mail informado no cadastro.'}</p>{fieldErrors.email&&<p role="alert" id={formId+'-email-error'} className="text-sm text-red-600">{fieldErrors.email}</p>}</div>
+                  {mode==='register'&&<div className="space-y-2"><label htmlFor={formId+'-phone'} className="text-sm font-bold">WhatsApp (opcional)</label><PhoneInput id={formId+'-phone'} name="phone" value={formData.phone} onValueChange={value=>changeField('phone',value)} disabled={loading} placeholder="(41) 99999-9999" aria-invalid={!!fieldErrors.phone} aria-describedby={formId+'-phone-help'+(fieldErrors.phone?' '+formId+'-phone-error':'')} className="w-full p-4 bg-white rounded-2xl border border-gray-200 outline-none focus:border-vovoh-red text-sm"/><p id={formId+'-phone-help'} className="text-xs text-gray-500">Inclua o DDD. Podemos preencher este número no pedido; você poderá trocar depois.</p>{fieldErrors.phone&&<p role="alert" id={formId+'-phone-error'} className="text-sm text-red-600">{fieldErrors.phone}</p>}</div>}
+                  <div className="space-y-2"><label htmlFor={formId+'-password'} className="text-sm font-bold">Senha</label><div className="relative"><Lock aria-hidden="true" size={18} className="absolute left-4 top-4 text-gray-400"/><input id={formId+'-password'} name="password" type={visiblePassword?'text':'password'} autoComplete={mode==='register'?'new-password':'current-password'} maxLength={128} required disabled={loading} placeholder={mode==='register'?'Crie uma frase só sua':'Sua senha'} aria-invalid={!!fieldErrors.password} aria-describedby={formId+'-password-help'+(fieldErrors.password?' '+formId+'-password-error':'')} className="w-full p-4 pl-12 pr-14 bg-white rounded-2xl border border-gray-200 outline-none focus:border-vovoh-red text-sm" value={formData.password} onChange={e=>changeField('password',e.target.value)} onKeyUp={e=>setCapsLock(e.getModifierState('CapsLock'))} onBlur={()=>setCapsLock(false)}/><button type="button" aria-label={visiblePassword?'Ocultar senhas':'Mostrar senhas'} aria-pressed={visiblePassword} className="absolute right-1 top-1 min-w-12 min-h-12 flex items-center justify-center text-gray-500" onClick={()=>setVisiblePassword(v=>!v)}>{visiblePassword?<EyeOff size={20}/>:<Eye size={20}/>}</button></div><p id={formId+'-password-help'} className="text-xs text-gray-500">{mode==='register'?'De 15 a 128 caracteres. Vale uma frase com espaços; não precisa de símbolos ou maiúsculas. Evite senhas usadas em outros sites.':'Você pode colar ou usar a senha salva pelo navegador.'}</p>{capsLock&&<p role="status" className="text-xs text-amber-700">Caps Lock está ativado.</p>}{mode==='register'&&formData.password&&<p className={'text-xs flex gap-2 items-center '+(!passwordIssue(formData.password)?'text-green-600':'text-gray-500')}>{!passwordIssue(formData.password)&&<CheckCircle2 size={14}/>}{passwordIssue(formData.password)||'Senha atende às regras.'}</p>}{fieldErrors.password&&<p role="alert" id={formId+'-password-error'} className="text-sm text-red-600">{fieldErrors.password}</p>}</div>
+                  {mode==='register'&&<div className="space-y-2"><label htmlFor={formId+'-passwordConfirmation'} className="text-sm font-bold">Confirmar senha</label><input id={formId+'-passwordConfirmation'} name="passwordConfirmation" type={visiblePassword?'text':'password'} autoComplete="new-password" maxLength={128} required disabled={loading} placeholder="Digite a mesma senha novamente" aria-invalid={!!fieldErrors.passwordConfirmation} aria-describedby={formId+'-confirmation-help'+(fieldErrors.passwordConfirmation?' '+formId+'-passwordConfirmation-error':'')} className="w-full p-4 bg-white rounded-2xl border border-gray-200 outline-none focus:border-vovoh-red text-sm" value={formData.passwordConfirmation} onChange={e=>changeField('passwordConfirmation',e.target.value)}/><p id={formId+'-confirmation-help'} className={'text-xs '+(formData.passwordConfirmation&&formData.passwordConfirmation===formData.password?'text-green-600':'text-gray-500')}>{formData.passwordConfirmation&&formData.passwordConfirmation===formData.password?'As senhas coincidem.':'Repita a senha para evitar erro de digitação.'}</p>{fieldErrors.passwordConfirmation&&<p role="alert" id={formId+'-passwordConfirmation-error'} className="text-sm text-red-600">{fieldErrors.passwordConfirmation}</p>}</div>}
                   <button type="submit" disabled={loading} className="w-full py-5 mt-4 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base flex items-center justify-center gap-3 active:scale-95 transition-all">
                     {loading ? <Loader2 className="animate-spin" /> : (mode === 'login' ? 'Entrar na Cozinha' : <><Heart size={18} className="fill-current"/> Cadastrar e Começar</>)}
                   </button>

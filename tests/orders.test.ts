@@ -86,7 +86,7 @@ test('delivery quote uses private store coordinates and enforces delivery radius
   assert.equal((await request('/chat', { message: 'oi' })).status, 404);
 });
 test('customer registration hashes credentials and protects customer profiles', async () => {
-  const result = await request('/auth/register', { name: 'Cliente teste', email: 'test@example.com', password: 'customer-test-password' });
+  const result = await request('/auth/register', { name: 'Cliente teste', email: 'test@example.com', password: 'customer-test-password', passwordConfirmation:'customer-test-password' });
   assert.equal(result.status, 200);
   customerCookie = result.headers.get('set-cookie')!.split(';')[0];
   customer = (await result.json()).user;
@@ -96,7 +96,7 @@ test('customer registration hashes credentials and protects customer profiles', 
   assert.equal((await request('/users/' + customer.id, { name: 'Hacked' }, {}, 'PATCH')).status, 401);
   assert.equal((await request('/users/' + customer.id, { id: 'other-user', name: 'Atualizado' }, { Cookie: customerCookie }, 'PATCH')).status, 200);
   assert.equal((await request('/orders/user/other-user', undefined, { Cookie: customerCookie })).status, 401);
-  const login = await request('/auth/login', { email: 'test@example.com', password: 'customer-test-password' });
+  const login = await request('/auth/login', { email: 'test@example.com', password: 'customer-test-password', passwordConfirmation:'customer-test-password' });
   assert.equal(login.status, 200); assert.equal((await login.json()).user.password, undefined);
 });
 test('an acknowledged order persists once and cannot be overwritten by a customer', async () => {
