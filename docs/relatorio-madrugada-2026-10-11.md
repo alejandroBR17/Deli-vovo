@@ -1,5 +1,11 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Instalação direta no Android — 14/10/2026
+
+Usuário informou que o botão abria apenas instruções. Botão compartilhado agora chama o prompt nativo na mesma interação quando o navegador disponibiliza beforeinstallprompt, sem etapa intermediária. Captura iniciada antes de React/Service Worker, retendo evento antecipado; eliminado listener/banner duplicado da Home. Cada evento consumido uma única vez, bloqueio de cliques durante instalação; recusa não dispara novamente o mesmo prompt. Falha abre orientação; iOS e Android sem suporte/permissão mantêm ajuda, sem prometer instalação forçada. Avisos e registro confirmado appinstalled preservados.
+
+Teste isolado cobre captura precoce, inicialização única, consumo, appinstalled e cancelamento da assinatura. QA do bundle em viewport Android/iPhone 390px simulou aceitação, recusa, falha e ausência do evento: chamada direta com gesto ativo, um listener, sem overflow/erros JS ou escritas remotas. Simulação não comprova instalação física no Android. Build/TypeScript passou. Revisão React: eventos globais centralizados, hooks estáveis, limpeza de assinatura, ref contra cliques concorrentes, estados acessíveis e fallback por plataforma.
+
 ## Revisão do repositório, licença e segurança — 14/10/2026
 
 Solicitação: conferir código correto, licença/segurança/README, visibilidade e destaque no perfil; manter repositório antigo privado. GitHub confirmou Deli-vovo (1384222082) público e fixado no perfil, delivovo (1170921588) privado. Branch principal tinha código anterior e README de outra revisão (b045a05), enquanto Production usava a branch fix/unifica-delivery-turso. Preparada integração preservando histórico, sem force push. Metadados do repositório corrigidos para https://delivovo.vercel.app/ e descrição Turso/MP/PWA; não alterados outros projetos ou ordem de pins.

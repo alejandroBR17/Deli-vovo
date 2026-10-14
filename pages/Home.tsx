@@ -57,7 +57,6 @@ export default function Home() {
   const pollingRef = useRef<any>(null);
   const productsPollingRef = useRef<any>(null);
 
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isClosed, setIsClosed] = useState(false);
   const [isForceClosed, setIsForceClosed] = useState(false);
   const [isMaintenance, setIsMaintenance] = useState(false);
@@ -257,15 +256,6 @@ export default function Home() {
       setCustomer(remembered.name ? remembered : { name: customerName(parsedUser.name), phone: parsedUser.phone || '', address: parsedUser.address || '' });
     }
 
-    if (window.matchMedia('(display-mode: standalone)').matches) return;
-
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
   const previousGuestName = useRef('');
@@ -336,17 +326,6 @@ export default function Home() {
     }, 2000);
     return () => clearTimeout(timer);
   }, [cart, user?.id, lastSyncedUser]);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-      setToast({ message: "Instalação solicitada. Abra pelo ícone quando terminar.", type: 'success' });
-      // AppInstallProvider records the confirmed appinstalled event.
-    }
-  };
 
   const fetchProducts = async () => {
     try {
@@ -836,30 +815,6 @@ export default function Home() {
           })}
         </AnimatePresence>
       </div>
-
-      {deferredPrompt && <div className="px-4 mt-4 space-y-3 relative z-[200]">
-        {deferredPrompt && (
-          <div className="bg-white border border-gray-100 px-4 py-3 rounded-2xl shadow-xl flex justify-between items-center animate-in slide-in-from-top-2 mx-auto max-w-md">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-vovoh-gold rounded-lg flex items-center justify-center shrink-0">
-                <Star size={14} className="text-white fill-current animate-pulse" />
-              </div>
-              <div className="flex flex-col">
-                 <span className="text-xs font-black text-vovoh-dark">Instalar App</span>
-                 <span className="text-[10px] text-gray-500 font-medium">Melhor experiência pra você!</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleInstallClick} className="px-4 py-1.5 bg-vovoh-dark text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all hover:bg-black whitespace-nowrap">
-                Instalar
-              </button>
-              <button onClick={() => setDeferredPrompt(null)} className="p-1.5 rounded-full hover:bg-gray-100 active:scale-90 transition-all text-gray-400">
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>}
 
       {/* Wrapper para o conteúdo crescer e empurrar o rodapé */}
       <div className="flex-grow">

@@ -3,48 +3,56 @@ import { createPortal } from 'react-dom';
 import { Download, Smartphone, Share, Monitor, Check, X } from 'lucide-react';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
 import {reportAppInstallation} from '../src/utils/install-tracking';
+import {getInstallPrompt, subscribeInstallPrompt, takeInstallPrompt} from '../src/utils/app-install';
 
-interface InstallPrompt extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-const InstallContext = createContext<{ open: () => void; standalone: boolean }>({ open: () => {}, standalone: false });
+const InstallContext = createContext<{ open: () => void; standalone: boolean; busy: boolean }>({ open: () => {}, standalone: false, busy: false });
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
 
 export function AppInstallProvider({ children }: { children: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
   const [standalone, setStandalone] = useState(isStandalone);
-  const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
+  const [prompt, setPrompt] = useState(getInstallPrompt);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [tab, setTab] = useState<'android' | 'ios' | 'pc'>(() => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'ios' : /Android/.test(navigator.userAgent) ? 'android' : 'pc');
   const ref = useRef<HTMLDivElement>(null);
+  const installing = useRef(false);
   const titleId = React.useId();
-  const open = useCallback(() => { setMessage(''); setVisible(true); }, []);
-  const context = useMemo(() => ({ open, standalone }), [open, standalone]);
   useModalFocus(ref, visible, () => setVisible(false));
   useEffect(() => {
     const media = window.matchMedia('(display-mode: standalone)');
     const change = () => {setStandalone(isStandalone());if(isStandalone())void reportAppInstallation();};
-    const available = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); };
-    const installed = () => { setPrompt(null); setMessage('Instalado! Abra pelo ícone na tela inicial ou na lista de aplicativos.');void reportAppInstallation(); change(); };
+    const updatePrompt = () => setPrompt(getInstallPrompt());
+    const unsubscribe = subscribeInstallPrompt(updatePrompt);
+    updatePrompt();
+    const installed = () => { setMessage('Instalado! Abra pelo ícone na tela inicial ou na lista de aplicativos.');void reportAppInstallation(); change(); };
     const online=()=>{if(isStandalone())void reportAppInstallation();};
     online();window.addEventListener('online',online);
-    window.addEventListener('beforeinstallprompt', available);
     window.addEventListener('appinstalled', installed);
     media.addEventListener('change', change);
-    return () => {window.removeEventListener('online',online); window.removeEventListener('beforeinstallprompt', available); window.removeEventListener('appinstalled', installed); media.removeEventListener('change', change); };
+    return () => {unsubscribe(); window.removeEventListener('online',online); window.removeEventListener('appinstalled', installed); media.removeEventListener('change', change); };
   }, []);
-  const install = async () => {
-    if (!prompt || busy) return;
+  const install = useCallback(async () => {
+    if (installing.current) return;
+    const event = takeInstallPrompt();
+    if (!event) { setVisible(true); return; }
+    installing.current = true;
     setBusy(true); setMessage('');
     try {
-      await prompt.prompt();
-      const { outcome } = await prompt.userChoice;
+      // Call before the first await, in the original button's user gesture.
+      await event.prompt();
+      const { outcome } = await event.userChoice;
       setMessage(outcome === 'accepted' ? 'Instalação solicitada. Quando terminar, abra pelo ícone do app.' : 'Você pode instalar depois pelo menu do navegador.');
-    } catch { setMessage('O navegador não conseguiu instalar. Tente pelo menu ou siga as instruções abaixo.'); }
-    finally { setPrompt(null); setBusy(false); }
-  };
+    } catch { setMessage('Não foi possível abrir a instalação. Tente pelo menu do navegador.'); setVisible(true); }
+    finally { installing.current = false; setBusy(false); }
+  }, []);
+  const open = useCallback(() => {
+    if (installing.current) return;
+    setMessage('');
+    if (!isStandalone() && getInstallPrompt()) void install();
+    else setVisible(true);
+  }, [install]);
+  const context = useMemo(() => ({ open, standalone, busy }), [open, standalone, busy]);
   const preview = window.location.hostname.endsWith('.vercel.app') && window.location.hostname !== 'delivovo.vercel.app';
   return <InstallContext.Provider value={context}>
     {children}
@@ -70,6 +78,7 @@ export function AppInstallProvider({ children }: { children: React.ReactNode }) 
 }
 
 export function AppInstallButton({ compact = false }: { compact?: boolean }) {
-  const { open, standalone } = useContext(InstallContext);
-  return <button type="button" onClick={open} className={compact ? 'install-trigger' : 'install-entry'} aria-label={standalone ? 'Sobre o aplicativo' : 'Instalar ou acessar o aplicativo'} title={standalone ? 'Sobre o aplicativo' : 'Instalar aplicativo'}><Smartphone size={20} aria-hidden="true" />{!compact && <span>{standalone ? 'Você está no aplicativo' : 'Instalar ou acessar o aplicativo'}</span>}</button>;
+  const { open, standalone, busy } = useContext(InstallContext);
+  const label = standalone ? 'Sobre o aplicativo' : busy ? 'Abrindo instalação…' : 'Instalar aplicativo';
+  return <button type="button" onClick={open} disabled={busy} aria-busy={busy} className={compact ? 'install-trigger' : 'install-entry'} aria-label={label} title={label}><Smartphone size={20} aria-hidden="true" />{!compact && <span>{standalone ? 'Você está no aplicativo' : label}</span>}</button>;
 }
