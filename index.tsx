@@ -1,8 +1,11 @@
-import './utils/logger'; // Inicializa a interceptação de logs o quanto antes
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/globals.css';
+import './styles/theme.css';
+import { ThemeProvider } from './src/theme/ThemeProvider';
+import { AppInstallProvider } from './components/AppInstall';
+import { ensureServiceWorker } from './src/utils/service-worker';
 
 // Força a atualização do cache para todos os usuários
 const APP_VERSION = '1.1.0-urgent-update';
@@ -22,32 +25,10 @@ if (localStorage.getItem('vovoh_app_version') !== APP_VERSION) {
   }
 }
 
-// Ativando a magia do Aplicativo (PWA) e garantindo atualizações
+// Os avisos precisam estar disponíveis mesmo com imagens ainda carregando.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then((registration) => {
-      // Verifica ativamente se há atualizações no Service Worker
-      registration.update();
-      
-      // Tenta atualizar sempre que a aba ficar visível novamente
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          registration.update();
-        }
-      });
-    }).catch((err) => {
-      console.log('SW falhou, mas a vovó garante que o site funciona: ', err);
-    });
-
-    // Atualiza a página automaticamente quando um novo Service Worker assumir o controle
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        // window.location.reload(); // Desativado temporariamente para evitar loops em produção
-        console.log("Nova versão disponível. Recarregue para atualizar.");
-      }
-    });
+  void ensureServiceWorker().catch(() => {
+    // O botão de ativar tenta novamente e apresenta a falha ao usuário.
   });
 }
 
@@ -97,7 +78,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider><AppInstallProvider><App /></AppInstallProvider></ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

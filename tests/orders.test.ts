@@ -1,0 +1,298 @@
+import {LEGAL_VERSION} from '../src/utils/legal';
+import { before, after, test, mock } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import type { Server } from 'node:http';
+
+const nativeFetch = globalThis.fetch;
+let server: Server;
+let base: string;
+let directory: string;
+let adminCookie: string;
+let customerCookie: string;
+let customer: any;
+let order: any;
+let requestKey: string;
+let accessToken: string;
+before(async () => {
+  mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-12T15:00:00Z')});
+  delete process.env.DELIVERY_PREVIEW_MODE;
+  globalThis.fetch = ((url: any, options?: any) => String(url).startsWith('https://nominatim.openstreetmap.org/')
+    ? Promise.resolve(new Response(JSON.stringify([{lat: '-25.35', lon: '-49.2'}]), { status: 200 })) : nativeFetch(url, options)) as typeof fetch;
+  process.env.NODE_ENV = 'test';
+  delete process.env.VERCEL; delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  delete process.env.GOOGLE_APPLICATION_CREDENTIALS; delete process.env.GOOGLE_SHEETS_SCRIPT_URL;
+  delete process.env.VAPID_PUBLIC_KEY; delete process.env.VAPID_PRIVATE_KEY;
+  process.env.ADMIN_PASSWORD = 'local-test-password';
+  process.env.ADMIN_SESSION_SECRET = randomUUID() + randomUUID();
+  directory = await mkdtemp(path.join(tmpdir(), 'delivovo-tests-'));
+  process.env.TEST_DATA_DIR = directory;
+  const { default: app } = await import('../api/index');
+  server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  base = `http://127.0.0.1:${(server.address() as any).port}/api`;
+});
+after(async () => {
+  mock.timers.reset();
+  globalThis.fetch = nativeFetch;
+  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  assert.equal(path.dirname(directory), tmpdir());
+  assert.ok(path.basename(directory).startsWith('delivovo-tests-'));
+  await rm(directory, { recursive: true });
+});
+function request(url: string, body?: any, headers: Record<string, string> = {}, method?: string) {
+  if(url==='/orders' && body!==undefined){body={legalAcceptance:{accepted:true,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION},...body};headers={Cookie:customerCookie,...headers};}
+  return fetch(base + url, { method: method || (body === undefined ? 'GET' : 'POST'),
+    headers: { 'Content-Type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+test('administrative data and writes require a real session on both mount paths', async () => {
+  assert.equal((await request('/orders')).status, 401);
+  assert.equal((await fetch(base.replace('/api', '') + '/orders')).status, 401);
+  assert.equal((await request('/products', { name: 'invalid' })).status, 403);
+  assert.equal((await request('/admin/login', { password: 'vovo123' }, { 'X-Vovo-Admin': '1' })).status, 401);
+  const login = await request('/admin/login', { password: process.env.ADMIN_PASSWORD }, { 'X-Vovo-Admin': '1' });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie')!;
+  assert.match(cookie, /HttpOnly/i); assert.match(cookie, /SameSite=Strict/i);
+  adminCookie = cookie.split(';')[0];
+  assert.equal((await request('/orders', undefined, { Cookie: adminCookie })).status, 200);
+  assert.equal((await request('/configs', { key: 'x', value: 'y' }, { Cookie: adminCookie })).status, 403);
+  assert.equal((await request('/orders', undefined, { Cookie: adminCookie + 'invalid' })).status, 401);
+});
+test('private configuration never appears in public responses', async () => {
+  await writeFile(path.join(directory, 'configs.json'), JSON.stringify([
+    { key: 'vapid_private_key', value: 'private-test-value' }, { key: 'store_name', value: 'Loja de teste' },
+    { key: 'store_street', value: 'Rua interna de teste' }, { key: 'store_number', value: '123' },
+    { key: 'store_lat', value: '-25.35' }, { key: 'store_lng', value: '-49.2' },
+    { key: 'max_delivery_radius', value: '5' }, { key: 'fee_per_km', value: '2' }, { key: 'free_delivery_radius', value: '0' },
+  ]));
+  const response = await request('/configs');
+  const text = await response.text();
+  assert.ok(!text.includes('private-test-value')); assert.ok(text.includes('Loja de teste'));
+  assert.ok(!text.includes('Rua interna de teste')); assert.ok(!text.includes('store_lat'));
+  const internal = await request('/configs', undefined, { Cookie: adminCookie });
+  const internalText = await internal.text();
+  assert.ok(internalText.includes('Rua interna de teste')); assert.ok(!internalText.includes('private-test-value'));
+});
+
+test('delivery quote uses private store coordinates and enforces delivery radius', async () => {
+  const nearby = await request('/delivery/quote', { address: 'Rua de teste, 123, Curitiba, PR' });
+  assert.equal(nearby.status, 200); const result = await nearby.json(); assert.equal(result.fee, 0); assert.equal(result.distance, 0); assert.ok(result.token);
+  assert.ok(!('store_lat' in result));
+  assert.equal((await request('/delivery/quote', { address: null })).status, 400);
+  assert.equal((await request('/chat', { message: 'oi' })).status, 404);
+});
+test('customer registration hashes credentials and protects customer profiles', async () => {
+  const result = await request('/auth/register', { name: 'Cliente teste', email: 'test@example.com', password: 'customer-test-password', passwordConfirmation:'customer-test-password' });
+  assert.equal(result.status, 200);
+  customerCookie = result.headers.get('set-cookie')!.split(';')[0];
+  customer = (await result.json()).user;
+  assert.equal(customer.password, undefined);
+  const stored = JSON.parse(await readFile(path.join(directory, 'users.json'), 'utf8'));
+  assert.match(stored[0].password, /^scrypt:/); assert.notEqual(stored[0].password, 'customer-test-password');
+  assert.equal((await request('/users/' + customer.id, { name: 'Hacked' }, {}, 'PATCH')).status, 401);
+  assert.equal((await request('/users/' + customer.id, { id: 'other-user', name: 'Atualizado' }, { Cookie: customerCookie }, 'PATCH')).status, 200);
+  assert.equal((await request('/orders/user/other-user', undefined, { Cookie: customerCookie })).status, 401);
+  const login = await request('/auth/login', { email: 'test@example.com', password: 'customer-test-password', passwordConfirmation:'customer-test-password' });
+  assert.equal(login.status, 200); assert.equal((await login.json()).user.password, undefined);
+});
+test('an acknowledged order persists once and cannot be overwritten by a customer', async () => {
+  await request('/products', {id: 'test-product', name: 'Produto teste', price: 10}, { Cookie: adminCookie, 'X-Vovo-Admin': '1' });
+  order = { type: 'retirada', id: randomUUID(), customer: { name: 'Teste', phone: '41999999999', address: 'Endereço de teste' }, items: [{ id: 'test-product', name: 'Produto teste', quantity: 1, price: 10 }], total: 10, payment: { method: 'pix', paid: true } };
+  requestKey = randomUUID();
+  assert.equal((await request('/orders', {...order,total:0.01,items:[{...order.items[0],price:0.01}]}, { 'X-Order-Request': requestKey })).status,409);
+  assert.equal((await request('/orders', {...order,coupon:'INVENTADO'}, { 'X-Order-Request': requestKey })).status,400);
+  const result = await request('/orders', order, { 'X-Order-Request': requestKey, Cookie: customerCookie });
+  assert.equal(result.status, 200);
+  accessToken = (await result.json()).accessToken;
+  assert.ok(accessToken);
+  const duplicate = await request('/orders', order, { 'X-Order-Request': requestKey });
+  assert.equal(duplicate.status, 200); assert.equal((await duplicate.json()).accessToken, accessToken);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'orders.json'), 'utf8')).length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'orders.json'), 'utf8'))[0].payment.paid, false);
+  assert.equal((await request('/orders', order, { 'X-Order-Request': randomUUID() })).status, 409);
+  assert.equal((await request('/orders/' + order.id, { status: 'concluido' }, {}, 'PUT')).status, 403);
+  assert.equal((await request('/orders/' + order.id + '/status', { status: 'preparando' }, { 'X-Order-Token': accessToken }, 'PATCH')).status, 403);
+  assert.equal((await request('/orders/' + order.id + '/status', { status: 'cancelado' }, { 'X-Order-Token': accessToken }, 'PATCH')).status, 200);
+});
+test('push configuration and subscriptions cannot claim success without working setup', async () => {
+  assert.equal((await request('/push/public-key')).status, 503);
+  assert.equal((await request('/push/subscribe', { role: 'admin', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/test', keys: { p256dh: 'x', auth: 'y' } } })).status, 401);
+  assert.equal((await request('/admin/test-push', { endpoint: 'missing' }, { Cookie: adminCookie, 'X-Vovo-Admin': '1' })).status, 404);
+});
+
+test('cash requires explicit saved opt-in and cannot claim payment or invalid change', async () => {
+  const cashOrder = (payment: any) => ({ ...order, id: randomUUID(), payment });
+  const headers = () => ({ 'X-Order-Request': randomUUID() });
+  const adminHeaders = { Cookie: adminCookie, 'X-Vovo-Admin': '1' };
+  assert.equal((await request('/orders', cashOrder({ method: 'dinheiro', paid: true }), headers())).status, 400);
+  assert.equal((await request('/orders', cashOrder({ method: 'unknown', paid: true }), headers())).status, 400);
+  assert.equal((await request('/configs', { key: 'cash_enabled', value: 'yes' }, adminHeaders)).status, 400);
+  assert.equal((await request('/configs', { key: 'cash_enabled', value: 'true' }, adminHeaders)).status, 200);
+  for (const changeFor of [5, -1, '20', null]) {
+    assert.equal((await request('/orders', cashOrder({ method: 'dinheiro', changeFor }), headers())).status, 400);
+  }
+  for (const changeFor of [undefined, 20]) {
+    const candidate = cashOrder({ method: 'dinheiro', changeFor, paid: true });
+    assert.equal((await request('/orders', candidate, headers())).status, 200);
+    const stored = JSON.parse(await readFile(path.join(directory, 'orders.json'), 'utf8')).find((entry: any) => entry.id === candidate.id);
+    assert.equal(stored.payment.paid, false);
+    assert.equal(stored.payment.method, 'dinheiro');
+    assert.equal(stored.payment.changeFor, changeFor);
+    assert.equal(stored.status, 'pendente');
+    assert.match(stored.paymentMethod, changeFor === undefined ? /Valor exato/ : /Troco para R\$ 20\.00/);
+  }
+  assert.equal((await request('/configs', { key: 'cash_enabled', value: 'false' }, adminHeaders)).status, 200);
+  assert.equal((await request('/orders', cashOrder({ method: 'dinheiro' }), headers())).status, 400);
+});
+
+test('invalid shop settings are refused without overwriting saved delivery and hours', async () => {
+  const headers={ Cookie: adminCookie, 'X-Vovo-Admin': '1' };
+  for(const [key,value] of [['fee_per_km',''],['fee_per_km','-1'],['max_delivery_radius','Infinity'],['free_delivery_radius','6'],['working_days','[7]'],['working_days','false'],['opening_start','25:00'],['force_closed','yes']]) {
+    const response=await request('/configs',{key,value},headers);
+    assert.equal(response.status,400);
+    assert.ok((await response.json()).error);
+  }
+  const saved=await (await request('/configs',undefined,{ Cookie: adminCookie })).json();
+  assert.equal(saved.fee_per_km,'2'); assert.equal(saved.free_delivery_radius,'0'); assert.equal(saved.max_delivery_radius,'5');
+  assert.equal((await request('/configs',{key:'fee_per_km',value:'1,50'},headers)).status,200);
+  assert.equal((await (await request('/configs',undefined,{ Cookie: adminCookie })).json()).fee_per_km,'1.5');
+  assert.equal((await request('/configs',{key:'opening_start',value:'18:00'},headers)).status,200);
+  assert.equal((await request('/configs',{key:'opening_end',value:'18:00'},headers)).status,400);
+  assert.equal((await request('/configs',{key:'opening_end',value:'02:00'},headers)).status,200);
+  assert.equal((await request('/configs',{key:'working_days',value:'[]'},headers)).status,200);
+});
+
+test('grouped delivery and hours save together and invalid groups leave every field unchanged',async()=>{
+  const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+  assert.equal((await request('/configs/batch',{updates:{fee_per_km:'2'}})).status,403);
+  assert.equal((await request('/configs/batch',{updates:{ADMIN_PASSWORD:'x'}},headers)).status,400);
+  const before=await (await request('/configs',undefined,{Cookie:adminCookie})).json();
+  assert.equal((await request('/configs/batch',{updates:{fee_per_km:'10',max_delivery_radius:'1',free_delivery_radius:'3'}},headers)).status,400);
+  const after=await (await request('/configs',undefined,{Cookie:adminCookie})).json();assert.equal(after.fee_per_km,before.fee_per_km);assert.equal(after.max_delivery_radius,before.max_delivery_radius);
+  assert.equal((await request('/configs/batch',{updates:{opening_start:'02:00',opening_end:'18:00',working_days:'[1,2]'}},headers)).status,200);
+  const saved=await (await request('/configs',undefined,{Cookie:adminCookie})).json();assert.equal(saved.opening_start,'02:00');assert.equal(saved.opening_end,'18:00');assert.equal(saved.working_days,'[1,2]');
+});
+
+test('JSON product options complete paid-distance delivery for Pix and cash',async()=>{
+  const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+  const product={id:'json-options-test',name:'Produto teste com opções',price:10,variations:JSON.stringify([{name:'Grande',price:2},{name:'Queijo',price:1.5,isAdditional:true}])};
+  assert.equal((await request('/products',product,headers)).status,200);
+  const catalog=await (await request('/products')).json();const entry=catalog.find((item:any)=>item.id===product.id);
+  assert.equal(entry.variations.length,1);assert.equal(entry.additionals.length,1);
+  assert.equal((await request('/configs/batch',{updates:{free_delivery_radius:'0',fee_per_km:'2',max_delivery_radius:'20'}},headers)).status,200);
+  assert.equal((await request('/configs',{key:'cash_enabled',value:'true'},headers)).status,200);
+  const {deliveryToken}=await import('../server/checkout');
+  const {quoteDelivery}=await import('../server/delivery');
+  const address='Endereço fictício exclusivamente no teste local';
+  const config=await (await request('/configs',undefined,{Cookie:adminCookie})).json();
+  const fee=quoteDelivery(config,'-25.4','-49.2').fee;assert.ok(fee>0);
+  for(const method of ['pix','dinheiro']){
+    const candidate={id:randomUUID(),type:'entrega',customer:{name:'Teste local',phone:'41999999999',address},items:[{id:product.id,quantity:1,variation:{name:'Grande',price:0},additionals:[{name:'Queijo',price:0}]}],total:13.5+fee,deliveryToken:deliveryToken(address,'-25.4','-49.2'),payment:{method,paid:true}};
+    const response=await request('/orders',candidate,{'X-Order-Request':randomUUID()});assert.equal(response.status,200,JSON.stringify(await response.json()));
+    const stored=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((item:any)=>item.id===candidate.id);
+    assert.equal(stored.total,Math.round((13.5+fee)*100)/100);assert.equal(stored.items[0].variation.price,2);assert.equal(stored.items[0].additionals[0].price,1.5);assert.equal(stored.payment.paid,false);
+  }
+});
+
+test('cash can leave for delivery before receipt but completion requires persistent admin confirmation',async()=>{
+ const stored=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8'));
+ const cash=stored.find((item:any)=>item.payment?.method==='dinheiro'&&item.status==='pendente');assert.ok(cash);
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ const receipt='/orders/'+cash.id+'/payment/confirm';const status='/orders/'+cash.id+'/status';
+ assert.equal((await request(receipt,{})).status,403);
+ assert.equal((await request(receipt,{}, {Cookie:customerCookie})).status,403);
+ assert.equal((await request(receipt,{}, {Cookie:adminCookie})).status,403);
+ for(const value of ['preparando','forno','entrega'])assert.equal((await request(status,{status:value},headers,'PATCH')).status,200);
+ assert.equal((await request(status,{status:'concluido'},headers,'PATCH')).status,409);
+ const {orderToken}=await import('../server/admin-auth');
+ assert.equal((await request('/orders/'+cash.id+'/receive',{}, {'X-Order-Token':orderToken(cash.id)})).status,409);
+ const response=await request(receipt,{method:'stripe',paid:false},headers);assert.equal(response.status,200);
+ const payment=(await response.json()).payment;assert.equal(payment.method,'dinheiro');assert.equal(payment.paid,true);assert.ok(payment.verifiedAt);
+ assert.deepEqual((await (await request(receipt,{},headers)).json()).payment,payment);
+ const persisted=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((item:any)=>item.id===cash.id);
+ assert.equal(persisted.status,'entrega');assert.deepEqual(persisted.payment,payment);
+ assert.equal((await request(status,{status:'concluido'},headers,'PATCH')).status,200);
+ assert.equal((await request('/orders/missing/payment/confirm',{},headers)).status,404);
+ const pix=stored.find((item:any)=>item.payment?.method==='pix'&&item.status==='cancelado');assert.ok(pix);
+ assert.equal((await request('/orders/'+pix.id+'/payment/confirm',{},headers)).status,409);
+});
+
+test('API rejects invalid schedules without writes and stores valid schedules with the shop timezone',async()=>{
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ assert.equal((await request('/configs/batch',{updates:{opening_start:'10:00',opening_end:'22:00',working_days:'[0,1,2,3,4,5,6]'}},headers)).status,200);
+ const before=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).length;
+ const body=(scheduledTo:any)=>({...order,id:randomUUID(),scheduledTo});
+ for(const schedule of ['2000-01-01T15:00','2099-02-30T15:00','2099-01-01T23:00',{},'tomorrow']){
+  const response=await request('/orders',body(schedule),{'X-Order-Request':randomUUID()});assert.equal(response.status,400);assert.ok((await response.json()).error);
+ }
+ assert.equal(JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).length,before);
+ const candidate=body('2099-01-01T15:00');const response=await request('/orders',candidate,{'X-Order-Request':randomUUID()});assert.equal(response.status,200);
+ const saved=JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((entry:any)=>entry.id===candidate.id);assert.equal(saved.scheduledTo,'2099-01-01T15:00:00-03:00');
+});
+
+test('receipt confirmation is admin-only, persistent and independent of scheduled preparation/payment',async()=>{
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ const candidate={...order,id:randomUUID(),scheduledTo:'2099-01-01T15:00',acknowledgedAt:'spoofed'};
+ assert.equal((await request('/orders',candidate,{'X-Order-Request':randomUUID()})).status,200);
+ const stored=async()=>JSON.parse(await readFile(path.join(directory,'orders.json'),'utf8')).find((entry:any)=>entry.id===candidate.id);
+ const before=await stored();assert.equal(before.acknowledgedAt,undefined);
+ const endpoint='/orders/'+candidate.id+'/acknowledge';
+ assert.equal((await request(endpoint,{}, {'X-Vovo-Admin':'1'})).status,401);
+ assert.equal((await request(endpoint,{}, {Cookie:customerCookie,'X-Vovo-Admin':'1'})).status,401);
+ assert.equal((await request(endpoint,{}, {Cookie:adminCookie})).status,403);
+ assert.equal((await request('/orders/missing/acknowledge',{},headers)).status,404);
+ const response=await request(endpoint,{},headers);assert.equal(response.status,200);
+ const {acknowledgedAt}=await response.json();assert.ok(Number.isFinite(Date.parse(acknowledgedAt)));
+ assert.deepEqual(await stored(),{...before,acknowledgedAt});
+ const repeated=await request(endpoint,{},headers);assert.equal(repeated.status,200);assert.equal((await repeated.json()).acknowledgedAt,acknowledgedAt);
+ const panel=await (await request('/orders',undefined,{Cookie:adminCookie})).json();assert.equal(panel.find((entry:any)=>entry.id===candidate.id).acknowledgedAt,acknowledgedAt);
+ assert.deepEqual(await (await request('/orders/batch/status?ids='+candidate.id)).json(),{[candidate.id]:'pendente'});
+ assert.deepEqual(await (await request('/orders/batch/status?ids='+candidate.id+'&details=1')).json(),{[candidate.id]:{status:'pendente',acknowledgedAt}});
+ const {needsOrderAttention}=await import('../src/utils/order-attention');assert.equal(needsOrderAttention(before),true);assert.equal(needsOrderAttention(await stored()),false);
+ assert.equal((await request('/orders/'+candidate.id+'/status',{status:'cancelado'},headers,'PATCH')).status,200);
+ assert.equal((await request(endpoint,{},headers)).status,409);
+});
+
+test('immediate orders stop at closing, retries remain idempotent and future slots still work',async()=>{
+ const headers={Cookie:adminCookie,'X-Vovo-Admin':'1'};
+ await request('/configs/batch',{updates:{opening_start:'10:00',opening_end:'12:01',working_days:'[0,1,2,3,4,5,6]'}},headers);
+ await request('/configs',{key:'cash_enabled',value:'true'},headers);
+ // A stored development flag must not override the real admission rules.
+ await request('/configs',{key:'preview_mode',value:'true'},headers);
+ const body=(method='pix')=>({...order,id:randomUUID(),payment:{method},scheduledTo:undefined});
+ const accepted=body(),nonce=randomUUID();
+ assert.equal((await request('/orders',accepted,{'X-Order-Request':nonce})).status,200);
+ const count=()=>readFile(path.join(directory,'orders.json'),'utf8').then(value=>JSON.parse(value).length);
+ const before=await count();
+ mock.timers.setTime(Date.parse('2026-10-12T15:01:00Z'));
+ for(const method of ['pix','dinheiro']){
+  const response=await request('/orders',body(method),{'X-Order-Request':randomUUID()});
+  assert.equal(response.status,409);assert.match((await response.json()).error,/entrega agendada/);
+ }
+ const forgedCard=await request('/orders',body('cartao_online'),{'X-Order-Request':randomUUID()});
+ assert.equal(forgedCard.status,400);assert.match((await forgedCard.json()).error,/Pagamento não confirmado/);
+ assert.equal((await request('/orders',accepted,{'X-Order-Request':nonce})).status,200);
+ assert.equal(await count(),before);
+ assert.equal((await request('/orders',{...body(),scheduledTo:'2099-01-01T11:00'},{'X-Order-Request':randomUUID()})).status,200);
+ mock.timers.setTime(Date.parse('2026-10-12T15:00:00Z'));
+ await request('/configs',{key:'force_closed',value:'true'},headers);
+ assert.equal((await request('/orders',body(),{'X-Order-Request':randomUUID()})).status,409);
+ assert.equal((await request('/orders',{...body(),scheduledTo:'2099-01-01T11:00'},{'X-Order-Request':randomUUID()})).status,200);
+ await request('/configs',{key:'force_closed',value:'false'},headers);
+ await request('/configs',{key:'working_days',value:'[]'},headers);
+ assert.equal((await request('/orders',body(),{'X-Order-Request':randomUUID()})).status,409);
+});
+
+
+test('new orders require a chosen customer name instead of the old guest placeholder', async () => {
+  for (const name of ['Visitante', '  visitante  ', '  ', 'Jo']) {
+    const candidate={...order,id:randomUUID(),customer:{...order.customer,name}};
+    const result=await request('/orders',candidate,{'x-order-request':randomUUID()});
+    assert.equal(result.status,400);
+    assert.match((await result.json()).error,/nome/);
+  }
+});

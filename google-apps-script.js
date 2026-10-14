@@ -8,7 +8,7 @@ function setup() {
   
   const sheets = {
     "Produtos": ["id", "name", "description", "price", "category", "image", "oldPrice", "variations"],
-    "Pedidos": ["id", "date", "customerName", "customerPhone", "total", "itemsSummary", "paymentMethod", "status", "type", "address", "userId", "archived"],
+    "Pedidos": ["id", "date", "customerName", "customerPhone", "total", "itemsSummary", "paymentMethod", "status", "type", "address", "userId", "archived", "items", "scheduledTo", "submissionKeyHash"],
     "Usuarios": ["id", "name", "email", "password", "phone", "address", "cart"],
     "Configuracoes": ["key", "value"]
   };
@@ -29,6 +29,7 @@ function setup() {
 
 function doGet(e) {
   try {
+    if (!authorizedRequest(e)) return createResponse({ error: "Acesso não autorizado." });
     setup();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const action = e.parameter.action;
@@ -66,6 +67,7 @@ function doGet(e) {
           itemsSummary: row[5],
           paymentMethod: row[6],
           status: row[7],
+          userId: row[10] || '', items: row[12] || '[]', scheduledTo: row[13] || '', submissionKeyHash: row[14] || '',
           type: row[8]
         };
       }).reverse();
@@ -86,6 +88,7 @@ function doGet(e) {
           itemsSummary: row[5],
           paymentMethod: row[6],
           status: row[7],
+          userId: row[10] || '', items: row[12] || '[]', scheduledTo: row[13] || '', submissionKeyHash: row[14] || '',
           type: row[8]
         };
       }).reverse();
@@ -123,6 +126,7 @@ function doGet(e) {
           id: row[0],
           name: row[1],
           email: row[2],
+          password: row[3],
           phone: row[4],
           address: row[5],
           cart: row[6]
@@ -139,6 +143,7 @@ function doGet(e) {
 
 function doPost(e) {
   try {
+    if (!authorizedRequest(e)) return createResponse({ error: "Acesso não autorizado." });
     setup();
     const params = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -196,6 +201,7 @@ function doPost(e) {
       for (let i = 1; i < data.length; i++) {
         if (data[i][0] === p.id) {
           if (p.name) sheet.getRange(i + 1, 2).setValue(p.name);
+          if (p.password) sheet.getRange(i + 1, 4).setValue(p.password);
           if (p.phone) sheet.getRange(i + 1, 5).setValue(p.phone);
           if (p.address) sheet.getRange(i + 1, 6).setValue(p.address);
           
@@ -210,13 +216,19 @@ function doPost(e) {
     }
 
     if (action === 'order') {
+      const lock = LockService.getScriptLock();
+      lock.waitLock(15000);
+      try {
       const sheet = ss.getSheetByName("Pedidos");
       const p = params.payload;
+      const existing = sheet.getDataRange().getValues().find(row => row[0] === p.id);
+      if (existing) return createResponse(existing[14] === p.submissionKeyHash ? { success: true } : { error: 'Pedido já existente.' });
       sheet.appendRow([
         p.id, new Date(), p.customerName, p.customerPhone, p.total, 
-        p.itemsSummary, p.paymentMethod, 'pendente', p.type, p.address, p.userId || '', false
+        p.itemsSummary, p.paymentMethod, 'pendente', p.type, p.address, p.userId || '', false, p.items || '[]', p.scheduledTo || '', p.submissionKeyHash || ''
       ]);
       return createResponse({ success: true });
+      } finally { lock.releaseLock(); }
     }
 
     if (action === 'archiveOrder') {
@@ -302,4 +314,9 @@ function doPost(e) {
 function createResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function authorizedRequest(e) {
+  const secret = PropertiesService.getScriptProperties().getProperty('API_SECRET');
+  return !!secret && e.parameter.apiSecret === secret;
 }

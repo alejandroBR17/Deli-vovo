@@ -29,11 +29,13 @@ export interface User {
 }
 
 export interface Order {
+  accessToken?: string;
   id: string;
   items: CartItem[];
   total: number;
   status: OrderStatus;
   scheduledTo?: string;
+  acknowledgedAt?: string;
   refusalReason?: string;
   customer: {
     name: string;
@@ -41,7 +43,7 @@ export interface Order {
     address: string;
   };
   payment: {
-    method: 'pix' | 'cartao_online';
+    method: 'pix' | 'cartao_online' | 'dinheiro';
     changeFor?: number;
     paid: boolean;
   };
@@ -50,11 +52,6 @@ export interface Order {
     estimatedTime?: string;
   };
   type: 'entrega' | 'retirada';
-}
-
-export interface RecommendationResponse {
-  message: string;
-  suggestedItems: string[];
 }
 
 export interface ScheduleData {

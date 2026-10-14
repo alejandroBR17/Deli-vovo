@@ -1,20 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { Heart, Zap, Bell, X, ChefHat, CreditCard, Copy, Check, Smartphone, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { useTheme } from '../src/theme/ThemeProvider';
+import React, { useEffect, useState, useRef } from 'react';
+import { Heart, Zap, Bell, X, ChefHat, CreditCard, Copy, Check, Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PaymentElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe } from '@stripe/stripe-js/pure';
 import { generatePixPayload } from '../utils/pix';
+import {useModalFocus} from '../src/hooks/use-modal-focus';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
+export const stripeTestMode = Boolean(stripeKey?.startsWith('pk_test_'));
 
 export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }: { isOpen: boolean, title: string, message: string, onConfirm: () => void, onCancel: () => void }) => {
+  const dialogRef=useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef,isOpen,onCancel);
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end items-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onCancel} />
       
-      <div className="relative w-full max-w-md bg-white rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain bg-white rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full">
         
         {/* Drag Handle Mobile */}
         <div className="w-full flex justify-center items-center h-6 bg-white shrink-0 cursor-pointer" onClick={onCancel}>
@@ -60,33 +64,60 @@ export const GrandmaLoader = () => (
   </div>
 );
 
-export const Toast = ({ message, type, onClose }: { message: string, type: any, onClose: () => void }) => {
-  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, [onClose]);
-  
-  const colors = {
-    success: 'bg-green-600 text-white shadow-green-200',
-    error: 'bg-vovoh-red text-white shadow-red-200',
-    info: 'bg-vovoh-dark text-white shadow-zinc-200'
-  };
-
+export const Toast = ({ message, type, onClose, notification }: { notification?: object, message: string, type: 'success' | 'error' | 'info', onClose: () => void }) => {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [expanded, setExpanded] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  const [hasDetails, setHasDetails] = useState(false);
+  useEffect(() => {
+    if (expanded) return;
+    const element = messageRef.current;
+    if (!element) return;
+    const check = () => setHasDetails(element.scrollHeight > element.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [message, expanded]);
+  useEffect(() => { setExpanded(false); }, [message, type, notification]);
+  useEffect(() => {
+    if (paused || expanded) return;
+    const delay = Math.min(12000, Math.max(type === 'error' ? 8000 : 4000, message.length * 45));
+    const timer = setTimeout(() => closeRef.current(), delay);
+    return () => clearTimeout(timer);
+  }, [message, type, paused, expanded, notification]);
+  const color = type === 'success' ? 'bg-green-50 text-green-700' : type === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700';
+  const Icon = type === 'success' ? CheckCircle2 : type === 'error' ? AlertTriangle : Info;
   return (
-    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-10 duration-500 w-[90%] max-w-md">
-      <div className={`${colors[type as keyof typeof colors]} rounded-full px-8 py-4 flex items-center gap-4 shadow-2xl font-black text-sm`}>
-        {type === 'success' ? <Check size={18} /> : <Bell size={18}/>}
-        <span className="flex-grow">{message}</span>
-        <button onClick={onClose} className="hover:scale-110 transition-transform active:scale-90"><X size={18}/></button>
+    <div className="fixed top-[calc(4.75rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-2rem)] max-w-sm" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocusCapture={() => setPaused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }}>
+      <div className="bg-white text-vovoh-dark border border-gray-200 rounded-2xl p-3 flex items-start gap-3 shadow-lg">
+        <span className={'w-9 h-9 shrink-0 rounded-xl flex items-center justify-center '+color}><Icon size={19} aria-hidden="true" /></span>
+        <div className="flex-1 min-w-0 pt-1">
+          <p ref={messageRef} role={type === 'error' ? 'alert' : 'status'} aria-atomic="true" className={'text-sm font-medium leading-relaxed break-words '+(expanded ? 'max-h-48 overflow-y-auto' : 'line-clamp-2')}>{message}</p>
+          {(hasDetails || message.length > 120) && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)} className="text-xs text-vovoh-red font-semibold min-h-9 underline underline-offset-2">{expanded ? 'Recolher detalhes' : 'Mostrar detalhes'}</button>}
+        </div>
+        <button type="button" aria-label="Fechar aviso" onClick={onClose} className="w-11 h-11 -m-1 shrink-0 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red"><X size={18} /></button>
       </div>
     </div>
   );
 };
 
-export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => void, total: number, customer?: any }) => {
+export const StripePaymentBox = ({ onComplete, total, customer, checkout }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any, checkout: any }) => {
+  const [stripePromise] = useState(() => stripeKey ? loadStripe(stripeKey) : null);
+  const {resolved} = useTheme();
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [orderId, setOrderId] = useState('');
+  const checkoutBody = JSON.stringify(checkout);
 
   const customerZip = customer?.address ? (customer.address.match(/\d{5}-?\d{3}/)?.[0] || '') : '';
 
   useEffect(() => {
+    const controller = new AbortController();
+    setClientSecret(null); setError(null);
     if (!stripePromise) {
       setError("Configuração de pagamento incompleta (Chave Stripe ausente).");
       return;
@@ -95,15 +126,18 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
     fetch('/api/create-payment-intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: total }),
+      body: checkoutBody,
+      signal: controller.signal,
     })
-      .then((res) => {
-        if (!res.ok) throw new Error('Falha ao iniciar pagamento seguro');
-        return res.json();
+      .then(async (res) => {
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Falha ao iniciar pagamento seguro');
+        return result;
       })
-      .then((data) => setClientSecret(data.clientSecret))
-      .catch((err) => setError(err.message));
-  }, [total]);
+      .then((data) => { setClientSecret(data.clientSecret); setOrderId(data.orderId); })
+      .catch((err) => { if (!controller.signal.aborted) setError(err.message); });
+    return () => controller.abort();
+  }, [checkoutBody]);
 
   if (error) {
     return (
@@ -127,10 +161,10 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
   if (!stripePromise) return null;
 
   return (
-    <Elements stripe={stripePromise} options={{ 
+    <Elements key={clientSecret} stripe={stripePromise} options={{
       clientSecret, 
       appearance: { 
-        theme: 'stripe',
+        theme: resolved === 'dark' ? 'night' : 'stripe',
         variables: {
           colorPrimary: '#2563eb',
           fontFamily: 'Quicksand, sans-serif',
@@ -138,15 +172,16 @@ export const StripePaymentBox = ({ onComplete, total, customer }: { onComplete: 
         }
       } 
     }}>
-      <StripeForm onComplete={onComplete} total={total} customer={customer} />
+      <StripeForm onComplete={details => onComplete({ ...details, orderId })} total={total} customer={customer} />
     </Elements>
   );
 };
 
-const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => void, total: number, customer?: any }) => {
+const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetails?: any) => Promise<boolean> | boolean | void, total: number, customer?: any }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmedPayment, setConfirmedPayment] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const customerZip = customer?.address ? (customer.address.match(/\d{5}-?\d{3}/)?.[0] || '') : '';
@@ -158,20 +193,21 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
     setIsProcessing(true);
     setErrorMessage(null);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: window.location.origin,
-      },
-      redirect: 'if_required',
-    });
-
-    if (error) {
-      setErrorMessage(error.message || 'Erro no processamento.');
-      setIsProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      onComplete({ method: 'cartao_online', id: paymentIntent.id });
-    }
+    try {
+      let paymentId = confirmedPayment;
+      if (!paymentId) {
+        const { error, paymentIntent } = await stripe.confirmPayment({
+          elements, confirmParams: { return_url: window.location.origin }, redirect: 'if_required',
+        });
+        if (error) throw new Error(error.message || 'Erro no processamento.');
+        if (!paymentIntent || paymentIntent.status !== 'succeeded') throw new Error('O pagamento ainda não foi confirmado.');
+        paymentId = paymentIntent.id; setConfirmedPayment(paymentId);
+      }
+      const saved = await onComplete({ method: 'cartao_online', id: paymentId });
+      if (saved === false) setErrorMessage('Pagamento confirmado, mas o pedido ainda não foi salvo. Tente enviar novamente. Você não será cobrado de novo por este botão.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível concluir.');
+    } finally { setIsProcessing(false); }
   };
 
   return (
@@ -187,6 +223,7 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {stripeTestMode && <p role="note" className="p-3 rounded-xl bg-blue-50 text-blue-700 text-sm">Pagamento de teste, sem cobrança real. Use somente um cartão de teste do Stripe.</p>}
         <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200">
           <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-4">Dados do Pagamento</label>
           <PaymentElement options={{ 
@@ -224,7 +261,7 @@ const StripeForm = ({ onComplete, total, customer }: { onComplete: (paymentDetai
           {isProcessing ? (
             <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Processando...</>
           ) : (
-            `Pagar R$ ${total.toFixed(2)}`
+            confirmedPayment ? 'Enviar pedido já pago' : `${stripeTestMode ? 'Simular pagamento de' : 'Pagar'} R$ ${total.toFixed(2)}`
           )}
         </button>
       </form>
@@ -246,7 +283,7 @@ export const PixBox = ({ onComplete, pixKey, total }: { onComplete: () => void, 
 
   return (
     <div className="bg-white rounded-[2.5rem] p-8 border-2 border-vovoh-gold/10 shadow-xl space-y-6 text-center animate-in zoom-in-95">
-      <div className="w-48 h-48 bg-white mx-auto rounded-3xl flex items-center justify-center border-2 border-dashed border-vovoh-gold/20 p-4">
+      <div className="pix-qr w-48 h-48 mx-auto rounded-3xl flex items-center justify-center border-2 border-dashed border-vovoh-gold/20 p-4">
         <QRCodeSVG value={pixPayload} size={160} level="M" includeMargin={true} />
       </div>
       <div>
@@ -257,8 +294,9 @@ export const PixBox = ({ onComplete, pixKey, total }: { onComplete: () => void, 
           {copied ? <><Check size={16}/> Copiado!</> : <><Copy size={16}/> Copiar Pix Copia e Cola</>}
         </button>
       </div>
+      <p className="text-sm text-gray-600">A loja vai conferir o pagamento antes de iniciar o preparo.</p>
       <button onClick={onComplete} className="w-full py-6 bg-vovoh-red text-white font-black rounded-[2rem] shadow-xl hover:scale-105 transition-transform">
-        Confirmar Pagamento
+        Já fiz o Pix — enviar pedido
       </button>
     </div>
   );

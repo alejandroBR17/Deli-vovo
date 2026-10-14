@@ -14,8 +14,7 @@ build/
 *.local
 
 # Variáveis de ambiente com segredos
-.env
-.env*.local
+.env*
 !.env.example
 
 # IDEs e Editores
@@ -29,3 +28,9 @@ build/
 *.sw?
 .DS_Store
 Thumbs.db
+
+data/
+.vercel/
+test-results/
+playwright-report/
+preview/

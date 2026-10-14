@@ -1,58 +1,32 @@
-const GAS_API_URL = import.meta.env.VITE_API_URL || '/api';
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
+import { GAS_API_URL } from '../../constants/index';
+import { adminFetch } from './admin-api';
+import { ensureServiceWorker } from './service-worker';
+function urlBase64ToUint8Array(value: string) {
+  const raw = atob((value + '='.repeat((4 - value.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, character => character.charCodeAt(0));
 }
-
-export async function subscribeToPush(userId?: string, role: 'admin' | 'customer' = 'customer') {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Push messaging is not supported');
-    return false;
+async function readyRegistration() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('No iPhone, instale pela opção Adicionar à Tela de Início e abra pelo ícone (iOS 16.4 ou superior). No Android, use o Chrome.');
+  return ensureServiceWorker();
+}
+export async function getPushSubscription() { return (await readyRegistration()).pushManager.getSubscription(); }
+export async function subscribeToPush(userId?: string, role: 'admin' | 'customer' = 'admin') {
+  if(role !== 'admin') throw new Error('Os avisos de pedidos são exclusivos do painel da Vovó.');
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') throw new Error('Permita as notificações no navegador primeiro.');
+  const registration = await readyRegistration();
+  const response = await fetch(`${GAS_API_URL}/push/public-key`);
+  const result = await response.json();
+  if (!response.ok || !result.publicKey) throw new Error(result.error || 'Os avisos ainda precisam ser configurados na loja.');
+  const key = urlBase64ToUint8Array(result.publicKey);
+  let subscription = await registration.pushManager.getSubscription();
+  const existingKey = subscription?.options.applicationServerKey;
+  if (subscription && (!existingKey || existingKey.byteLength !== key.length || !new Uint8Array(existingKey).every((byte, index) => byte === key[index]))) {
+    await subscription.unsubscribe(); subscription = null;
   }
-
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    
-    // Pega a chave pública do servidor
-    const response = await fetch(`${GAS_API_URL}/push/public-key`);
-    const { publicKey } = await response.json();
-    
-    const convertedVapidKey = urlBase64ToUint8Array(publicKey);
-
-    // Inscreve o usuário
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: convertedVapidKey
-    });
-
-    // Envia a subscription para o servidor
-    await fetch(`${GAS_API_URL}/push/subscribe`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscription,
-        userId,
-        role
-      }),
-    });
-
-    console.log('Push subscription successful');
-    return true;
-  } catch (error) {
-    console.error('Error subscribing to push:', error);
-    return false;
-  }
+  subscription ||= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  const options = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: subscription.toJSON(), userId, role }) };
+  const saved = role === 'admin' ? await adminFetch('/push/subscribe', options) : await fetch(`${GAS_API_URL}/push/subscribe`, options);
+  const savedResult = await saved.json();
+  if (!saved.ok || savedResult.success !== true) throw new Error(savedResult.error || 'Não foi possível cadastrar os avisos. Tente novamente.');
+  return true;
 }

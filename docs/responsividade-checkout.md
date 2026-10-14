@@ -1,0 +1,17 @@
+# Responsividade e conferência do pedido no servidor
+
+A sacola agora usa espaço flexível para o cupom e itens e uma grade proporcional no cartão de fidelidade. Login, produto e sacola usam a altura dinâmica do viewport; campos em painéis móveis usam texto de 16 px, a navegação respeita a área segura inferior e animações de entrada respeitam a preferência por movimento reduzido. A decoração do login fica recortada no painel, evitando rolagem horizontal.
+
+O servidor busca preços atuais do catálogo, valida quantidades de 1 a 99, opções obrigatórias e adicionais permitidos, rejeita adicionais repetidos e usa os cupons configurados. Valores são calculados em centavos. Nome, preço e resumo dos itens gravados vêm do catálogo. Se o total enviado difere do total conferido, a API recusa a confirmação e mantém a sacola para revisão, em vez de mudar o valor silenciosamente.
+
+A cotação de frete recebe o endereço e consulta o geocodificador no servidor. Não aceita coordenadas escolhidas pelo cliente para definir a taxa. Uma prova assinada válida por 20 minutos vincula o ponto encontrado ao endereço informado. Ao salvar, o servidor confere a assinatura, o endereço e novamente as taxas e o raio atuais. Editar campos de endereço invalida a cotação no checkout. A busca usa cache local limitado a 100 endereços por 30 minutos e limite de 10 solicitações por minuto por IP. O cache é por instância; não é armazenamento permanente nem um limite global entre todas as funções. A precisão do endereço depende do provedor de mapas.
+
+O início do pagamento Stripe usa o mesmo cálculo, rejeita divergência de total e vincula a intenção de pagamento ao pedido e à sua composição. A confirmação exige pagamento concluído em BRL, valor correspondente e vínculo com esse pedido. Requisições antigas de pagamento são canceladas no componente quando o checkout muda. Nenhuma cobrança externa foi feita na validação; o fluxo com cartão e recuperação após redirecionamento precisa de teste antes de habilitar em produção.
+
+O destino remoto confirmado pelo responsável é somente `delivovo`, mantendo seu banco Turso. `Deli-vovo` é a origem do código mais recente. Não foi criada outra conexão de banco, nem alterada a produção. O teste de avisos no Android com a tela bloqueada continua pendente porque o responsável está longe do aparelho.
+
+Validação: 14 testes passaram, cobrindo catálogo adulterado, opções, quantidades, cupons, frete assinado/alterado/vencido, raio, armazenamento e sessões. A compra completa foi repetida em navegador, com geocodificação real, taxa conferida e envio persistido no SQLite local; a falha de envio simulada mantém a sacola. Os testes usam produtos e pedidos fictícios e não escrevem no banco remoto.
+
+A inspeção de responsividade cobre 320×568, 360×640, 390×844, 768×1024, 820×1180, 1024×768, 1365×900 e 1920×1080: loja, produto, sacola, endereço, login e painel, sem rolagem horizontal inesperada ou erros JavaScript. Nas três telas menores, a altura foi reduzida para simular o espaço ocupado pelo teclado; isso não substitui uma verificação com o teclado real do Android. Campos e ações permanecem acessíveis por rolagem vertical.
+
+O atalho de portfólio do desktop foi reposicionado no canto inferior esquerdo, abaixo dos modais: ele interceptava o botão de fechar a sacola. O subtotal do atalho da sacola passou a incluir adicionais. A indicação de pagamento Pix gravada é sempre pendente de conferência; uma marcação de pagamento recebido enviada pelo navegador não é aceita.

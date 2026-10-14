@@ -1,56 +1,123 @@
+import { customerName, validCustomerName } from '../src/utils/customer-name';
 import React, { useEffect, useState, useRef } from 'react';
 import { X, ShoppingCart, Trash2, ArrowRight, User, MapPin, Zap, CheckCircle2, Bike, ChefHat, Flame, Heart, PackageCheck, Award, Star, Clock, LogIn, AlertTriangle, CreditCard, Check, ArrowLeft, RefreshCw, Loader2, MessageSquare, Phone } from 'lucide-react';
-import { PixBox, StripePaymentBox } from './UI';
-import { PLACEHOLDER_IMG } from '../constants/index';
-import { normalizeCoordinate } from '../utils/geo';
-import { subscribeToPush } from '../src/utils/push';
+import { Banknote } from 'lucide-react';
+import { PixBox } from './UI';
+import {CardPaymentBox} from './CardPayment';
+import { PLACEHOLDER_IMG, GAS_API_URL } from '../constants/index';
+import { lookupCep, formatCep } from '../src/utils/cep';
+import { SavedCheckoutDetails } from './SavedCheckoutDetails';
+import { PhoneInput } from './PhoneInput';
+import {LEGAL_VERSION,guestNotice,currentLegalReceipt} from '../src/utils/legal';
+import {localGuest} from '../src/utils/customer-name';
+import {shopDate,validateSchedule} from '../src/utils/order-schedule';
+import {storeAvailability} from '../src/utils/store-hours';
+import {useModalFocus} from '../src/hooks/use-modal-focus';
+import { addressParts, readSavedCustomers, rememberCustomer, SavedCustomer, CustomerDetails } from '../src/utils/saved-checkout';
 
-export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, coupons, dynamicConfigs, showMsg }: any) => {
+export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer, method, setMethod, changeFor, setChangeFor, onOrder, pixKey, user, openAuth, ensureIdentity, coupons, dynamicConfigs, onRefreshConfigs, showMsg }: any) => {
+  const [legalAccepted,setLegalAccepted]=useState(false);
+  const [savedAcceptance,setSavedAcceptance]=useState<any>(null);
+  const [savingAcceptance,setSavingAcceptance]=useState(false);
+  const rememberedAcceptance=currentLegalReceipt(user?.legalAcceptance,user?.id)||currentLegalReceipt(savedAcceptance,user?.id);
+  const hasLegalAcceptance=!!rememberedAcceptance||legalAccepted;
+  useEffect(()=>{if(isOpen)setLegalAccepted(false);},[isOpen,user?.id]);
+  const legalAcceptance={accepted:hasLegalAcceptance,termsVersion:LEGAL_VERSION,privacyVersion:LEGAL_VERSION};
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef,isOpen,onClose);
+  const [configStatus, setConfigStatus] = useState<'loading'|'ready'|'error'>('loading');
+  const [configRetry, setConfigRetry] = useState(0);
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setConfigStatus('loading');
+    onRefreshConfigs().then((configs: any) => {
+      if (!cancelled) {
+        setConfigStatus(configs ? 'ready' : 'error');
+        if (configs) {
+          quoteSequence.current++;
+          quoteAbort.current?.abort();
+          setCalculatingFee(false);
+          setFeeCalculated(false); setDeliveryProof('');
+          setDeliveryFee(0); setDeliveryDistance(0);
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, onRefreshConfigs, configRetry]);
+  const cashEnabled = dynamicConfigs?.cash_enabled === 'true';
+  useEffect(() => {
+    if (!cashEnabled && method === 'dinheiro') setMethod('pix');
+  }, [cashEnabled, method, setMethod]);
   const [fidelidade, setFidelidade] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [step, setStep] = useState('cart');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [couponError, setCouponError] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [deliveryDistance, setDeliveryDistance] = useState(0);
+  const [deliveryProof, setDeliveryProof] = useState('');
   const [calculatingFee, setCalculatingFee] = useState(false);
   const [feeCalculated, setFeeCalculated] = useState(false);
   const [addressError, setAddressError] = useState('');
+  const quoteSequence = useRef(0);
+  const quoteAbort = useRef<AbortController | null>(null);
+  const addressSearchSequence = useRef(0);
+  const addressSearchAbort = useRef<AbortController | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const immediateAvailable = !!dynamicConfigs && storeAvailability(dynamicConfigs).open;
+  useEffect(() => {
+    if (isOpen && dynamicConfigs && !immediateAvailable && step !== 'payment') setIsScheduled(true);
+  }, [isOpen, dynamicConfigs, immediateAvailable, step]);
 
-  const [cep, setCep] = useState('');
+  const [cep, setCep] = useState(() => addressParts(customer).cep);
   const [searchingCep, setSearchingCep] = useState(false);
-  const [street, setStreet] = useState('');
-  const [number, setNumber] = useState('');
+  const [street, setStreet] = useState(() => addressParts(customer).street);
+  const [number, setNumber] = useState(() => addressParts(customer).number);
   const numberRef = useRef<HTMLInputElement>(null);
-  const [neighborhood, setNeighborhood] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [neighborhood, setNeighborhood] = useState(() => addressParts(customer).neighborhood);
+  const [city, setCity] = useState(() => addressParts(customer).city);
+  const [state, setState] = useState(() => addressParts(customer).state);
+  const [savedCustomers, setSavedCustomers] = useState<SavedCustomer[]>([]);
+  const applyCustomer = (details: CustomerDetails) => {
+    const parts = addressParts(details);
+    setCustomer({...details, name:customerName(details.name), phone: details.phone.replace(/\D/g, '')}); setStreet(parts.street); setNumber(parts.number);
+    setNeighborhood(parts.neighborhood); setCity(parts.city); setState(parts.state); setCep(parts.cep);
+    setAddressError('');
+  };
+  useEffect(() => {
+    if (isOpen) { setSavedCustomers(readSavedCustomers()); applyCustomer(customer); }
+  }, [isOpen]);
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const deliveryResultRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    if (isOpen && feeCalculated) deliveryResultRef.current?.scrollIntoView({block:'nearest',behavior:'auto'});
+  },[feeCalculated,isOpen]);
+
+
 
   useEffect(() => {
-    if (customer.address && !street && !city) {
-      // Tenta fazer um parse básico se já vier preenchido do banco
-      const parts = customer.address.split(',');
-      if (parts.length > 1) {
-        setStreet(parts[0].trim());
-        const numAndRest = parts[1].split('-');
-        if (numAndRest.length > 0) setNumber(numAndRest[0].trim());
-      } else {
-        setStreet(customer.address);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (street && number && city) {
-      const newAddress = `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}`;
-      setCustomer((prev: any) => ({ ...prev, address: newAddress }));
-    }
+    quoteSequence.current++;
+    quoteAbort.current?.abort();
+    setCalculatingFee(false);
+    setDeliveryFee(0); setDeliveryDistance(0);
+    addressSearchSequence.current++;
+    addressSearchAbort.current?.abort();
+    setSearchingCep(false); setIsGettingLocation(false);
+    const newAddress = street && number && city ? `${street}, ${number} - ${neighborhood}, ${city} - ${state}, ${cep}` : '';
+    setCustomer((prev: any) => ({ ...prev, address: newAddress, deliveryAddress: {street,number,neighborhood,city,state,cep} }));
+    setFeeCalculated(false); setDeliveryProof('');
+    return () => {
+      quoteSequence.current++; quoteAbort.current?.abort();
+      addressSearchSequence.current++; addressSearchAbort.current?.abort();
+    };
   }, [street, number, neighborhood, city, state, cep]);
 
   const searchCep = async () => {
@@ -61,29 +128,29 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     }
     setAddressError('');
     setSearchingCep(true);
+    setIsGettingLocation(false);
+    const sequence = ++addressSearchSequence.current;
+    addressSearchAbort.current?.abort();
+    const controller = new AbortController();
+    addressSearchAbort.current = controller;
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-      const data = await res.json();
-      if (data.erro) {
-        setAddressError("CEP não encontrado.");
-        return;
-      }
-      setStreet(data.logradouro || '');
-      setNeighborhood(data.bairro || '');
-      setCity(data.localidade || '');
-      setState(data.uf || '');
+      const data = await lookupCep(cleanCep, controller.signal);
+      if (sequence !== addressSearchSequence.current || controller.signal.aborted) return;
+      setStreet(data.street);
+      setNeighborhood(data.neighborhood);
+      setCity(data.city);
+      setState(data.state);
       setFeeCalculated(false);
       
       // Foca no número automaticamente para agilizar
-      setTimeout(() => numberRef.current?.focus(), 100);
+      numberRef.current?.focus();
     } catch (e) {
-      setAddressError("Erro ao buscar CEP.");
+      if (sequence !== addressSearchSequence.current) return;
+      setAddressError(e instanceof Error ? e.message : 'Preencha o endereço manualmente ou tente novamente.');
     } finally {
-      setSearchingCep(false);
+      if (sequence === addressSearchSequence.current) setSearchingCep(false);
     }
   };
-
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -92,11 +159,20 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     }
 
     setIsGettingLocation(true);
+    setSearchingCep(false); setAddressError('');
+    const sequence = ++addressSearchSequence.current;
+    addressSearchAbort.current?.abort();
+    const controller = new AbortController();
+    addressSearchAbort.current = controller;
     navigator.geolocation.getCurrentPosition(async (position) => {
+      if (sequence !== addressSearchSequence.current) return;
+      const timeout = setTimeout(() => controller.abort(), 15000);
       try {
         const { latitude, longitude } = position.coords;
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`, { signal: controller.signal });
+        if (!res.ok) throw new Error('Localização indisponível');
         const data = await res.json();
+        if (sequence !== addressSearchSequence.current || controller.signal.aborted) return;
         
         if (data.address) {
           const addr = data.address;
@@ -108,16 +184,19 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
           setCep(addr.postcode || '');
           setFeeCalculated(false);
           showMsg?.("Localização encontrada!", "success");
-        }
+        } else setAddressError('Não encontramos o endereço desta localização. Preencha manualmente.');
       } catch (e) {
-        setAddressError("Erro ao obter endereço pela localização.");
+        if (sequence !== addressSearchSequence.current) return;
+        setAddressError(controller.signal.aborted ? 'A busca da localização demorou demais. Preencha o endereço ou tente novamente.' : 'Erro ao obter endereço pela localização. Você pode preencher manualmente.');
       } finally {
-        setIsGettingLocation(false);
+        clearTimeout(timeout);
+        if (sequence === addressSearchSequence.current) setIsGettingLocation(false);
       }
-    }, () => {
-      setAddressError("Permissão de localização negada.");
+    }, (error) => {
+      if (sequence !== addressSearchSequence.current) return;
+      setAddressError(error.code === 1 ? 'Permissão de localização negada. Você pode preencher o endereço manualmente.' : 'Não foi possível obter sua localização. Você pode preencher o endereço manualmente.');
       setIsGettingLocation(false);
-    });
+    }, { timeout: 15000, maximumAge: 60000 });
   };
 
   useEffect(() => {
@@ -155,77 +234,36 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 
   const calculateDeliveryFee = async () => {
     setAddressError('');
-    if (!customer.address) {
+    if (!street.trim() || !number.trim() || !city.trim()) {
       setAddressError("Por favor, preencha seu endereço completo primeiro.");
       return;
     }
-    if (!dynamicConfigs?.store_lat || !dynamicConfigs?.store_lng) {
-      setAddressError("A loja ainda não configurou o endereço de entrega.");
-      return;
-    }
-
     setCalculatingFee(true);
+    const sequence = ++quoteSequence.current;
+    quoteAbort.current?.abort();
+    const controller = new AbortController();
+    quoteAbort.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      // Busca mais precisa usando os campos separados
-      const params = new URLSearchParams({
-        format: 'json',
-        street: `${number} ${street}`,
-        city: city,
-        state: state,
-        country: 'Brazil',
-        postalcode: cep.replace(/\D/g, '')
+      const quote = await fetch(`${GAS_API_URL}/delivery/quote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: customer.address }),
+        signal: controller.signal,
       });
-
-      let res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
-      let data = await res.json();
-      
-      // Fallback para busca genérica se a estruturada falhar
-      if (!data || data.length === 0) {
-        const searchQuery = `${street}, ${number}, ${city}, ${state}, Brasil`;
-        res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-        data = await res.json();
-      }
-      
-      if (data && data.length > 0) {
-        const customerLat = parseFloat(data[0].lat);
-        const customerLng = parseFloat(data[0].lon);
-        const storeLat = normalizeCoordinate(dynamicConfigs.store_lat);
-        const storeLng = normalizeCoordinate(dynamicConfigs.store_lng);
-
-        const R = 6371; // Radius of the earth in km
-        const dLat = (customerLat - storeLat) * (Math.PI/180);
-        const dLon = (customerLng - storeLng) * (Math.PI/180);
-        const a = 
-          Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(storeLat * (Math.PI/180)) * Math.cos(customerLat * (Math.PI/180)) * 
-          Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-        const distance = R * c; // Distance in km
-
-        const freeRadius = parseFloat(dynamicConfigs.free_delivery_radius || '0');
-        const feePerKm = parseFloat(dynamicConfigs.fee_per_km || '0');
-        const maxRadius = parseFloat(dynamicConfigs.max_delivery_radius || '999');
-
-        if (distance > maxRadius) {
-          setAddressError(`Desculpe, só entregamos até ${maxRadius}km. Sua distância é de ${distance.toFixed(1)}km.`);
-          setFeeCalculated(false);
-          setDeliveryFee(0);
-        } else {
-          let fee = 0;
-          if (distance > freeRadius) {
-            fee = (distance - freeRadius) * feePerKm;
-          }
-          setDeliveryDistance(distance);
-          setDeliveryFee(fee);
-          setFeeCalculated(true);
-        }
-      } else {
-        setAddressError("Não conseguimos encontrar seu endereço. Por favor, seja mais específico (Rua, Número, Cidade).");
-      }
+      const result = await quote.json().catch(() => ({}));
+      if (sequence !== quoteSequence.current) return;
+      if (controller.signal.aborted) throw new Error('O cálculo do frete demorou demais. Tente novamente.');
+      if (!quote.ok) throw new Error(result.error || 'Não foi possível calcular o frete.');
+      if (!Number.isFinite(result.fee) || result.fee < 0 || !Number.isFinite(result.distance) || result.distance < 0 || typeof result.token !== 'string' || !result.token) throw new Error('Não foi possível confirmar o frete. Tente novamente.');
+      setDeliveryDistance(result.distance); setDeliveryFee(result.fee);
+      setDeliveryProof(result.token); setFeeCalculated(true);
     } catch (e) {
-      setAddressError("Erro ao calcular o frete. Tente novamente.");
+      if (sequence !== quoteSequence.current) return;
+      setFeeCalculated(false); setDeliveryFee(0);
+      setAddressError(controller.signal.aborted ? 'O cálculo do frete demorou demais. Tente novamente.' : e instanceof Error ? e.message : 'Erro ao calcular o frete. Tente novamente.');
     } finally {
-      setCalculatingFee(false);
+      clearTimeout(timeout);
+      if (sequence === quoteSequence.current) setCalculatingFee(false);
     }
   };
 
@@ -240,50 +278,73 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
     }
   };
 
-  const handleOrder = () => {
+  const handleOrder = async (paymentDetails?: any) => {
+    if (submitLock.current) return false;
+    submitLock.current = true; setSubmitting(true);
+    try {
+    if(!user || !hasLegalAcceptance){showMsg('Identifique-se e aceite os documentos antes de pedir.','error');setStep('details');return false;}
+    if (!validCustomerName(customer.name)) { showMsg('Informe seu nome antes de enviar o pedido.', 'error'); setStep('details'); return false; }
     let scheduledTo = undefined;
-    if (isScheduled && scheduledDate && scheduledTime) {
-      scheduledTo = `${scheduledDate}T${scheduledTime}:00`;
+    if (isScheduled) {
+      try {
+        if (!scheduledDate || !scheduledTime) throw new Error('Escolha a data e o horário da entrega agendada.');
+        scheduledTo = validateSchedule(`${scheduledDate}T${scheduledTime}:00`,dynamicConfigs);
+      } catch(error) {
+        showMsg(error instanceof Error ? error.message : 'Confira o agendamento.', 'error'); return false;
+      }
     }
-    onOrder({ finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, scheduledTo });
+    if (method === 'dinheiro' && (!cashEnabled || (changeFor !== '' && (!Number.isFinite(Number(changeFor)) || Number(changeFor) < total)))) {
+      showMsg('Confira a forma de pagamento e o valor para troco.', 'error');
+      return false;
+    }
+    return await onOrder({ ...paymentDetails,legalAcceptance, ...(method === 'dinheiro' ? { method, changeFor: changeFor === '' ? undefined : Number(changeFor) } : {}), finalTotal: total, coupon: appliedCoupon?.code, deliveryFee, deliveryDistance, deliveryToken: deliveryProof, scheduledTo });
+    } finally { submitLock.current = false; setSubmitting(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
+    <div className="checkout-overlay fixed inset-0 z-[400] flex flex-col justify-end md:items-end overscroll-none">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Sua sacola" tabIndex={-1} className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F9F9F9] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
         </div>
 
-        <header className="px-6 py-4 md:py-5 flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
+        <header className="px-4 sm:px-6 py-4 md:py-5 flex flex-wrap gap-3 justify-between items-center bg-white border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-3 md:gap-4">
             <div className="w-10 h-10 md:w-12 md:h-12 bg-vovoh-red text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-100"><ShoppingCart size={20}/></div>
             <h3 className="text-xl md:text-2xl font-black text-vovoh-dark">Sua Sacola</h3>
           </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-colors"><X size={20}/></button>
+          <button aria-label="Fechar sacola" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark hover:bg-gray-100 transition-colors"><X size={20}/></button>
         </header>
 
-        <div ref={scrollRef} className="flex-grow overflow-y-auto p-6  space-y-8 bg-[#F9F9F9] no-scrollbar pb-32 ">
+        <div ref={scrollRef} className="checkout-scroll flex-grow overflow-y-auto overscroll-contain touch-pan-y min-h-0 p-4 sm:p-6 space-y-8 bg-[#F9F9F9] no-scrollbar pb-32">
+          {configStatus !== 'ready' && (
+            <div role={configStatus === 'error' ? 'alert' : 'status'} className="p-4 rounded-2xl border border-gray-200 bg-white text-sm text-gray-700">
+              {configStatus === 'loading' ? <span className="flex items-center gap-2"><Loader2 size={18} className="animate-spin shrink-0" /> Conferindo as opções da loja...</span> : <>
+                <p>Não conseguimos atualizar as opções da loja. Seus dados continuam preenchidos.</p>
+                <button type="button" onClick={() => setConfigRetry(value => value + 1)} className="mt-3 font-bold text-vovoh-red underline">Tentar novamente</button>
+              </>}
+            </div>
+          )}
           
           {(step === 'cart' || step === 'details' || step === 'payment') && (
-            <div className="bg-gradient-to-br from-vovoh-gold to-amber-600 p-6  rounded-[2rem] text-white shadow-lg relative overflow-hidden shrink-0">
+            <div className="bg-gradient-to-br from-vovoh-gold to-amber-600 p-4 sm:p-6  rounded-[2rem] text-white shadow-lg relative overflow-hidden shrink-0">
                <div className="absolute -top-4 -right-4 opacity-10 rotate-12"><Award size={100} /></div>
                <div className="relative z-10 space-y-4">
                   <div className="flex justify-between items-center">
                     <h4 className="font-black text-[10px]  uppercase tracking-widest">Cartão Fidelidade</h4>
                     <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-black">{fidelidade}/10</span>
                   </div>
-                  <div className="flex gap-1.5 ">
+                  <div className="grid grid-cols-10 gap-1.5">
                     {[...Array(10)].map((_, i) => (
-                      <div key={i} className={`w-6 h-6   rounded-full border-2 border-white/30 flex items-center justify-center transition-all ${i < fidelidade ? 'bg-white text-vovoh-gold scale-110 shadow-lg' : 'bg-transparent text-white/30'}`}>
+                      <div key={i} className={`w-full aspect-square rounded-full border-2 border-white/30 flex items-center justify-center transition-all ${i < fidelidade ? 'bg-white text-vovoh-gold scale-110 shadow-lg' : 'bg-transparent text-white/30'}`}>
                         {i < fidelidade ? <Heart size={12} fill="currentColor" /> : <Star size={10} />}
                       </div>
                     ))}
                   </div>
-                  <p className="text-[9px] [10px] font-bold opacity-80 leading-tight">Complete seu cartão e ganhe um lanche grátis! 🥟</p>
+                  <p className="text-[9px] [10px] font-bold opacity-80 leading-tight">Complete seu cartão e ganhe um lanche grátis! </p>
                </div>
             </div>
           )}
@@ -299,9 +360,9 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                 <>
                   <div className="space-y-3">
                     {cart.map((item:any, index: number) => (
-                      <div key={`${item.id}-${index}`} className="bg-white p-4 rounded-[1.5rem] flex items-center gap-4 shadow-sm border border-gray-100">
-                        <img src={item.image || PLACEHOLDER_IMG} className="w-16 h-16 rounded-xl object-cover bg-vovoh-cream" />
-                        <div className="flex-grow">
+                      <div key={`${item.id}-${index}`} className="bg-white p-3 sm:p-4 rounded-[1.5rem] flex flex-wrap min-[400px]:flex-nowrap items-center gap-2 sm:gap-4 shadow-sm border border-gray-100">
+                        <img src={item.image || PLACEHOLDER_IMG} className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 rounded-xl object-cover bg-vovoh-cream" />
+                        <div className="flex-1 min-w-0 basis-24 break-words">
                           <h4 className="font-black text-sm text-vovoh-dark leading-tight mb-1">{item.name}</h4>
                           {item.variation && <p className="text-[10px] font-bold text-gray-500 mb-1">Opção: {item.variation.name}</p>}
                           {item.additionals && item.additionals.length > 0 && (
@@ -312,7 +373,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                           {item.observation && <p className="text-[10px] font-bold text-gray-400 italic mb-1">Obs: {item.observation}</p>}
                           <p className="text-vovoh-red font-black text-sm">R$ {(parseFloat(item.price) + (item.variation ? parseFloat(item.variation.price) : 0) + (item.additionals ? item.additionals.reduce((sum:number, a:any) => sum + parseFloat(a.price), 0) : 0)).toFixed(2)}</p>
                         </div>
-                        <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="flex shrink-0 ml-auto flex-col items-center justify-center gap-2">
                            <div className="flex items-center gap-3 bg-[#F9F9F9] px-3 py-1.5 rounded-xl border border-gray-100">
                              <button onClick={() => setCart((prev:any) => prev.map((i:any, idx:number) => idx === index ? {...i, quantity: Math.max(1, i.quantity - 1)} : i))} className="font-black text-vovoh-gold text-sm px-1">-</button>
                              <span className="font-black text-xs w-2 text-center">{item.quantity}</span>
@@ -333,9 +394,9 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                             value={couponCode}
                             onChange={e => setCouponCode(e.target.value)}
                             placeholder="Ex: PROMO10"
-                            className="flex-grow p-4 bg-white rounded-xl border border-gray-200 font-bold text-xs uppercase outline-none focus:border-vovoh-red transition-all"
+                            className="flex-1 min-w-0 p-4 bg-white rounded-xl border border-gray-200 font-bold text-xs uppercase outline-none focus:border-vovoh-red transition-all"
                           />
-                          <button onClick={handleApplyCoupon} className="px-6 bg-vovoh-dark text-white font-black rounded-xl text-[10px] uppercase tracking-widest active:scale-95 transition-all">Aplicar</button>
+                          <button onClick={handleApplyCoupon} className="checkout-action px-5 font-bold rounded-xl text-sm active:scale-95 transition-all">Aplicar</button>
                        </div>
                        {couponError && <p className="text-[9px] font-bold text-vovoh-red px-1">{couponError}</p>}
                        {appliedCoupon && (
@@ -351,12 +412,12 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                           <span>Subtotal</span>
                           <span>R$ {subtotal.toFixed(2)}</span>
                        </div>
-                       {deliveryFee > 0 && (
+                       {feeCalculated ? (
                          <div className="flex justify-between text-xs font-bold text-gray-400">
-                            <span>Taxa de Entrega</span>
-                            <span>R$ {deliveryFee.toFixed(2)}</span>
+                            <span>Taxa de entrega</span>
+                            <span>{deliveryFee === 0 ? 'Grátis' : 'R$ ' + deliveryFee.toFixed(2)}</span>
                          </div>
-                       )}
+                       ) : <p className="text-sm text-gray-600">A taxa de entrega será calculada pelo endereço no próximo passo.</p>}
                        {appliedCoupon && (
                          <div className="flex justify-between text-xs font-bold text-green-600">
                             <span>Desconto</span>
@@ -364,13 +425,13 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                          </div>
                        )}
                        <div className="flex justify-between items-end pt-2">
-                          <span className="text-gray-400 font-black uppercase tracking-widest text-[10px]">Total a Pagar</span>
+                          <span className="text-gray-400 font-black uppercase tracking-widest text-[10px]">{feeCalculated ? 'Total a pagar' : 'Itens da sacola'}</span>
                           <span className="text-3xl  font-black text-vovoh-dark tracking-tighter leading-none">R$ {total.toFixed(2)}</span>
                        </div>
                     </div>
                   </div>
                   
-                  <button onClick={() => setStep('details')} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 flex items-center justify-center gap-3 text-base active:scale-95 transition-all mt-4">
+                  <button disabled={configStatus !== 'ready'} onClick={async () => {if(await ensureIdentity())setStep('details');}}  className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 flex items-center justify-center gap-3 text-base active:scale-95 transition-all mt-4 disabled:opacity-50">
                     Continuar Pedido <ArrowRight size={20}/>
                   </button>
                 </>
@@ -383,14 +444,15 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
               
               {!user && (
                  <div className="bg-amber-50 border border-vovoh-gold/20 p-5 rounded-[1.5rem] flex flex-col gap-3">
-                    <p className="text-xs font-bold text-vovoh-dark leading-tight">Já é de casa? Faça login para preencher tudo mais rápido!</p>
+                    <p className="text-xs font-bold text-vovoh-dark leading-tight">Identifique-se para pedir. Use sua conta ou continue como convidado com nome e WhatsApp.</p>
                     <button onClick={openAuth} className="w-full py-3 bg-white text-vovoh-gold font-black border border-vovoh-gold/20 rounded-xl text-xs uppercase tracking-widest shadow-sm flex items-center justify-center gap-2 active:scale-95">
-                      <LogIn size={14} /> Entrar na conta
+                      <LogIn size={14} /> Entrar ou continuar como convidado
                     </button>
                  </div>
               )}
 
               <div className="space-y-4">
+                <SavedCheckoutDetails saved={savedCustomers} customer={customer} onApply={applyCustomer}/>
                 <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm"><User size={16} className="text-vovoh-red"/> Nome Completo</label>
                 <input 
                   type="text" 
@@ -400,20 +462,23 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                   onChange={e => setCustomer({...customer, name: e.target.value})} 
                 />
                 
-                <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><Zap size={16} className="text-vovoh-red"/> WhatsApp</label>
-                <input 
+                <label htmlFor="checkout-whatsapp" className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><Zap size={16} className="text-vovoh-red"/> WhatsApp</label>
+                <PhoneInput
                   type="tel" 
-                  placeholder="Ex: 41999999999 (Apenas números)"
+                  id="checkout-whatsapp"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="(41) 99999-9999"
                   className="w-full p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" 
-                  value={customer.phone} 
-                  onChange={e => setCustomer({...customer, phone: e.target.value.replace(/\D/g, '')})} 
+                  value={customer.phone || ''}
+                  onValueChange={phone => setCustomer({...customer, phone})}
                 />
                 
                 <label className="flex items-center gap-2 font-black text-vovoh-dark px-1 text-sm pt-2"><MapPin size={16} className="text-vovoh-red"/> Endereço de Entrega Completo</label>
                 
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
-                    <input type="text" placeholder="CEP (Apenas números)" maxLength={8} className="w-full /3 p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" value={cep} onChange={e => setCep(e.target.value)} />
+                    <input type="text" inputMode="numeric" aria-label="CEP de entrega" placeholder="CEP (Apenas números)" maxLength={9} className="w-full min-w-0 p-4 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm" value={cep} onChange={e => setCep(formatCep(e.target.value))} />
                     <button onClick={searchCep} disabled={searchingCep} className="px-4 bg-gray-100 text-vovoh-dark rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all whitespace-nowrap shrink-0 disabled:opacity-50">
                       {searchingCep ? 'Buscando...' : 'Buscar CEP'}
                     </button>
@@ -434,43 +499,58 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                   <input type="text" placeholder="Cidade" className="p-5 bg-white rounded-2xl border border-gray-200 font-bold outline-none focus:border-vovoh-red transition-colors text-sm w-full" value={city} onChange={e => { setCity(e.target.value); setFeeCalculated(false); setAddressError(''); }} />
                 </div>
                 
-                <button onClick={calculateDeliveryFee} disabled={calculatingFee || !street || !number || !city} className="w-full py-4 bg-vovoh-dark text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50">
+                <button onClick={calculateDeliveryFee} disabled={calculatingFee || !street || !number || !city} className="checkout-action w-full py-4 rounded-2xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50">
                   {calculatingFee ? 'Calculando...' : 'Calcular Frete'}
                 </button>
 
                 {addressError && <p className="text-[10px] font-bold text-vovoh-red px-1">{addressError}</p>}
+                {feeCalculated && (
+                  <div ref={deliveryResultRef} role="status" aria-live="polite" className="delivery-result p-4 rounded-2xl flex items-center gap-3">
+                    <CheckCircle2 size={24} className="shrink-0" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm">Taxa de Entrega: {deliveryFee === 0 ? 'Grátis!' : `R$ ${deliveryFee.toFixed(2)}`}</p>
+                      <p className="text-xs mt-1">Frete calculado · distância de {deliveryDistance.toFixed(1)} km</p>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 space-y-4">
-                  <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
+                  {!immediateAvailable && <p className="text-sm text-gray-600">A loja está fechada agora. Escolha uma entrega agendada dentro do expediente.</p>}
+                  <div className="grid grid-cols-2 gap-3">
                     <button 
                       onClick={() => setIsScheduled(false)}
-                      className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      disabled={!immediateAvailable}
+                      aria-pressed={!isScheduled}
+                      className="delivery-choice min-w-0 px-2 py-3 rounded-xl text-sm font-bold flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Entrega Agora
+                      <Bike size={20} aria-hidden="true" /> Entrega Agora
                     </button>
                     <button 
                       onClick={() => setIsScheduled(true)}
-                      className={`flex-1 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isScheduled ? 'bg-white text-vovoh-dark shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      aria-pressed={isScheduled}
+                      className="delivery-choice min-w-0 px-2 py-3 rounded-xl text-sm font-bold flex flex-col items-center justify-center gap-2"
                     >
-                      Agendar Entrega
+                      <Clock size={20} aria-hidden="true" /> Agendar Entrega
                     </button>
                   </div>
 
                   {isScheduled && (
                     <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Data</label>
+                      <div className="space-y-1 min-w-0">
+                        <label htmlFor="scheduled-date" className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Data</label>
                         <input 
+                          id="scheduled-date"
                           type="date" 
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 font-bold text-sm outline-none focus:border-vovoh-gold text-gray-600"
                           value={scheduledDate}
                           onChange={e => setScheduledDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
+                          min={shopDate()}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Horário</label>
+                      <div className="space-y-1 min-w-0">
+                        <label htmlFor="scheduled-time" className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-1">Horário</label>
                         <input 
+                          id="scheduled-time"
                           type="time" 
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 font-bold text-sm outline-none focus:border-vovoh-gold text-gray-600"
                           value={scheduledTime}
@@ -479,40 +559,56 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                       </div>
                     </div>
                   )}
+                  {isScheduled && <p className="text-xs text-gray-500">Escolha um dia e horário do expediente da loja. Usamos o horário de Brasília.</p>}
                 </div>
 
-                {feeCalculated && (
-                  <div className="bg-green-50 p-4 rounded-2xl border border-green-100 flex justify-between items-center">
-                    <div>
-                      <p className="text-[10px] font-black text-green-600 uppercase tracking-widest">Distância: {deliveryDistance.toFixed(1)}km</p>
-                      <p className="text-xs font-bold text-green-700">Taxa de Entrega: {deliveryFee === 0 ? 'Grátis!' : `R$ ${deliveryFee.toFixed(2)}`}</p>
-                    </div>
-                    <CheckCircle2 size={24} className="text-green-500" />
-                  </div>
-                )}
               </div>
               
+              {localGuest(user) && <p role="note" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{guestNotice}</p>}
+              {!user && <button type="button" onClick={openAuth} className="w-full min-h-12 rounded-2xl border border-vovoh-red p-4 font-bold text-vovoh-red">Entrar ou continuar como convidado</button>}
+              <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-paper)] text-[var(--app-ink)] p-4 space-y-2">{rememberedAcceptance?<p role="status" className="flex gap-2 items-center text-sm font-bold"><CheckCircle2 size={18} className="shrink-0 text-green-600"/>Documentos já aceitos. Você só precisa aceitar novamente se houver uma nova versão.</p>:<label className="flex gap-3 items-start text-sm leading-relaxed"><input type="checkbox" checked={legalAccepted} onChange={e=>setLegalAccepted(e.target.checked)} className="mt-1 w-5 h-5 shrink-0 accent-vovoh-red"/><span>Li e aceito os Termos de Uso e estou ciente da Política de Privacidade.</span></label>}<div className="flex flex-wrap gap-4 text-sm font-bold text-vovoh-red"><a href="/#termos" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Termos (nova aba)</a><a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="underline min-h-11 inline-flex items-center">Ler Privacidade (nova aba)</a></div><p className="text-xs text-gray-500">Seus dados serão usados para atender o pedido. Isto não autoriza publicidade.</p></div>
               <div className="flex gap-3 pt-4">
                  <button onClick={() => setStep('cart')} className="px-6 py-5 bg-white border border-gray-200 text-gray-500 font-black rounded-2xl text-sm active:scale-95 transition-all">Voltar</button>
                  <button 
-                   onClick={() => {
-                     if (!customer.name || customer.name.trim().length < 3) {
+                   onClick={async () => {
+                     if (!validCustomerName(customer.name)) {
                        setAddressError("Por favor, digite seu nome completo, meu anjo.");
                        return;
                      }
-                     if (!customer.phone || customer.phone.length < 10) {
-                       setAddressError("Por favor, digite um WhatsApp válido com DDD (apenas números).");
+                     if (!/^(?:\d{10,11}|55\d{10,11})$/.test(customer.phone || '')) {
+                       setAddressError("Digite um WhatsApp válido com DDD, como (41) 99999-9999.");
                        return;
                      }
                      if (!feeCalculated) {
                        setAddressError("Por favor, calcule o frete antes de prosseguir para o pagamento.");
                        return;
                      }
+                     if (!isScheduled && !storeAvailability(dynamicConfigs || {}).open) {
+                       setIsScheduled(true);
+                       setAddressError('A loja fechou. Escolha a data e o horário da entrega agendada.');
+                       return;
+                     }
+                     if (isScheduled) {
+                       try {
+                         if (!scheduledDate || !scheduledTime) throw new Error('Escolha a data e o horário da entrega agendada.');
+                         validateSchedule(`${scheduledDate}T${scheduledTime}:00`,dynamicConfigs);
+                       } catch(error) { setAddressError(error instanceof Error ? error.message : 'Confira o agendamento.'); return; }
+                     }
+                     if(!hasLegalAcceptance){setAddressError('Leia e aceite os Termos de Uso e confirme a ciência da Política de Privacidade.');return;}
+                     if(!await ensureIdentity())return;
+                     if(!rememberedAcceptance){
+                       setSavingAcceptance(true);
+                       try {const response=await fetch('/api/auth/legal-acceptance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({legalAcceptance}),signal:AbortSignal.timeout(10000)});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||'Não foi possível registrar o aceite.');if(!currentLegalReceipt(result.legalAcceptance,user?.id))throw new Error('Confira sua identificação antes de pagar.');setSavedAcceptance(result.legalAcceptance);}
+                       catch(error){setAddressError(error instanceof Error?error.message:'Não foi possível registrar o aceite.');return;}
+                       finally{setSavingAcceptance(false);}
+                     }
+                     rememberCustomer(customer);
                      setStep('payment');
                    }} 
-                   className="flex-grow py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-200 text-sm active:scale-95 transition-all"
+                   disabled={configStatus !== 'ready'||savingAcceptance}
+                   className="flex-grow py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-lg shadow-red-200 text-sm active:scale-95 transition-all disabled:opacity-50"
                  >
-                   Ir para Pagamento
+                   {savingAcceptance?'Registrando aceite…':'Ir para Pagamento'}
                  </button>
               </div>
             </div>
@@ -526,7 +622,7 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${method === 'pix' ? 'bg-vovoh-gold text-white' : 'bg-gray-100 text-gray-400'}`}><Zap size={20}/></div>
                     <div>
                       <p className="font-black text-vovoh-dark text-sm leading-tight">Pix Instantâneo</p>
-                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'pix' ? 'text-vovoh-gold' : 'text-gray-400'}`}>Aprovação na hora</p>
+                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'pix' ? 'text-vovoh-gold' : 'text-gray-400'}`}>Pagamento conferido pela loja</p>
                     </div>
                   </div>
                   {method === 'pix' && <CheckCircle2 size={20} className="text-vovoh-gold" />}
@@ -536,25 +632,47 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
                    <div className="flex items-center gap-4 text-left">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${method === 'cartao_online' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}><CreditCard size={20}/></div>
                     <div>
-                      <p className="font-black text-vovoh-dark text-sm leading-tight">Cartão de Crédito ou Débito (Online)</p>
-                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'cartao_online' ? 'text-blue-500' : 'text-gray-400'}`}>Pague agora via Stripe</p>
+                      <p className="font-black text-vovoh-dark text-sm leading-tight">Cartão online</p>
+                      <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${method === 'cartao_online' ? 'text-blue-500' : 'text-gray-400'}`}>Pagamento seguro</p>
                     </div>
                   </div>
                   {method === 'cartao_online' && <CheckCircle2 size={20} className="text-blue-500" />}
                 </button>
               </div>
 
-              <div className="pt-4">
+              {cashEnabled && (
+                <button type="button" aria-pressed={method === 'dinheiro'} onClick={() => setMethod('dinheiro')} className={`w-full p-5 rounded-2xl border-2 flex items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${method === 'dinheiro' ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                  <span className="flex items-center gap-4"><Banknote size={24} aria-hidden="true" /><span><span className="block font-black text-sm">Dinheiro na entrega</span><span className="block text-xs text-gray-600">Pague quando receber</span></span></span>
+                  {method === 'dinheiro' && <CheckCircle2 size={20} aria-hidden="true" />}
+                </button>
+              )}
+              {cashEnabled && method === 'dinheiro' && (
+                <div className="space-y-2">
+                  <label htmlFor="cash-change-for" className="block text-sm font-bold">Precisa de troco para quanto?</label>
+                  <input id="cash-change-for" type="number" inputMode="decimal" min={total} step="0.01" value={changeFor} onChange={event => setChangeFor(event.target.value)} aria-describedby="cash-change-hint" className="w-full p-4 border border-gray-300 rounded-2xl" />
+                  <p id="cash-change-hint" className="text-xs text-gray-600">Deixe em branco se pagar o valor exato. O valor informado deve cobrir o total do pedido.</p>
+                </div>
+              )}
+              <section aria-label="Resumo do pedido" className="bg-white p-5 rounded-2xl border border-gray-200 space-y-2 text-sm">
+                <h4 className="font-bold text-base">Confira antes de pagar</h4>
+                <p>{customer.address}</p>
+                <div className="flex justify-between"><span>Itens</span><span>R$ {subtotal.toFixed(2)}</span></div>
+                {discount > 0 && <div className="flex justify-between"><span>Desconto</span><span>− R$ {discount.toFixed(2)}</span></div>}
+                <div className="flex justify-between"><span>Entrega</span><span>{deliveryFee === 0 ? 'Grátis' : 'R$ ' + deliveryFee.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total a pagar</span><span>R$ {total.toFixed(2)}</span></div>
+              </section>
+              <div className="pt-4 relative" aria-busy={submitting}>
+                 {submitting && <div role="status" className="absolute inset-0 z-20 bg-white/95 rounded-2xl flex items-center justify-center gap-2"><Loader2 className="animate-spin" /> Enviando pedido...</div>}
                  {method === 'pix' ? (
                    <PixBox pixKey={pixKey} total={total} onComplete={handleOrder} />
                  ) : method === 'cartao_online' ? (
-                   <StripePaymentBox onComplete={handleOrder} total={total} customer={customer} />
+                   <CardPaymentBox onComplete={handleOrder} total={total} customer={customer} checkout={{ legalAcceptance, items: cart, total, coupon: appliedCoupon?.code, deliveryToken: deliveryProof, type: 'entrega', customer, ...(isScheduled ? {scheduledTo:`${scheduledDate}T${scheduledTime}:00-03:00`} : {}) }} />
                  ) : (
-                   <button onClick={handleOrder} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
+                   <button onClick={() => handleOrder()} className="w-full py-5 bg-vovoh-red text-white font-black rounded-2xl shadow-xl shadow-red-200 text-base active:scale-95 transition-all">
                      Confirmar e Enviar Pedido
                    </button>
                  )}
-                 <button onClick={() => setStep('details')} className="w-full mt-4 text-gray-400 font-black text-[10px] uppercase tracking-widest hover:text-vovoh-dark transition-colors">Voltar para Detalhes</button>
+                 <button onClick={async () => {if(await ensureIdentity())setStep('details');}}  className="w-full mt-4 text-gray-400 font-black text-[10px] uppercase tracking-widest hover:text-vovoh-dark transition-colors">Voltar para Detalhes</button>
               </div>
             </div>
           )}
@@ -565,6 +683,8 @@ export const Checkout = ({ isOpen, onClose, cart, setCart, customer, setCustomer
 };
 
 export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCancelOrder, onReceiveOrder, onReorder, onRetryPayment, onRefresh, dynamicConfigs }: any) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef,isOpen,onClose);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -599,7 +719,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
     
     if (order.scheduledTo) {
       const scheduledDate = new Date(order.scheduledTo);
-      return `Agendado: ${scheduledDate.toLocaleDateString('pt-BR')} às ${scheduledDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`;
+      return `Agendado: ${scheduledDate.toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo'})} às ${scheduledDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit',timeZone:'America/Sao_Paulo'})}`;
     }
 
     let minDelay = 0; let maxDelay = 0;
@@ -624,7 +744,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
     <div className="fixed inset-0 z-[400] flex flex-col justify-end md:items-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full md:max-w-md lg:max-w-lg h-[92vh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Rastreio" tabIndex={-1} className="relative w-full md:max-w-md lg:max-w-lg h-[92dvh] md:h-full bg-[#F5F5F7] shadow-3xl flex flex-col rounded-t-[2.5rem] md:rounded-none md:rounded-l-[2.5rem] animate-sheet md:animate-drawer overflow-hidden z-10">
         
         <div className="w-full flex md:hidden justify-center items-center h-8 bg-white shrink-0 cursor-pointer" onClick={onClose}>
            <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
@@ -639,28 +759,15 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={async () => {
-              if (typeof Notification !== 'undefined' && 'Notification' in window) {
-                const perm = await Notification.requestPermission();
-                if (perm === 'granted') {
-                  const userId = selectedOrder?.userId;
-                  const subscribed = await subscribeToPush(userId, 'customer');
-                  if (subscribed) alert("Notificações ativadas! Você será avisado sobre seus pedidos.");
-                }
-              } else {
-                alert("Seu navegador não suporta notificações.");
-              }
-            }} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:scale-90">
-              <Zap size={20} />
-            </button>
-            <button onClick={onRefresh} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:rotate-180 duration-500">
+
+            <button aria-label="Atualizar rastreio" title="Atualizar rastreio" onClick={onRefresh} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-gold hover:bg-amber-50 transition-colors active:rotate-180 duration-500">
               <RefreshCw size={20} />
             </button>
-            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark transition-colors active:scale-90"><X size={20}/></button>
+            <button aria-label="Fechar sacola" onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:text-vovoh-dark transition-colors active:scale-90"><X size={20}/></button>
           </div>
         </header>
 
-        <div className="flex-grow overflow-y-auto p-6  space-y-8 bg-[#F5F5F7] no-scrollbar pb-32 ">
+        <div className="flex-grow overflow-y-auto overscroll-contain touch-pan-y min-h-0 p-4 sm:p-6 space-y-8 bg-[#F5F5F7] no-scrollbar pb-32">
             
             {!selectedOrder ? (
               <div className="space-y-4">
@@ -677,7 +784,7 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
                       <div className="flex justify-between items-end">
                         <div>
                           <p className="text-base font-black text-vovoh-dark mb-1">R$ {parseFloat(o.total || 0).toFixed(2)}</p>
-                          <p className="text-xs font-bold text-gray-400">{o.items?.length || 0} itens • {o.payment?.method === 'pix' ? 'Pix' : 'Cartão'}</p>
+                          <p className="text-xs font-bold text-gray-400">{o.items?.length || 0} itens • {o.payment?.method === 'pix' ? 'Pix' : o.payment?.method === 'dinheiro' ? 'Dinheiro na entrega' : 'Cartão'}</p>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-vovoh-gold group-hover:text-white transition-colors">
                           <ArrowRight size={16} />
@@ -721,7 +828,8 @@ export const TrackingModal = ({ isOpen, onClose, orders = [], onClearOrder, onCa
                 </div>
 
                 <div className="relative space-y-8 px-2  py-4">
-                  {selectedOrder.status === 'pendente' && (
+                  {selectedOrder.status === 'pendente' && selectedOrder.acknowledgedAt && <div role="status" className="delivery-result p-4 rounded-2xl text-sm font-bold">A loja confirmou seu pedido. {selectedOrder.scheduledTo ? 'O preparo será iniciado para o horário agendado.' : 'Aguardando o início do preparo.'}</div>}
+                  {selectedOrder.status === 'pendente' && !selectedOrder.acknowledgedAt && (
                     <div className="bg-amber-50 p-5 rounded-[2rem] border border-amber-100 space-y-3 animate-in fade-in slide-in-from-top-4 shadow-sm">
                       <div className="flex items-center gap-2 text-amber-600">
                         <AlertTriangle size={18} className="animate-pulse" />

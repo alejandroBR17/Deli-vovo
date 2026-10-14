@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import Home from './pages/Home';
-import AdminPage from './pages/AdminPage';
-import { ChefHat, ShoppingBag, ShieldCheck } from 'lucide-react';
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
+const ResetPasswordPage=lazy(()=>import('./pages/ResetPasswordPage'));
+
 
 export default function App() {
   const [currentHash, setCurrentHash] = useState(window.location.hash);
@@ -11,15 +13,23 @@ export default function App() {
       const hash = window.location.hash;
       setCurrentHash(hash);
       
-      // Atualização dinâmica de Metadados
+      const privatePage = hash === '#vovo-secreta' || hash.startsWith('#recuperar-senha') || hash === '#entrar';
+      document.querySelector('meta[name="robots"]')?.setAttribute('content', privatePage ? 'noindex,nofollow' : 'index,follow,max-image-preview:large');
+      // Metadados de navegação; compartilhamento continua apontando à loja pública.
       if (hash === '#vovo-secreta') {
-        document.title = "Painel Secreto da Vovó 👵🔒 | Gestão & KDS";
+        document.title = "Painel Secreto da Vovó  | Gestão & KDS";
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc) metaDesc.setAttribute('content', 'Painel de gestão operacional, KDS de cozinha, pedidos e financeiro da Delícias da Vovó Grazy.');
+      } else if (hash.startsWith('#recuperar-senha')) {
+        document.title = 'Recuperar senha | Delícias da Vovó Grazy';
+        document.querySelector('meta[name="description"]')?.setAttribute('content', 'Recupere o acesso à sua conta na Delícias da Vovó Grazy.');
+      } else if (hash === '#termos' || hash === '#privacidade') {
+        document.title = (hash === '#termos' ? 'Termos de Uso' : 'Política de Privacidade') + ' | Delícias da Vovó';
+        document.querySelector('meta[name="description"]')?.setAttribute('content', 'Conheça os documentos de uso e privacidade da Delícias da Vovó Grazy.');
       } else {
-        document.title = "Delícias da Vovó Grazy 🥟 | Salgados, Empanadas & Doces";
+        document.title = "Delícias da Vovó Grazy | Salgados e doces";
         const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) metaDesc.setAttribute('content', 'O melhor tempero da cidade! Salgados fritos na hora, empanadas autênticas e Massa com tempero de Mãe.');
+        if (metaDesc) metaDesc.setAttribute('content', 'Escolha seus salgados e doces no Delícias da Vovó Grazy. Consulte o frete, faça ou agende seu pedido e acompanhe o preparo pelo site.');
       }
     };
     
@@ -29,39 +39,16 @@ export default function App() {
   }, []);
 
   const isAdmin = currentHash === '#vovo-secreta';
+  const legal = currentHash === '#termos' ? 'terms' : currentHash === '#privacidade' ? 'privacy' : null;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-900 selection:bg-vovoh-red selection:text-white">
-      {/* Barra de atalho de portfólio no Desktop */}
-      <div className="hidden desktop:flex fixed top-3 right-4 z-[9999] bg-zinc-900/90 backdrop-blur-md border border-white/10 text-white rounded-full px-4 py-2 shadow-2xl items-center gap-3 text-xs">
-        <span className="flex items-center gap-1.5 font-bold text-zinc-400">
-          <ChefHat size={15} className="text-vovoh-red" />
-          Portfólio:
-        </span>
-        <button
-          onClick={() => { window.location.hash = isAdmin ? '' : '#vovo-secreta'; }}
-          className="px-3 py-1 bg-vovoh-red hover:bg-red-600 text-white font-extrabold rounded-full transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-red-900/30"
-        >
-          {isAdmin ? (
-            <>
-              <ShoppingBag size={13} />
-              Ver Cardápio (Cliente)
-            </>
-          ) : (
-            <>
-              <ShieldCheck size={13} />
-              Ver Painel Admin / KDS
-            </>
-          )}
-        </button>
-      </div>
-
-      {isAdmin ? (
+    <div data-surface={isAdmin ? "admin" : "customer"} className="min-h-screen app-shell selection:bg-vovoh-red selection:text-white">
+      {currentHash.startsWith('#recuperar-senha')?<Suspense fallback={<p role="status" className="p-6">Abrindo recuperação...</p>}><ResetPasswordPage/></Suspense>:legal ? <Suspense fallback={<p role="status" className="p-6">Abrindo documento...</p>}><LegalPage document={legal}/></Suspense> : isAdmin ? (
         <div className="w-full min-h-screen bg-vovoh-dark text-white">
-          <AdminPage />
+          <Suspense fallback={<p role="status" className="p-6 text-center">Abrindo o painel...</p>}><AdminPage /></Suspense>
         </div>
       ) : (
-        <div className="w-full min-h-screen bg-[#F9F9F9] relative">
+        <div className="w-full min-h-screen relative">
           <Home />
         </div>
       )}

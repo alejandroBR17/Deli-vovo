@@ -12,14 +12,15 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  app.disable('x-powered-by');
+  const PORT = Number(process.env.PORT || 3000);
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(express.json({ limit: '4mb' }));
+  app.use(express.urlencoded({ limit: '4mb', extended: true }));
 
   // Request logging
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
   });
 
@@ -40,7 +41,7 @@ async function startServer() {
   } else {
     const distPath = path.resolve(__dirname, "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("/{*path}", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

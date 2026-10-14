@@ -1,38 +1,26 @@
-const CACHE_VERSION = 'v2-urgent-update';
-
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', event => event.waitUntil(clients.claim()));
+function safeNotificationUrl(value) {
+  try {
+    const url = new URL(value || '/', self.location.origin);
+    return url.origin === self.location.origin ? url.href : self.location.origin + '/';
+  } catch { return self.location.origin + '/'; }
+}
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch {}
+  event.waitUntil(self.registration.showNotification(data.title || 'Aviso da Delícias da Vovó', {
+    body: data.body || 'Abra o aplicativo para conferir.', icon: '/icon-192.png', badge: '/icon-192.png',
+    tag: data.tag || 'vovo-' + Date.now(), vibrate: [300, 100, 300], requireInteraction: true,
+    data: { url: safeNotificationUrl(data.url) },
+  }));
 });
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
-});
-
-self.addEventListener('push', function(event) {
-  const data = event.data.json();
-  const options = {
-    body: data.body,
-    icon: data.icon || '/favicon.ico',
-    badge: '/favicon.ico',
-    vibrate: [1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000], // Padrão de vibração bem longo e insistente
-    requireInteraction: true, // A notificação NÃO some até a pessoa clicar ou fechar
-    renotify: true, // Faz o celular apitar/vibrar de novo mesmo se já tiver uma notificação lá
-    tag: 'vovoh-urgent-alert', // Tag para agrupar e permitir o renotify
-    silent: false,
-    sound: 'https://actions.google.com/sounds/v1/alarms/beeping_alarm.ogg', // Tenta tocar o alarme no Android
-    data: {
-      url: data.url || '/'
-    }
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || '🚨 NOVO PEDIDO!', options)
-  );
-});
-
-self.addEventListener('notificationclick', function(event) {
+self.addEventListener('notificationclick', event => {
   event.notification.close();
-  event.waitUntil(
-    clients.openWindow(event.notification.data.url)
-  );
+  const url = safeNotificationUrl(event.notification.data?.url);
+  event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async windows => {
+    const existing = windows.find(client => new URL(client.url).origin === self.location.origin);
+    if (existing) { await existing.navigate(url); return existing.focus(); }
+    return clients.openWindow(url);
+  }));
 });
