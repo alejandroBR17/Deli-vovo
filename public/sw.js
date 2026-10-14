@@ -10,7 +10,7 @@ self.addEventListener('push', event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch {}
   event.waitUntil(self.registration.showNotification(data.title || 'Aviso da Delícias da Vovó', {
-    body: data.body || 'Abra o aplicativo para conferir.', icon: '/icon-192.png', badge: '/icon-192.png',
+    body: data.body || 'Abra o aplicativo para conferir.', icon: '/vovo-icon-192-2026.png', badge: '/vovo-icon-192-2026.png',
     tag: data.tag || 'vovo-' + Date.now(), vibrate: [300, 100, 300], requireInteraction: true,
     data: { url: safeNotificationUrl(data.url) },
   }));

@@ -94,7 +94,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
           <div className="min-w-0">
             <div className="flex items-center gap-4">
               <div className="relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-vovoh-red/5 flex items-center justify-center">
-                <ChefHat size={32} className="text-vovoh-red" aria-hidden="true" />
+                {logoFailed && <ChefHat size={32} className="text-vovoh-red" aria-hidden="true" />}
                 {!logoFailed && <img src={logo} width={80} height={80} fetchPriority="high" decoding="async" alt="Logo Delícias da Vovó" onError={() => setLogoFailed(true)} className="absolute inset-0 w-full h-full object-contain" />}
                 <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-vovoh-gold text-vovoh-dark px-2 py-1 rounded-full text-[10px] font-bold shadow-sm">Artesanal</span>
               </div>
@@ -349,7 +349,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
 
       <section id="nossa-historia" className="story-section scroll-mt-20 border-y border-orange-100 py-8 md:py-10">
         <div className="max-w-7xl mx-auto px-4 md:px-6 grid md:grid-cols-[0.85fr_1.15fr] gap-6 md:gap-10 items-center">
-          <figure className="story-photo"><img loading="lazy" decoding="async" src={dynamicConfigs?.story_image || 'https://imgur.com/lrKC57Q.png'} alt="A família por trás da Delícias da Vovó" referrerPolicy="no-referrer" /><figcaption className="story-caption"><Heart size={18} aria-hidden="true" /> Receitas de família, feitas com carinho</figcaption></figure>
+          <figure className="story-photo"><img loading="lazy" decoding="async" src={dynamicConfigs?.story_image || '/vovo-grazy-2026.webp'} alt="Vovó Grazy na cozinha da Delícias da Vovó" referrerPolicy="no-referrer" /><figcaption className="story-caption"><Heart size={18} aria-hidden="true" /> Receitas de família, feitas com carinho</figcaption></figure>
           <div className="min-w-0"><p className="text-xs font-bold text-vovoh-red uppercase tracking-wider">Nossa história</p><h2 className="font-sans text-2xl md:text-3xl font-bold text-vovoh-dark mt-2">Uma cozinha de família.<br /><span className="text-vovoh-red">Um cuidado em cada pedido.</span></h2>
             <div id="store-story" className={'text-sm md:text-base text-gray-600 leading-relaxed whitespace-pre-line mt-4 '+(storyExpanded ? '' : 'line-clamp-4')}>{dynamicConfigs?.story_text || 'A Delícias da Vovó nasceu do desejo de compartilhar o sabor autêntico da comida caseira. Tudo começou na cozinha da Vovó Grazy, onde cada salgado era feito com um cuidado que só quem ama cozinhar entende.\n\nHoje, a Vovó Grazy mantém a mesma essência: massa fresca, recheio generoso e muito capricho.'}</div>
             <button type="button" aria-expanded={storyExpanded} aria-controls="store-story" onClick={() => setStoryExpanded(!storyExpanded)} className="min-h-11 mt-2 text-sm font-semibold text-vovoh-red underline underline-offset-4">{storyExpanded ? 'Recolher história' : 'Ler nossa história'}</button>

@@ -11,13 +11,13 @@
   "gcm_sender_id": "103953800507",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/vovo-icon-192-2026.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/vovo-icon-512-2026.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
