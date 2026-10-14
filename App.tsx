@@ -13,15 +13,23 @@ export default function App() {
       const hash = window.location.hash;
       setCurrentHash(hash);
       
-      // Atualização dinâmica de Metadados
+      const privatePage = hash === '#vovo-secreta' || hash.startsWith('#recuperar-senha') || hash === '#entrar';
+      document.querySelector('meta[name="robots"]')?.setAttribute('content', privatePage ? 'noindex,nofollow' : 'index,follow,max-image-preview:large');
+      // Metadados de navegação; compartilhamento continua apontando à loja pública.
       if (hash === '#vovo-secreta') {
         document.title = "Painel Secreto da Vovó  | Gestão & KDS";
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc) metaDesc.setAttribute('content', 'Painel de gestão operacional, KDS de cozinha, pedidos e financeiro da Delícias da Vovó Grazy.');
+      } else if (hash.startsWith('#recuperar-senha')) {
+        document.title = 'Recuperar senha | Delícias da Vovó Grazy';
+        document.querySelector('meta[name="description"]')?.setAttribute('content', 'Recupere o acesso à sua conta na Delícias da Vovó Grazy.');
+      } else if (hash === '#termos' || hash === '#privacidade') {
+        document.title = (hash === '#termos' ? 'Termos de Uso' : 'Política de Privacidade') + ' | Delícias da Vovó';
+        document.querySelector('meta[name="description"]')?.setAttribute('content', 'Conheça os documentos de uso e privacidade da Delícias da Vovó Grazy.');
       } else {
-        document.title = "Delícias da Vovó Grazy  | Salgados & Doces";
+        document.title = "Delícias da Vovó Grazy | Salgados e doces";
         const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) metaDesc.setAttribute('content', 'O melhor tempero da cidade! Salgados fritos na hora e massa com tempero de Mãe.');
+        if (metaDesc) metaDesc.setAttribute('content', 'Escolha seus salgados e doces no Delícias da Vovó Grazy. Consulte o frete, faça ou agende seu pedido e acompanhe o preparo pelo site.');
       }
     };
     
