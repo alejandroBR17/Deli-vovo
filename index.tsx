@@ -7,6 +7,7 @@ import { ThemeProvider } from './src/theme/ThemeProvider';
 import { AppInstallProvider } from './components/AppInstall';
 import { ensureServiceWorker } from './src/utils/service-worker';
 import { initializeAppInstall } from './src/utils/app-install';
+import {AdminAccessProvider} from './src/auth/AdminAccess';
 
 initializeAppInstall();
 
@@ -81,7 +82,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <ThemeProvider><AppInstallProvider><App /></AppInstallProvider></ThemeProvider>
+      <ThemeProvider><AdminAccessProvider><AppInstallProvider><App /></AppInstallProvider></AdminAccessProvider></ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

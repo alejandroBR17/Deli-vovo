@@ -1,6 +1,7 @@
 import {LegalSettings} from '../components/LegalSettings';
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
 import { AppInstallButton } from '../components/AppInstall';
+import {useAdminAccess} from '../src/auth/AdminAccess';
 import { AdminSecurity } from '../components/AdminSecurity';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChefHat, Bell, ArrowLeft, RefreshCw, Plus, Edit2, Trash2, Save, X, Upload, Loader2, AlertTriangle, CheckCircle2, ChevronDown, DollarSign, TrendingUp, Wallet, CreditCard, Calendar, PieChart, MessageCircle, Clock, MapPin, ArrowRight, ShoppingBag, Settings, Utensils, ClipboardList, Tag, Menu, MoreHorizontal, Flame, Bike, PackageCheck, Eye } from 'lucide-react';
@@ -21,6 +22,8 @@ import { shopDate } from '../src/utils/order-schedule';
 
 
 export default function AdminPage() {
+  const {refreshAdminAccess} = useAdminAccess();
+  const sessionRevision = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
@@ -769,13 +772,16 @@ export default function AdminPage() {
 
   useEffect(() => {
     localStorage.removeItem('vovoh_admin_auth');
-    adminFetch('/admin/session').then(response => setIsAuthenticated(response.ok)).catch(() => {});
-    const expire = () => { setIsAuthenticated(false); historyOrders.current = []; setHistoryCursor(null); setFinanceData(null); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false; };
+    let active = true;
+    const revision = sessionRevision.current;
+    void refreshAdminAccess().then(allowed => {if (active && revision === sessionRevision.current) setIsAuthenticated(allowed);});
+    const expire = () => { sessionRevision.current++; setIsAuthenticated(false); historyOrders.current = []; setHistoryCursor(null); setFinanceData(null); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false; };
     window.addEventListener('vovo-admin-session-expired', expire);
-    return () => window.removeEventListener('vovo-admin-session-expired', expire);
-  }, []);
+    return () => {active = false; window.removeEventListener('vovo-admin-session-expired', expire);};
+  }, [refreshAdminAccess]);
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault(); if (loggingIn) return; setLoggingIn(true);
+    sessionRevision.current++;
     try {
       const response = await adminFetch('/admin/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: passwordInput }),
@@ -783,6 +789,7 @@ export default function AdminPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível entrar.');
       setPasswordInput(''); setIsAuthenticated(true);
+      window.dispatchEvent(new Event('vovo-admin-access-changed'));
     } catch (error) { showMsg(error instanceof Error ? error.message : 'Não foi possível entrar.', 'error'); }
     finally { setLoggingIn(false); }
   };
@@ -790,6 +797,7 @@ export default function AdminPage() {
     try {
       const response = await adminFetch('/admin/logout', { method: 'POST' });
       if (!response.ok) throw new Error();
+      window.dispatchEvent(new Event('vovo-admin-access-changed'));
       setIsAuthenticated(false); historyOrders.current = []; setHistoryCursor(null); setFinanceData(null); setOrders([]); setStats(null); setPushState('inactive'); ordersLoaded.current = false;
     } catch { showMsg('Não foi possível sair. Tente novamente.', 'error'); }
   };
