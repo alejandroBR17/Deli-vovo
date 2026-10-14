@@ -12,6 +12,7 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
   const PORT = Number(process.env.PORT || 3000);
 
   app.use(express.json({ limit: '4mb' }));
@@ -19,7 +20,7 @@ async function startServer() {
 
   // Request logging
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
   });
 

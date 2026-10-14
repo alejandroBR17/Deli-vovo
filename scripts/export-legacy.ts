@@ -2,12 +2,14 @@ import 'dotenv/config';
 import { createSign } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import firebaseConfig from '../firebase-applet-config.json';
 
 // Read-only export through the official Firestore REST API. No Firebase SDK is used by the application.
 const credentialFile = process.env.LEGACY_FIREBASE_SERVICE_ACCOUNT_FILE;
 if (!credentialFile) throw new Error('Defina LEGACY_FIREBASE_SERVICE_ACCOUNT_FILE com o caminho privado da conta de serviço. Não envie a chave pela conversa.');
 const account = JSON.parse(await readFile(credentialFile, 'utf8'));
+const project = process.env.LEGACY_FIREBASE_PROJECT_ID || account.project_id;
+const database = process.env.LEGACY_FIREBASE_DATABASE_ID || '(default)';
+if (typeof project !== 'string' || !project) throw new Error('Informe LEGACY_FIREBASE_PROJECT_ID ou uma conta de serviço com project_id.');
 const encode = (value: any) => Buffer.from(JSON.stringify(value)).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 const unsigned = encode({ alg: 'RS256', typ: 'JWT' }) + '.' + encode({ iss: account.client_email, scope: 'https://www.googleapis.com/auth/datastore', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
@@ -15,8 +17,6 @@ const signature = createSign('RSA-SHA256').update(unsigned).sign(account.private
 const authorization = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: unsigned + '.' + signature }), signal: AbortSignal.timeout(15000) });
 if (!authorization.ok) throw new Error(`Autorização recusada (${authorization.status}).`);
 const { access_token } = await authorization.json() as any;
-const project = process.env.LEGACY_FIREBASE_PROJECT_ID || firebaseConfig.projectId;
-const database = process.env.LEGACY_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)';
 const decode = (value: any): any => {
   if ('nullValue' in value) return null;
   for (const key of ['stringValue','timestampValue','booleanValue','doubleValue','referenceValue']) if (key in value) return value[key];

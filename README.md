@@ -1,142 +1,87 @@
-# 🥟 Delícias da Vovó Grazy — Plataforma de Delivery Artesanal & KDS
+# Delícias da Vovó Grazy
 
-> Uma plataforma completa de comércio eletrônico, delivery sob demanda e sistema de gestão operacional (KDS) desenvolvida com **React 19**, **TypeScript**, **Tailwind CSS**, **Node.js/Express**, **Framer Motion** e integrações inteligentes.
+Delivery artesanal com cardápio, checkout, pedidos agendados e painel da cozinha. Projeto aplicado a um negócio da família, desenvolvido com assistência de IA e validação da experiência pelo responsável.
 
-[![React](https://img.shields.io/badge/React-19.0.0-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Stripe](https://img.shields.io/badge/Stripe-Payments-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://stripe.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+[Acessar o site](https://delivovo.vercel.app/) · [Segurança](SECURITY.md) · [Licença do código](LICENSE) · [Marca e imagens](LICENSE-ASSETS.md)
 
----
+![Logo da loja](public/vovo-logo-2026.webp)
 
-## 🌟 Visão Geral do Projeto
+## Funcionalidades
 
-O **Delícias da Vovó Grazy** foi concebido para resolver os gargalos reais de negócios gastronômicos artesanais, unindo **experiência do consumidor** (mobile-first, fluida e humanizada) a um **centro de controle operacional robusto** (KDS de cozinha, fluxo de caixa, gestão de catálogo e agendamento).
+- Sacola com opções, cupons, frete e agendamento validados no servidor.
+- Conta ou acesso como convidado, dados salvos, confirmação de senha, troca e recuperação por e-mail.
+- Mercado Pago Checkout Pro com conferência de aprovação, valor, moeda, recebedor, referência e assinatura de webhook. Pix e dinheiro dependem das configurações da loja.
+- Painel de catálogo, cupons, configurações, pedidos, estatísticas e modo de cozinha (KDS).
+- Pedidos agendados podem ser confirmados sem iniciar preparo. Web Push é exclusivo dos aparelhos administrativos.
+- PWA para Android, iOS e computador; temas claro/escuro/dispositivo, termos e política de privacidade.
 
-### 🚀 Diferenciais de Engenharia
-- **Experiência Híbrida Adaptativa:** No mobile, interface inspirada em apps nativos de entrega (gestos, bottom-sheets, tabs e animações táteis). No desktop, centralização elegante para o cliente e painel executivo amplo para a cozinha/administração.
-- **Transição Fluida de Estado:** Microinterações refinadas com Framer Motion (efeito de item voando para a sacola, modais com física de mola e transições de tela).
-- **Checkout Multimeios:** Suporte a **PIX dinâmico com payload Copia e Cola & QR Code**, cartões via **Stripe Elements** e pagamento na entrega (dinheiro com troco / maquininha).
-- **KDS (Kitchen Display System):** Modo de visualização de pedidos em tempo real para produção com alarme sonoro, alertas visuais de urgência e atualização otimista de status.
-- **Painel Administrativo Completo:** Gestão de produtos, cupons de desconto, taxas e bairros atendidos, métricas de vendas com **Recharts**, controle de estoque e notificações Web Push.
+Previsões não acompanham trânsito em tempo real. Stripe e Google Planilhas permanecem apenas como caminhos legados, sem participação na operação atual.
 
----
+## Arquitetura
 
-## 📱 Funcionalidades
+| Camada | Implementação |
+| --- | --- |
+| Interface | React 19, TypeScript, Tailwind CSS 3, Framer Motion, Lucide |
+| API | Express e Vercel Functions |
+| Persistência | Turso/libSQL; SQLite nos testes locais |
+| Pagamentos | Mercado Pago Checkout Pro e webhook assinado |
+| E-mail | Nodemailer/SMTP, somente no servidor |
+| Avisos | Service Worker, Web Push e VAPID |
 
-### 🛍️ Área do Cliente (App Mobile & Web)
-- **Catálogo Inteligente:** Filtros por categoria (Fritos, Assados, Doces e Bebidas), fotos com zoom e cálculo de porções.
-- **Personalização de Pedidos:** Seleção de complementos, molhos e observações para a cozinha.
-- **Cálculo Dinâmico de Entrega:** Integração com base de bairros e CEP para cálculo automático de taxa e tempo estimado.
-- **Agendamento Inteligente:** Possibilidade de pedir para agora ou agendar entrega para datas e horários futuros.
-- **Rastreamento em Tempo Real:** Linha do tempo visual de 4 etapas (Recebido ➔ Na Cozinha ➔ A Caminho ➔ Entregue).
-- **Fidelidade & Cupons:** Aplicação instantânea de cupons promocionais (fixos ou percentuais).
+O servidor verifica identidade, preço, frete e aceite dos documentos antes do pagamento. Retornos do provedor são conferidos antes de criar o pedido, sem duplicação. Número completo do cartão e CVV não passam pela API da loja.
 
-### 👩‍🍳 Painel da Cozinha & Gestão (`#vovo-secreta`)
-- **Quadro de Pedidos Operacional:** Separação de pedidos pendentes, em preparo e concluídos com ações de 1 clique.
-- **Modo KDS (Kitchen Display):** Interface de alto contraste pensada para tablets e telas de cozinha com cronômetro de tempo de espera.
-- **Gestão do Cardápio:** Criação, edição e exclusão de produtos com precificação, categorias e fotos.
-- **Gestão de Cupons & Bairros:** Configuração de taxas de frete por bairro e regras de cupons promocionais.
-- **Métricas & Caixa:** Gráficos interativos de faturamento e produtos mais vendidos via Recharts.
+`api/` reúne endpoints; `server/`, persistência e integrações; `components/` e `pages/`, interface; `src/utils/`, regras compartilhadas; `public/`, imagens/PWA/SEO; `scripts/`, migrações e verificações; `tests/`, testes isolados; `docs/`, registros e documentação. `data/` é privado e ignorado pelo Git.
 
----
+## Executar localmente
 
-## 🛠️ Stack Tecnológica
+Use Node.js 22 ou 24 e npm. Não reutilize banco ou credenciais de produção.
 
-| Camada | Tecnologias |
-|---|---|
-| **Frontend** | React 19, TypeScript, Tailwind CSS, Framer Motion, Lucide React |
-| **Gráficos & Dados** | Recharts, QRCode.react |
-| **Build & Bundler** | Vite 6, PostCSS, Autoprefixer |
-| **Backend / API** | Node.js, Express, TSX, Google Apps Script (Serverless DB API) |
-| **Pagamentos** | Stripe SDK (@stripe/react-stripe-js, @stripe/stripe-js) |
-| **Notificações** | Web Push API, Service Workers, VAPID |
-| **Estilos & Tipografia** | Quicksand (Interface amigável) + Playfair Display (Títulos clássicos) |
-
----
-
-## 📂 Estrutura de Pastas
-
-```text
-├── api/                  # Endpoints backend (pagamentos Stripe, push, etc.)
-├── components/           # Componentes modulares reutilizáveis
-│   ├── Auth.tsx          # Modal e lógica de login/perfil do cliente
-│   ├── Checkout.tsx      # Sacola de compras, cálculo de frete e rastreio
-│   ├── StoreFront.tsx    # Vitrine de produtos e detalhes do item
-│   └── UI.tsx            # Toast, Modal de Confirmação, Stripe e Pix
-├── constants/            # Constantes de configuração, temas e cardápio
-├── data/                 # Schemas e mockups de fallback estruturados
-├── docs/                 # Documentações de arquitetura e guias do projeto
-├── pages/                # Telas principais da aplicação
-│   ├── Home.tsx          # Aplicação do cliente (Cardápio & Pedidos)
-│   └── AdminPage.tsx     # Painel de Controle, KDS e Relatórios Financeiros
-├── public/               # Ativos estáticos, manifest PWA e ícones
-├── services/             # Clientes de comunicação com APIs externas
-├── styles/               # Folhas de estilo e extensões Tailwind
-├── utils/                # Funções utilitárias (PIX, geolocalização, formatação)
-├── App.tsx               # Roteador de estado e alternador de visão
-├── server.ts             # Servidor Express com suporte a Vite Middleware
-├── vite.config.ts        # Configuração do bundler Vite
-└── package.json          # Dependências e scripts de automação
+```sh
+git clone https://github.com/alejandroBR17/Deli-vovo.git
+cd Deli-vovo
+npm ci
 ```
 
----
+Copie `.env.example` para `.env` e crie `data/`. No PowerShell:
 
-## 🚀 Como Executar o Projeto Localmente
-
-### Pré-requisitos
-- **Node.js** 18+ (ou LTS recente)
-- Gerenciador de pacotes **npm** ou **bun**
-
-### 1. Clonar o Repositório
-```bash
-git clone https://github.com/seu-usuario/delicias-da-vovo.git
-cd delicias-da-vovo
+```powershell
+Copy-Item .env.example .env
+New-Item -ItemType Directory -Force data
 ```
 
-### 2. Instalar as Dependências
-```bash
-npm install
-```
+Configure uma senha administrativa própria e um segredo de sessão aleatório de pelo menos 32 caracteres. O exemplo usa SQLite em `data/delivery.db`, sem cardápio fictício.
 
-### 3. Configurar Variáveis de Ambiente
-Copie o arquivo de exemplo e preencha as chaves desejadas:
-```bash
-cp .env.example .env
-```
-
-### 4. Iniciar o Ambiente de Desenvolvimento
-```bash
+```sh
+npm run db:migrate
 npm run dev
 ```
-O servidor será iniciado em: `http://localhost:3000`
 
-### 5. Compilar para Produção
-```bash
-npm run build
-```
+Abra `http://localhost:3000`; painel em `/#vovo-secreta`, protegido por autenticação. O nome da rota não é proteção. Para servir a aplicação compilada, use `npm run build` e `npm start` com `NODE_ENV=production`. `npm run preview` serve somente a interface, não a API.
 
-Para validar a tipagem estática sem gerar arquivos:
-```bash
+## Verificação
+
+```sh
+npm run check:secrets
 npm run lint
+npm test
+npm run build
+npm audit --omit=dev --audit-level=high
 ```
 
----
+A CI roda essas verificações sem credenciais ou dados reais. O detector de padrões de credenciais é uma proteção adicional, não uma auditoria completa do histórico. O audit completo mantém um alerta não corrigido de `braces` na cadeia de build, detalhado em [SECURITY.md](SECURITY.md). Não use `npm audit fix --force` para migrar os estilos sem revisar a interface.
 
-## 🔑 Acesso aos Modos de Demonstração
+## Implantação
 
-Ao rodar a aplicação:
-- **Visão do Cliente (Cardápio / Delivery):** Acesse a rota raiz (`/`). No desktop, há um botão de alternância no canto superior direito.
-- **Painel Administrativo & KDS:** Acesse adicionando a hash `#vovo-secreta` na URL (`http://localhost:3000/#vovo-secreta`) ou clique no atalho flutuante do cabeçalho.
+Projeto Vercel ativo: **delivovo**. Repositório canônico: **alejandroBR17/Deli-vovo**. Build: `npm run db:migrate && npm run build`; saída: `dist`. Production e Preview exigem credenciais isoladas. Não recrie uma branch do banco Production a cada deployment: cadastros e configurações devem persistir. Backups e dados pessoais ficam fora do Git.
 
----
+Configure somente no servidor as variáveis Turso, Mercado Pago, SMTP, VAPID e sessões descritas em `.env.example`. Não use prefixo `VITE_` em chaves privadas. Mercado Pago exige conferência da conta recebedora e do webhook antes de habilitar checkout. Gmail usa senha de aplicativo, nunca a senha normal. `node generate-vapid.js` gera um arquivo privado local sem imprimir a chave; não regenere as chaves de aparelhos já inscritos sem planejar a atualização.
 
-## 📄 Licença
+## Estado e limites
 
-Este projeto é disponibilizado sob a licença [MIT](LICENSE).
+A aplicação está publicada; a preparação comercial ainda depende de produtos/preços, Pix, contato e confirmação dos horários/taxas pela loja. Recebimento e redefinição por e-mail foram confirmados pelo responsável; Android com avisos em segundo plano foi testado na prévia. Pedido/pagamento real em produção, avisos no domínio definitivo e teste físico no iPhone ainda exigem validação.
 
----
+O cadastro ainda não confirma posse do e-mail; nome e telefone são autodeclarados. Convidados podem perder acesso ao limpar dados ou trocar de navegador, sem apagar os pedidos da loja. Instalações contam navegadores identificados, não pessoas únicas/desinstalações. SEO tem metadados, canonical, sitemap e dados básicos da marca; a SPA não garante indexação ou posição no Google.
 
-Feito com dedicação e carinho caseiro! 🥟✨
+## Licença
+
+O código está sob [MIT](LICENSE). Marca, logotipos e fotos da família têm [condições próprias](LICENSE-ASSETS.md); a licença do código não autoriza representar a loja. Dependências e ícones de terceiros mantêm suas licenças originais.

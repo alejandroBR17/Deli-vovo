@@ -1261,7 +1261,7 @@ app.post('/push/subscribe', async (req, res) => {
     await PushSubscriptionRepo.add({ endpoint: subscription.endpoint, keys: subscription.keys, userId: 'admin-user', role: 'admin' });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1419,7 +1419,7 @@ app.get('/products', async (req, res) => {
     const products = await ProductRepo.getAll();
     res.json(products);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1430,7 +1430,7 @@ app.post('/products', requireAdminWrite, async (req, res) => {
     await ProductRepo.add(product);
     res.json({ success: true, id: product.id });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1440,7 +1440,7 @@ app.put('/products/:id', requireAdminWrite, async (req, res) => {
     await ProductRepo.update(product);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1449,7 +1449,7 @@ app.delete('/products/:id', requireAdminWrite, async (req, res) => {
     await ProductRepo.delete(String(req.params.id));
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1460,7 +1460,7 @@ app.get('/orders', requireAdmin, async (req, res) => {
     const activeOrders = orders.filter(o => !o.archived);
     res.json(activeOrders);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1500,7 +1500,7 @@ app.get('/orders/batch/status', rateLimit({ windowMs: 60000, limit: 60, legacyHe
     });
     res.json(statuses);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1510,7 +1510,7 @@ app.get('/orders/:id/status', async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Pedido não encontrado' });
     res.json({ status: order.status });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1519,7 +1519,7 @@ app.get('/orders/user/:userId', requireCustomer, async (req, res) => {
     const orders = await OrderRepo.getByUserId(String(req.params.userId));
     res.json(orders);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1582,7 +1582,7 @@ app.post('/orders', async (req, res) => {
     backgroundNotification(notifyAdmins('Novo pedido', `Pedido #${order.id.slice(-4)}. Abra o painel para conferir.`, `/?order=${encodeURIComponent(order.id)}#vovo-secreta`));
     res.json({ success: true, id: order.id, accessToken });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1598,7 +1598,7 @@ app.put('/orders/:id', requireAdminWrite, async (req, res) => {
     await OrderRepo.update(order);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1648,7 +1648,7 @@ app.patch('/orders/:id/status', async (req, res) => {
     
     res.json({ success: true });
   } catch (e: any) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1661,7 +1661,7 @@ app.post('/orders/:id/receive', async (req, res) => {
     await OrderRepo.updateStatus(String(req.params.id), 'concluido');
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1670,7 +1670,7 @@ app.post('/orders/:id/archive', requireAdminWrite, async (req, res) => {
     await OrderRepo.archive(String(req.params.id));
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1785,15 +1785,14 @@ app.post('/auth/register', async (req, res) => {
     } catch (createErr: any) {
       console.error("Erro ao gravar usuário no banco:", createErr);
       return res.status(500).json({ 
-        error: 'Não foi possível criar sua conta agora. Tente novamente em alguns instantes.',
-        details: createErr.message || String(createErr) 
+        error: 'Não foi possível criar sua conta agora. Tente novamente em alguns instantes.'
       });
     }
     if (!user.password?.startsWith('scrypt:')) { user.password = await hashPassword(password); await UserRepo.update(user); }
     setCustomerSession(res, user.id,user.authVersion);
     res.json({ success: true, user: publicUser(user) });
   } catch (e: any) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1812,9 +1811,8 @@ app.post('/auth/login', async (req, res) => {
     } catch (fetchErr: any) {
       console.error("Erro ao buscar usuário por email:", fetchErr);
       return res.status(500).json({ 
-        error: 'Não foi possível entrar agora. Tente novamente em alguns instantes.',
-        details: fetchErr.message || String(fetchErr) 
-      });
+        error: 'Não foi possível entrar agora. Tente novamente em alguns instantes.'
+});
     }
 
     if (!user) {
@@ -1827,7 +1825,7 @@ app.post('/auth/login', async (req, res) => {
     setCustomerSession(res, user.id,user.authVersion);
     res.json({ success: true, user: publicUser(user) });
   } catch (e: any) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1864,7 +1862,7 @@ app.post('/auth/sync', async (req, res) => {
     setCustomerSession(res, user.id,user.authVersion);
     res.json({ success: true, user: publicUser(user) });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1878,7 +1876,7 @@ app.patch('/users/:id', requireCustomer, async (req, res) => {
     await UserRepo.update({ ...current, name: name!=null?customerName(name):current.name, phone: phone!=null?normalizePhone(phone):current.phone, address: address ?? current.address, cart: cart ?? current.cart });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1907,7 +1905,7 @@ app.get('/configs', async (req, res) => {
     }
     res.json(configs);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1922,7 +1920,7 @@ app.post('/configs', requireAdminWrite, async (req, res) => {
     await ConfigRepo.update(key, validated);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1959,7 +1957,7 @@ app.post('/visits', async (req, res) => {
     await VisitRepo.add({ userId, isPwa, userAgent: req.headers['user-agent'], sessionId, authType });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1969,7 +1967,7 @@ app.post('/visits/auth', async (req, res) => {
     await VisitRepo.updateAuth(sessionId, userId, authType);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -1985,7 +1983,7 @@ app.post('/presence', async (req, res) => {
     });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -2028,7 +2026,7 @@ app.get('/admin/stats', async (req, res) => {
       revenue: orders.filter(o => o.status === 'concluido').reduce((acc, o) => acc + Number(o.total), 0)
     });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
@@ -2056,7 +2054,7 @@ app.post('/admin/broadcast-push', async (req, res) => {
     }
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: 'Não foi possível concluir agora. Tente novamente.' });
   }
 });
 
