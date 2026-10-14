@@ -9,6 +9,14 @@
   "background_color": "#F9F9F9",
   "theme_color": "#D61F1F",
   "gcm_sender_id": "103953800507",
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://delivovo.vercel.app/manifest.json",
+      "id": "https://delivovo.vercel.app/"
+    }
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
