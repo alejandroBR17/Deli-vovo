@@ -1,15 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, Smartphone, Share, Monitor, Check, X } from 'lucide-react';
+import { Download, Smartphone, Share, Monitor, Check, X, Heart, ClipboardList } from 'lucide-react';
+import {useAdminAccess} from '../src/auth/AdminAccess';
 import { useModalFocus } from '../src/hooks/use-modal-focus';
 import {reportAppInstallation} from '../src/utils/install-tracking';
 import {getInstallPrompt, subscribeInstallPrompt, takeInstallPrompt} from '../src/utils/app-install';
 import {detectInstalledApp, type RelatedApp} from '../src/utils/installed-app';
 
 const InstallContext = createContext<{ open: () => void; standalone: boolean; installed: boolean; requested: boolean; busy: boolean }>({ open: () => {}, standalone: false, installed: false, requested: false, busy: false });
+export const useAppInstall = () => useContext(InstallContext);
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
 
 export function AppInstallProvider({ children }: { children: React.ReactNode }) {
+  const {hasAdminAccess} = useAdminAccess();
   const [visible, setVisible] = useState(false);
   const [standalone, setStandalone] = useState(isStandalone);
   const [prompt, setPrompt] = useState(getInstallPrompt);
@@ -88,6 +91,7 @@ export function AppInstallProvider({ children }: { children: React.ReactNode }) 
       <div ref={ref} className="install-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header><div className="install-heading"><Smartphone size={24} aria-hidden="true" /><h2 id={titleId}>O app da Vovó, sempre à mão</h2></div><button type="button" aria-label="Fechar instalação" onClick={() => setVisible(false)}><X size={22} /></button></header>
         <div className="install-body">
+          <div className="app-benefits"><div><Heart size={21} aria-hidden="true" /><strong>Seus favoritos</strong><span>Guarde os salgados que você gosta neste aparelho.</span></div><div><ClipboardList size={21} aria-hidden="true" /><strong>Seu cantinho no app</strong><span>Atalhos para favoritos, pedidos e seus dados.</span></div></div>
           {standalone || installed ? <p role="status" className="install-notice"><Check size={20} aria-hidden="true" />{standalone ? 'Você já está usando o aplicativo.' : 'O aplicativo já está instalado neste aparelho. Abra pelo ícone na tela inicial ou na lista de aplicativos.'}</p> : requested ? <p role="status" className="install-notice">Instalação solicitada. O navegador pode levar alguns instantes para criar o app. Abra pelo ícone quando terminar.</p> : <><p>Tenha um ícone para abrir a loja e acompanhar os pedidos, sem procurar o link novamente.</p>{prompt && <button type="button" className="install-primary" onClick={install} disabled={busy}><Download size={20} aria-hidden="true" />{busy ? 'Abrindo instalação…' : 'Instalar aplicativo'}</button>}</>}
           {!standalone && (installed || requested) && <button type="button" className="install-secondary" onClick={() => void checkInstalled()}>Verificar instalação novamente</button>}
           {message && !installed && !standalone && !requested && <p role="status" className="install-notice">{message}</p>}
@@ -95,12 +99,12 @@ export function AppInstallProvider({ children }: { children: React.ReactNode }) 
           {!standalone && !installed && !requested && !prompt && !busy && <a href="/instalar.html" className="install-secondary">Abrir página de instalação</a>}
           {!standalone && !installed && !requested && <><div className="install-tabs" role="group" aria-label="Instruções por dispositivo">{(['android','ios','pc'] as const).map(value => <button type="button" key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{value === 'pc' ? <Monitor size={18} aria-hidden="true" /> : <Smartphone size={18} aria-hidden="true" />}{value === 'ios' ? 'iPhone / iPad' : value === 'pc' ? 'PC / Mac' : 'Android'}</button>)}</div>
           <section className="install-instructions" aria-label="Como instalar">
-            {tab === 'ios' ? <><h3>No iPhone ou iPad</h3><ol><li>Abra este endereço no Safari.</li><li>Toque em <strong>Compartilhar</strong> <Share size={16} aria-label="ícone de compartilhar" />, depois em <strong>Adicionar à Tela de Início</strong>.</li><li>Confirme em <strong>Adicionar</strong> e abra pelo novo ícone.</li></ol><p>Para receber avisos, use iOS 16.4 ou superior e permita as notificações dentro do app instalado.</p></> : tab === 'android' ? <><h3>No Android</h3><ol><li>Abra este endereço no Chrome, fora do navegador do WhatsApp ou Instagram.</li><li>Toque em <strong>Instalar aplicativo</strong>, quando disponível, ou abra o menu do Chrome e procure <strong>Instalar app</strong> / <strong>Adicionar à tela inicial</strong>.</li><li>Abra pelo ícone criado na tela inicial.</li></ol></> : <><h3>No computador</h3><ol><li>Abra este endereço no Chrome ou Edge.</li><li>Use o botão de instalar, quando disponível, ou a opção de aplicativos no menu do navegador.</li><li>No Safari do Mac compatível, use <strong>Arquivo → Adicionar ao Dock</strong>.</li></ol></>}
+            {tab === 'ios' ? <><h3>No iPhone ou iPad</h3><ol><li>Abra este endereço no Safari.</li><li>Toque em <strong>Compartilhar</strong> <Share size={16} aria-label="ícone de compartilhar" />, depois em <strong>Adicionar à Tela de Início</strong>.</li><li>Confirme em <strong>Adicionar</strong> e abra pelo novo ícone.</li></ol>{hasAdminAccess && <p>Para receber avisos, use iOS 16.4 ou superior e permita as notificações dentro do app instalado.</p>}</> : tab === 'android' ? <><h3>No Android</h3><ol><li>Abra este endereço no Chrome, fora do navegador do WhatsApp ou Instagram.</li><li>Toque em <strong>Instalar aplicativo</strong>, quando disponível, ou abra o menu do Chrome e procure <strong>Instalar app</strong> / <strong>Adicionar à tela inicial</strong>.</li><li>Abra pelo ícone criado na tela inicial.</li></ol></> : <><h3>No computador</h3><ol><li>Abra este endereço no Chrome ou Edge.</li><li>Use o botão de instalar, quando disponível, ou a opção de aplicativos no menu do navegador.</li><li>No Safari do Mac compatível, use <strong>Arquivo → Adicionar ao Dock</strong>.</li></ol></>}
           </section>
           </>}
           {!standalone && !installed && !requested && <p className="install-note"><strong>Já instalou?</strong> Abra pelo ícone na tela inicial, no Dock ou na lista de aplicativos. O navegador não permite que este botão abra uma instalação existente em todos os dispositivos.</p>}
-          <p className="install-note">Os avisos de pedidos são exclusivos do painel da Vovó. A loja pode ativá-los no painel depois de instalar; com a tela bloqueada, dependem da permissão do aparelho e de conexão com a internet. Clientes acompanham o andamento na tela Pedidos.</p>
-          {preview && <p className="install-note">Esta é uma prévia de testes. Se aparecer “não foi possível instalar”, a proteção de acesso pode estar bloqueando a instalação. Um novo endereço de prévia exige instalar e ativar os avisos novamente.</p>}
+          {hasAdminAccess && <p className="install-note">Ative os avisos de novos pedidos no Painel da Vovó. Com a tela bloqueada, eles dependem da permissão do aparelho e de conexão com a internet.</p>}
+          {preview && <p className="install-note">Esta é uma prévia de testes. Se aparecer “não foi possível instalar”, a proteção de acesso pode estar bloqueando a instalação. Um novo endereço de prévia exige uma instalação separada.</p>}
           <button type="button" className="install-secondary" onClick={() => setVisible(false)}>{standalone ? 'Continuar no aplicativo' : 'Continuar pelo navegador'}</button>
         </div>
       </div>

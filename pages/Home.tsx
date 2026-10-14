@@ -1,5 +1,6 @@
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
 import { AppInstallButton } from '../components/AppInstall';
+import {useAdminAccess} from '../src/auth/AdminAccess';
 import {CardPaymentReturn} from '../components/CardPayment';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,6 +22,7 @@ import { CustomerDetails, lastCustomer, rememberCustomer } from '../src/utils/sa
 const LOGO = "/vovo-logo-2026.webp";
 
 export default function Home() {
+  const {hasAdminAccess} = useAdminAccess();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const submittingOrder = useRef(false);
@@ -829,6 +831,7 @@ export default function Home() {
            dynamicConfigs={dynamicConfigs}
            isClosed={isClosed}
            onTrackOrders={() => setIsTrackingOpen(true)}
+           onProfile={() => setIsAuthOpen(true)}
          />
       </div>
 
@@ -941,7 +944,7 @@ export default function Home() {
           </div>
           <nav aria-label="Documentos da loja" className="flex flex-wrap gap-4 text-sm"><a href="/#termos" target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center underline">Termos de Uso</a><a href="/#privacidade" target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center underline">Política de Privacidade</a></nav>
           <div className="border-t border-white/10 pt-4 flex gap-4 items-center justify-between"><p className="text-xs text-zinc-400">© {new Date().getFullYear()} · {STORE_NAME}</p>
-            <button type="button" onClick={() => {window.location.hash='#vovo-secreta';}} className="inline-flex gap-2 items-center min-h-11 text-xs text-zinc-300 hover:text-white" aria-label="Painel da Vovó"><ChefHat size={18} aria-hidden="true" /><span>Painel da Vovó</span></button>
+            {hasAdminAccess && <button type="button" onClick={() => {window.location.hash='#vovo-secreta';}} className="inline-flex gap-2 items-center min-h-11 text-xs text-zinc-300 hover:text-white" aria-label="Painel da Vovó"><ChefHat size={18} aria-hidden="true" /><span>Painel da Vovó</span></button>}
           </div>
         </div>
       </footer>

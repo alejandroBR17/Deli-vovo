@@ -4,7 +4,8 @@ import { useModalFocus } from '../src/hooks/use-modal-focus';
 import { Star, Plus, ChefHat, Loader2, Clock, Heart, ShieldCheck, MessageSquare, ChevronDown, Instagram, Facebook, Flame, X, Check, Timer, Search, MapPin, ShoppingBag, ClipboardList, BookOpen, CreditCard, Minus } from 'lucide-react';
 import { CATEGORIES, PLACEHOLDER_IMG, STORE_NAME, GAS_API_URL, WHATSAPP_NUMBER } from '../constants/index';
 import { GrandmaLoader } from './UI';
-import { AppInstallButton } from './AppInstall';
+import { AppInstallButton, useAppInstall } from './AppInstall';
+import {FAVORITES_KEY, readFavorites, saveFavorites} from '../src/utils/favorites';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const money = (value: number) => currencyFormatter.format(value);
@@ -13,7 +14,23 @@ const faqSymbol = (question: string) => {
   const key = searchText(question);
   return /agend|horario/.test(key) ? Clock : /pag|pix|cartao/.test(key) ? CreditCard : /frete|entrega/.test(key) ? MapPin : /acompanh|pedido/.test(key) ? ClipboardList : MessageSquare;
 };
-export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs, isClosed, onTrackOrders }: any) => {
+export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConfigs, isClosed, onTrackOrders, onProfile }: any) => {
+  const {standalone, installed} = useAppInstall();
+  const appExperience = standalone || installed;
+  const [favorites, setFavorites] = useState(readFavorites);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoriteError, setFavoriteError] = useState('');
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {if (event.key === FAVORITES_KEY || event.key === null) setFavorites(readFavorites());};
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
+  const toggleFavorite = (id: string) => {
+    if (!favorites.includes(id) && favorites.length >= 200) {setFavoriteError('Você já tem 200 favoritos. Remova um para salvar outro salgado.'); return;}
+    const next = favorites.includes(id) ? favorites.filter(item => item !== id) : [...favorites, id];
+    if (saveFavorites(next)) {setFavorites(next); setFavoriteError('');}
+    else setFavoriteError('Não foi possível salvar neste aparelho. Verifique se o navegador permite armazenamento.');
+  };
   const [activeCat, setActiveCat] = useState('todos');
   const [search, setSearch] = useState('');
   const [logoFailed, setLogoFailed] = useState(false);
@@ -85,7 +102,9 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
   );
   const currentCat = visibleCategories.some(cat => cat.id === activeCat) ? activeCat : 'todos';
   const query = searchText(search.trim());
-  const filteredProducts = products.filter((product: any) => (currentCat === 'todos' || product.category === currentCat) && searchText(`${product.name || ''} ${product.description || ''}`).includes(query));
+  const showingFavorites = appExperience && favoritesOnly;
+  const favoriteCount = products.filter((product: any) => favorites.includes(String(product.id))).length;
+  const filteredProducts = products.filter((product: any) => (!showingFavorites || favorites.includes(String(product.id))) && (currentCat === 'todos' || product.category === currentCat) && searchText(`${product.name || ''} ${product.description || ''}`).includes(query));
 
   return (
     <>
@@ -117,6 +136,16 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
       </header>
 
       <main id="menu" className="pb-12 max-w-7xl mx-auto px-4 md:px-6 scroll-mt-20">
+        {appExperience && <section className="app-member-hub" aria-labelledby="app-member-title">
+          <div><span className="app-member-eyebrow">Feito para quem usa o app</span><h2 id="app-member-title">Seu cantinho na Vovó</h2><p>Seus sabores preferidos e atalhos para o dia a dia.</p></div>
+          <div className="app-member-actions">
+            <button type="button" aria-pressed={showingFavorites} onClick={() => {setFavoritesOnly(!showingFavorites); setActiveCat('todos'); setSearch('');}}><Heart size={22} aria-hidden="true" /><span>Meus favoritos<small>{favoriteCount} {favoriteCount === 1 ? 'salgado salvo' : 'salgados salvos'}</small></span></button>
+            <button type="button" onClick={onTrackOrders}><ClipboardList size={22} aria-hidden="true" /><span>Meus pedidos<small>Acompanhar pedido</small></span></button>
+            <button type="button" onClick={onProfile}><BookOpen size={22} aria-hidden="true" /><span>Meus dados<small>Acessar meu perfil</small></span></button>
+          </div>
+          <p className="app-member-footnote">Favoritos ficam neste aparelho. Podem ser perdidos se os dados do app forem apagados.</p>
+        </section>}
+        {appExperience && favoriteError && <p role="status" className="text-sm text-vovoh-red mb-3">{favoriteError}</p>}
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
           <div><h2 className="font-sans text-2xl font-bold text-vovoh-dark">Cardápio</h2><p className="text-sm text-gray-600 mt-1">Escolha o que vai na sua sacola.</p></div>
           <div className="relative w-full sm:max-w-sm">
@@ -128,6 +157,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
         </div>
         
         <nav aria-label="Categorias do cardápio" className="sticky top-[64px] z-[190] bg-[#F9F9F9]/95 backdrop-blur-xl py-3 -mx-4 px-4 md:mx-0 md:px-0 mb-4 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-200/50 scroll-pl-4">
+          {appExperience && <button type="button" className="favorite-filter" aria-pressed={showingFavorites} onClick={() => setFavoritesOnly(!showingFavorites)}><Heart size={17} aria-hidden="true" />Favoritos</button>}
           {visibleCategories.map(c => (
             <button type="button" aria-pressed={currentCat === c.id} key={c.id} onClick={() => setActiveCat(c.id)} className={`min-h-11 px-5 rounded-full font-semibold text-sm whitespace-nowrap transition-colors flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red ${currentCat === c.id ? 'bg-vovoh-red text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-vovoh-red'}`}>
               {c.label}
@@ -143,7 +173,7 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
             <p className="mt-2 text-sm text-gray-500">Assim que os produtos estiverem disponíveis, você poderá escolher e fazer seu pedido por aqui.</p>
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div role="status" className="bg-white p-8 rounded-2xl border border-gray-200 text-center"><Search size={28} className="mx-auto text-gray-400 mb-3" aria-hidden="true" /><h3 className="font-sans text-lg font-bold">Nenhum produto encontrado</h3><p className="text-sm text-gray-600 mt-2">Tente outro nome ou escolha uma categoria diferente.</p><button type="button" onClick={() => {setSearch('');setActiveCat('todos');}} className="min-h-11 mt-4 px-5 rounded-xl bg-vovoh-red text-white text-sm font-semibold">Limpar filtros</button></div>
+          <div role="status" className="bg-white p-8 rounded-2xl border border-gray-200 text-center"><Search size={28} className="mx-auto text-gray-400 mb-3" aria-hidden="true" /><h3 className="font-sans text-lg font-bold">{showingFavorites && favoriteCount === 0 ? 'Seus favoritos começam aqui' : 'Nenhum produto encontrado'}</h3><p className="text-sm text-gray-600 mt-2">{showingFavorites && favoriteCount === 0 ? 'Toque no coração de um salgado para guardá-lo neste aparelho.' : 'Tente outro nome ou escolha uma categoria diferente.'}</p><button type="button" onClick={() => {setSearch('');setActiveCat('todos');setFavoritesOnly(false);}} className="min-h-11 mt-4 px-5 rounded-xl bg-vovoh-red text-white text-sm font-semibold">{showingFavorites ? 'Ver todo o cardápio' : 'Limpar filtros'}</button></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {filteredProducts.map((p: any) => (
@@ -170,7 +200,8 @@ export const StoreFront = ({ products, isLoading, onAddToCart, logo, dynamicConf
                 >
                    <div className="flex flex-col h-full">
                      <div className="flex justify-between items-start gap-2">
-                        <h3 className="font-sans text-base font-bold text-vovoh-dark leading-tight line-clamp-2"><button type="button" aria-label={`Ver opções de ${p.name}`} className="text-left min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red">{p.name}</button></h3>
+                        <h3 className="min-w-0 flex-1 font-sans text-base font-bold text-vovoh-dark leading-tight line-clamp-2"><button type="button" aria-label={`Ver opções de ${p.name}`} className="text-left min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-vovoh-red">{p.name}</button></h3>
+                        {appExperience && <button type="button" className="favorite-toggle" aria-label={`${favorites.includes(String(p.id)) ? 'Remover' : 'Salvar'} ${p.name} ${favorites.includes(String(p.id)) ? 'dos' : 'nos'} favoritos`} aria-pressed={favorites.includes(String(p.id))} onClick={event => {event.stopPropagation(); toggleFavorite(String(p.id));}}><Heart size={20} fill={favorites.includes(String(p.id)) ? 'currentColor' : 'none'} aria-hidden="true" /></button>}
                         {p.oldPrice && (
                           <span className="bg-vovoh-gold text-white px-1.5 py-0.5 rounded-md text-[8px] md:text-[9px] font-black uppercase tracking-wider shadow-sm shrink-0">Promo</span>
                         )}
