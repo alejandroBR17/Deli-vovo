@@ -6,6 +6,9 @@ import './styles/theme.css';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { AppInstallProvider } from './components/AppInstall';
 import { ensureServiceWorker } from './src/utils/service-worker';
+import { initializeAppInstall } from './src/utils/app-install';
+
+initializeAppInstall();
 
 // Força a atualização do cache para todos os usuários
 const APP_VERSION = '1.1.0-urgent-update';
