@@ -1,5 +1,11 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Convite de instalação e navegação offline — 14/10/2026
+
+Responsável confirmou Chrome Android sem app instalado: menu ⋮ instala, botão não oferece confirmação. Manifesto público sem erros; probe real isolado Chromium persistente (sem eventos simulados) apresentou beforeinstallprompt após interação, mas isso não comprova Android físico. Worker anterior não possuía fetch handler; documentação Chrome distingue instalação pelo menu do convite em versões que exigem esse handler. Implementado suporte offline real de navegação, evitando handler vazio: somente GET de documento no próprio domínio usa rede primeiro e aviso estático sem conexão (503) se a rede falhar. Cache exclusivo de /offline.html, sem API, pedidos, usuários, páginas da loja ou dados de pagamento; falha do cache não impede ativação/avisos. Push/notificationclick mantidos. Instruções explicam ausência do convite em vez de ocultar silenciosamente a opção.
+
+Teste do worker verifica cache mínimo, preservação de APIs/POST/subrecursos/checkout externo, resposta online intacta e fallback seguro mesmo sem cache. QA com worker real em 390px escuro passou navegação offline/retorno online sem overflow nem escrita remota; build/TypeScript passou. Compatibilidade adicional implementada, causa específica no aparelho ainda não demonstrada. Referências: https://developer.chrome.com/blog/update-install-criteria e https://web.dev/articles/install-criteria . Não adicionado APK, redirect por intent ou instalação forçada.
+
 ## Instalação direta no Android — 14/10/2026
 
 Usuário informou que o botão abria apenas instruções. Botão compartilhado agora chama o prompt nativo na mesma interação quando o navegador disponibiliza beforeinstallprompt, sem etapa intermediária. Captura iniciada antes de React/Service Worker, retendo evento antecipado; eliminado listener/banner duplicado da Home. Cada evento consumido uma única vez, bloqueio de cliques durante instalação; recusa não dispara novamente o mesmo prompt. Falha abre orientação; iOS e Android sem suporte/permissão mantêm ajuda, sem prometer instalação forçada. Avisos e registro confirmado appinstalled preservados.

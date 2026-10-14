@@ -1,5 +1,21 @@
-self.addEventListener('install', () => self.skipWaiting());
+const OFFLINE_CACHE = 'vovo-offline-v1';
+self.addEventListener('install', event => event.waitUntil(Promise.all([
+  self.skipWaiting(),
+  caches.open(OFFLINE_CACHE).then(cache => cache.add('/offline.html')).catch(() => {}),
+])));
 self.addEventListener('activate', event => event.waitUntil(clients.claim()));
+// Real offline navigation support; never cache API, account, order or payment data.
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || request.mode !== 'navigate' || url.origin !== self.location.origin || url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
+  event.respondWith(fetch(request).catch(async () => {
+    const page = await caches.open(OFFLINE_CACHE).then(cache => cache.match('/offline.html')).catch(() => undefined);
+    return new Response(page ? await page.text() : '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Sem conexão</title><h1>Você está sem conexão</h1><p>Reconecte à internet e recarregue a página. Nenhum pedido pode ser enviado sem conexão.</p></html>', {
+      status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }));
+});
 function safeNotificationUrl(value) {
   try {
     const url = new URL(value || '/', self.location.origin);
