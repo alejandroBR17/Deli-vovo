@@ -1028,8 +1028,8 @@ export default function AdminPage() {
         <header className="admin-header relative lg:sticky top-0 bg-vovoh-dark/95 backdrop-blur-md z-40 flex flex-col gap-4 py-4 border-b border-white/5">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-4 items-center w-full min-w-0">
           <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-[var(--app-paper)] border border-[var(--app-border)] rounded-2xl flex items-center justify-center shadow-sm shrink-0">
-              <img src="/vovo-logo-2026.webp" width={56} height={56} alt="" className="w-full h-full object-contain" />
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-vovoh-red rounded-2xl flex items-center justify-center shadow-2xl rotate-3 shrink-0">
+              <ChefHat className="text-white w-6 h-6 md:w-7 md:h-7" />
             </div>
             <div className="min-w-0 flex-grow">
               <h1 className="text-2xl md:text-3xl font-black tracking-tight truncate">Painel da Vovó</h1>

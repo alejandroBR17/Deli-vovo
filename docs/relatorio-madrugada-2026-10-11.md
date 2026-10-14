@@ -1,5 +1,11 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Correção de escopo da logo — 13/10/2026
+
+Usuário esclareceu que a logo nova deve aparecer SOMENTE na marca Artesanal, não em cabeçalhos/painel/ícones/compartilhamento. Reconhecida ampliação indevida. Cabeçalho cliente voltou ao ChefHat vermelho anterior; painel, favicon/Apple, manifesto, ícones de notificação e metadados de compartilhamento restaurados exatamente ao estado anterior a 59e006d. Logo nova continua apenas no hero Artesanal. Retrato novo da Vovó e story_image preservados. Arquivos de ícones novos não referenciados mantidos para clientes com manifesto anterior em cache; sem alterações de banco/configuração/comercial.
+
+Build/TypeScript passou; QA local 390/1365 claro/escuro confirmou ausência de imagem no botão de cabeçalho, uma única logo nova na página, foto nova decodificada sem recorte, manifesto e compartilhamento antigos, sem overflow/erros JS. Comparação Git confirmou painel/index/manifest/worker idênticos ao estado anterior. Snapshots privados preservados; nenhuma gravação remota adicional. Publicação/conferência abaixo.
+
 ## Nova logo e retrato da Vovó — 13/10/2026
 
 Usuário enviou Logo Delícias da Vovó.png e Retrato Acolhedor na Cozinha Caseira.png, autorizando remoção de fundo preto e substituição da foto do casal. Logo original RGB sem transparência; ferramenta image_gen aplicada para background-extraction, com revisões de borda. Prompt final: extrair somente o fundo preto fora do círculo e chapéu, alfa transparente, preservar personagem, cores, texto e composição, sem elementos adicionais. Arte transparente selecionada gerada em exec-56dd7422-a1a5-419c-871e-5b1c7c8e5fc8.png; derivados no workspace public/vovo-logo-2026.webp (32 KB), ícones PNG 180/192/512 (~20/22/100 KB) e compartilhamento PNG 640 (~144 KB). Redimensionamento/otimização técnica via Sharp; foto enviada preservada, somente redução para WebP 820px (~153 KB), sem recorte/alteração de rosto.
