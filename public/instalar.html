@@ -10,22 +10,39 @@
     // Register before the manifest, styles and application bundle can load.
     let installEvent = null;
     let installBusy = false;
+    let installedOnDevice = false;
+    let checkingInstalled = false;
     const installState = {convite: 'Ainda não recebido', conexao: location.protocol === 'https:' ? 'HTTPS' : 'Sem HTTPS', navegador: navigator.userAgent, worker: 'Verificando', manifesto: 'Verificando'};
     function renderInstall() {
       const button = document.getElementById('install');
       if (!button) return;
       const installedView = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-      button.disabled = !installEvent || installBusy || installedView;
-      button.textContent = installBusy ? 'Abrindo instalação…' : 'Instalar aplicativo';
-      document.getElementById('status').textContent = installedView ? 'Você está no aplicativo instalado.' : installEvent ? 'Tudo pronto. Toque em Instalar aplicativo.' : installBusy ? 'Confirme a instalação na janela do navegador.' : installState.convite === 'Instalado' ? 'Instalado! Abra pelo novo ícone na tela inicial.' : installState.convite === 'Instalação solicitada' ? 'Instalação solicitada. Abra pelo ícone quando terminar.' : installState.convite === 'Cancelado' ? 'Instalação cancelada. Você pode tentar novamente quando o navegador oferecer a opção.' : installState.convite === 'Falha ao abrir' ? 'Não foi possível abrir a instalação. Use o menu do navegador.' : 'O navegador ainda não ofereceu a instalação direta nesta página.';
+      button.disabled = !installEvent || installBusy || installedView || installedOnDevice;
+      button.textContent = installedOnDevice || installedView ? 'Aplicativo já instalado' : installBusy ? 'Abrindo instalação…' : 'Instalar aplicativo';
+      document.getElementById('guide').hidden = installedOnDevice || installedView || installState.convite === 'Instalado' || installState.convite === 'Instalação solicitada';
+      document.getElementById('status').textContent = installedView ? 'Você está no aplicativo instalado.' : installedOnDevice ? 'O app já está instalado neste aparelho. Abra pelo ícone na tela inicial.' : installEvent ? 'Tudo pronto. Toque em Instalar aplicativo.' : installBusy ? 'Confirme a instalação na janela do navegador.' : installState.convite === 'Instalado' || installState.convite === 'Instalação solicitada' ? 'Instalação solicitada. O navegador pode levar alguns instantes para criar o ícone do app.' : installState.convite === 'Cancelado' ? 'Instalação cancelada. Você pode tentar novamente quando o navegador oferecer a opção.' : installState.convite === 'Falha ao abrir' ? 'Não foi possível abrir a instalação. Use o menu do navegador.' : 'Não conseguimos confirmar se o app já está instalado. Confira sua lista de aplicativos ou use o menu do navegador.';
       document.getElementById('diagnosis').textContent = Object.entries(installState).map(([key, value]) => key + ': ' + value).join('\n');
     }
+    async function checkInstalled() {
+      if (checkingInstalled) return;
+      if (typeof navigator.getInstalledRelatedApps !== 'function') {installedOnDevice = false; installState.aparelho = 'Detecção indisponível'; renderInstall(); return;}
+      checkingInstalled = true;
+      let timer;
+      try {
+        const apps = await Promise.race([navigator.getInstalledRelatedApps(), new Promise(resolve => {timer = setTimeout(() => resolve(null), 3000);})]);
+        if (!Array.isArray(apps)) {installedOnDevice = false; installState.aparelho = 'Não confirmado'; return;}
+        installedOnDevice = apps.some(app => app.platform === 'webapp' && (app.id === location.origin + '/' || app.url === location.origin + '/manifest.json'));
+        installState.aparelho = installedOnDevice ? 'App instalado' : 'App não detectado';
+      } catch {installedOnDevice = false; installState.aparelho = 'Não confirmado';}
+      finally {clearTimeout(timer); checkingInstalled = false; renderInstall();}
+    }
     addEventListener('beforeinstallprompt', event => {
-      event.preventDefault(); installEvent = event; installState.convite = 'Recebido'; renderInstall();
+      event.preventDefault(); installedOnDevice = false; installEvent = event; installState.convite = 'Recebido'; renderInstall();
     });
     addEventListener('appinstalled', () => {
       installEvent = null; installState.convite = 'Instalado'; renderInstall();
-      document.getElementById('status').textContent = 'Instalado! Abra pelo novo ícone na tela inicial.';
+      void checkInstalled();
+      [2000, 8000, 20000].forEach(delay => setTimeout(checkInstalled, delay));
     });
     addEventListener('DOMContentLoaded', () => {
       document.getElementById('install').addEventListener('click', async () => {
@@ -35,10 +52,15 @@
           await event.prompt();
           const {outcome} = await event.userChoice;
           if (installState.convite !== 'Instalado') installState.convite = installEvent ? 'Novo convite recebido' : outcome === 'accepted' ? 'Instalação solicitada' : 'Cancelado';
+          if (outcome === 'accepted') void checkInstalled();
         } catch { installState.convite = 'Falha ao abrir'; }
         finally { installBusy = false; renderInstall(); }
       });
       renderInstall();
+      document.getElementById('recheck').addEventListener('click', checkInstalled);
+      addEventListener('focus', checkInstalled);
+      document.addEventListener('visibilitychange', () => {if (document.visibilityState === 'visible') void checkInstalled();});
+      void checkInstalled();
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js', {scope: '/', updateViaCache: 'none'}).then(() => {
           installState.worker = 'Registrado'; renderInstall();
@@ -61,5 +83,5 @@
     button{width:100%;min-height:48px;padding:14px;border:0;border-radius:14px;background:#b72e25;color:white;font-size:16px;font-weight:700;cursor:pointer}button:disabled{background:var(--border);color:var(--ink);cursor:default}a{color:inherit}a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #e8a348;outline-offset:4px}details{margin-top:24px}summary{cursor:pointer;font-weight:600}pre{font-family:inherit;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
   </style>
 </head>
-<body><main><p class="brand">Delícias da Vovó Grazy</p><h1>A Vovó na sua tela inicial</h1><p>Instale o app para abrir a loja pelo ícone do celular.</p><button id="install" type="button" disabled>Instalar aplicativo</button><p id="status" role="status">Preparando a instalação…</p><p>Se o botão continuar indisponível, use <strong>⋮ → Instalar app</strong> no Chrome. No iPhone, use <strong>Compartilhar → Adicionar à Tela de Início</strong>.</p><p><a href="/">Voltar à loja</a></p><details><summary>Informações para suporte</summary><p>Estas informações ficam neste navegador. Não contêm sua conta ou seus pedidos.</p><pre id="diagnosis"></pre></details></main></body>
+<body><main><p class="brand">Delícias da Vovó Grazy</p><h1>A Vovó na sua tela inicial</h1><p>Instale o app para abrir a loja pelo ícone do celular.</p><button id="install" type="button" disabled>Instalar aplicativo</button><p id="status" role="status">Preparando a instalação…</p><button id="recheck" type="button">Verificar instalação novamente</button><p id="guide">Se o botão continuar indisponível, use <strong>⋮ → Instalar app</strong> no Chrome. No iPhone, use <strong>Compartilhar → Adicionar à Tela de Início</strong>.</p><p><a href="/">Voltar à loja</a></p><details><summary>Informações para suporte</summary><p>Estas informações ficam neste navegador. Não contêm sua conta ou seus pedidos.</p><pre id="diagnosis"></pre></details></main></body>
 </html>

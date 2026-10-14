@@ -1,5 +1,13 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Identificação de app instalado e instalação solicitada — 14/10/2026
+
+Usuário encontrou app antigo instalado com ícone anterior; pediu distinguir instalação em curso de app instalado. Manifesto mantém id/start_url/scope anteriores e informa relação webapp consigo no domínio oficial, prefer_related_applications false. Chrome compatível consulta getInstalledRelatedApps localmente, compara apenas id/manifesto do próprio domínio e não usa localStorage de instalação anterior como prova. Resposta vazia, API ausente, erro/timeout nunca confirmam app instalado; apps externos/antigo domínio não contam. App em standalone também identificado.
+
+Botão/modal mostram Aplicativo já instalado e orientação pelo ícone quando confirmado. Após aceite/evento appinstalled mostram Instalação solicitada: Android pode disparar esse evento antes de concluir o WebAPK. Sem porcentagem fictícia, promessa de abrir app pelo navegador ou travar instalação por registro antigo. Reconsulta ao retornar à página, abrir modal/manualmente e três verificações locais limitadas após solicitação (2/8/20s), limpeza ao desmontar, sem consultas de banco. Falha posterior remove confirmação anterior em memória. Página leve /instalar.html oferece os mesmos estados e reconsulta. API é dependente do navegador e não detecta universalmente aplicativos/atalhos de outros domínios.
+
+Teste isolado verifica id/url, rejeição de outro domínio/play, API indisponível/falha/timeout e remoção depois de instalação. QA do bundle390px claro/escuro simula API do aparelho: instalado, instalação solicitada seguida de confirmação, API desconhecida com flag antiga, standalone e página leve; sem overflow/erros JS/escritas remotas. Não comprova API no Android físico. Build/TypeScript passou. Revisão React: callback estável, consultas sem sobreposição, assinatura e timers limpos, estados acessíveis, sem efeitos por render nem login/permissões extras. Fonte: https://developer.chrome.com/docs/capabilities/get-installed-related-apps e https://web.dev/learn/pwa/detection . Ícones e fotos não alterados nesta etapa.
+
 ## Investigação no Chrome Android 155 — 14/10/2026
 
 Screenshot confirma versão atual na produção, sem convite. Usuário informa Chrome155.0.8059.79 e possível cancelamento anterior. Código Chromium atual distingue bloqueios da promoção automática do envio de beforeinstallprompt; cancelamento não foi tratado como causa demonstrada. Sem limpar dados do cliente, mudar manifest id ou criar APK. Android físico permanece sem diagnóstico conclusivo.
