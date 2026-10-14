@@ -1,5 +1,13 @@
 # Trabalho da noite e madrugada — 11/10/2026
 
+## Investigação no Chrome Android 155 — 14/10/2026
+
+Screenshot confirma versão atual na produção, sem convite. Usuário informa Chrome155.0.8059.79 e possível cancelamento anterior. Código Chromium atual distingue bloqueios da promoção automática do envio de beforeinstallprompt; cancelamento não foi tratado como causa demonstrada. Sem limpar dados do cliente, mudar manifest id ou criar APK. Android físico permanece sem diagnóstico conclusivo.
+
+Preparada /instalar.html no mesmo domínio/manifesto/id da loja: página leve sem React, fontes externas ou consultas da aplicação, listener no início do HTML antes do manifesto. Botão só fica ativo quando o navegador disponibiliza evento real; status de instalação preservado. Diagnóstico opcional local mostra convite, HTTPS, navegador, worker e acesso ao manifesto, sem conta/pedidos, envio automático, logs remotos ou novas métricas. Modal da loja oferece link para a página quando não recebeu evento. noindex/nofollow, cores do dispositivo e largura móvel. Teste Chromium persistente isolado com evento real (não sintético) ativou o botão, sem API requests ou erros JS/overflow390px. Esse teste não demonstra o resultado no Android do responsável. Build/TypeScript passou.
+
+GitHub: responsável confirmou acesso. Interface mostra regra main criada; conferido PR obrigatório, check verify vinculado GitHubActions, branch atualizada e conversas resolvidas, force push/exclusão desabilitados. Aprovação por segundo mantenedor não exigida; administrador mantém bypass padrão. Prova privada github-main-protection-active.jpg. Regras não foram alteradas novamente nesta conferência.
+
 ## Convite de instalação e navegação offline — 14/10/2026
 
 Responsável confirmou Chrome Android sem app instalado: menu ⋮ instala, botão não oferece confirmação. Manifesto público sem erros; probe real isolado Chromium persistente (sem eventos simulados) apresentou beforeinstallprompt após interação, mas isso não comprova Android físico. Worker anterior não possuía fetch handler; documentação Chrome distingue instalação pelo menu do convite em versões que exigem esse handler. Implementado suporte offline real de navegação, evitando handler vazio: somente GET de documento no próprio domínio usa rede primeiro e aviso estático sem conexão (503) se a rede falhar. Cache exclusivo de /offline.html, sem API, pedidos, usuários, páginas da loja ou dados de pagamento; falha do cache não impede ativação/avisos. Push/notificationclick mantidos. Instruções explicam ausência do convite em vez de ocultar silenciosamente a opção.
