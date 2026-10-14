@@ -2,12 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import webpush from 'web-push';
 
 test('admin delayed test acknowledges scheduling before delivery, requires session and only targets registered admin', async () => {
   process.env.NODE_ENV='test'; delete process.env.VERCEL;
-  process.env.TEST_DATA_DIR=await fs.mkdtemp(path.join(process.cwd(),'data/push-test-'));
+  process.env.TEST_DATA_DIR=await fs.mkdtemp(path.join(os.tmpdir(),'push-test-'));
   process.env.ADMIN_PASSWORD=randomUUID();process.env.ADMIN_SESSION_SECRET=randomUUID()+randomUUID();
   const vapid=webpush.generateVAPIDKeys();process.env.VAPID_PUBLIC_KEY=vapid.publicKey;process.env.VAPID_PRIVATE_KEY=vapid.privateKey;
   const endpoint='https://fcm.googleapis.com/fcm/send/local-test';
@@ -32,7 +33,7 @@ test('admin delayed test acknowledges scheduling before delivery, requires sessi
   } finally {
     webpush.sendNotification=original;await new Promise<void>(resolve=>server.close(()=>resolve()));
     const directory=process.env.TEST_DATA_DIR!;
-    assert.equal(path.dirname(directory),path.resolve('data'));assert.ok(path.basename(directory).startsWith('push-test-'));
+    assert.equal(path.dirname(directory),path.resolve(os.tmpdir()));assert.ok(path.basename(directory).startsWith('push-test-'));
     await fs.rm(directory,{recursive:true,force:true});
   }
 });

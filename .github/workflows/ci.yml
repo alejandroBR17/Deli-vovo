@@ -2,7 +2,7 @@ name: Verify delivery
 
 on:
   push:
-    branches: [main, fix/unifica-delivery-turso]
+    branches: [main]
   pull_request:
     branches: [main]
 

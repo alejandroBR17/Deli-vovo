@@ -597,3 +597,5 @@ Atualização: responsável concluiu reCAPTCHA; agente clicou Ativar credenciais
 
 Documentação oficial atual consultada: checkout-pro-preferences/test-accounts informa vendedor de teste criado automaticamente com aplicação; integration-test/test-purchases exige comprador de teste separado e cartões de teste, evitando sessão do vendedor. Confirmar credenciais/titular de teste antes de chamar API. Referência Preferences usa POST /checkout/preferences, init_point e consulta de pagamentos; validar aprovação no servidor, sem confiar em retorno do navegador. Notificações devem seguir documentação específica Preferences, sem misturar API Orders.
 
+
+CI remoto identificou ausência de data/ no clone limpo (pasta ignorada): teste push-test dependia desse diretório. Corrigido para os.tmpdir(), com validação do caminho antes da limpeza; teste dedicado passou. Push CI limitado a main e PRs, evitando execução dupla na feature branch. Vercel Git settings confirmou conexão ao repositório antigo privado alejandroBR17/delivovo; conexão será corrigida após integrar main verificada, preservando projeto, banco e ambientes existentes.
